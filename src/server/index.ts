@@ -127,6 +127,57 @@ app.get('/api/health', (_req, res) => {
   res.json({ ok: true, app: 'AsistenQ' });
 });
 
+app.get('/activate', (req, res) => {
+  const query = z.object({
+    token: z.string().min(1),
+    hwid: z.string().min(1)
+  }).parse(req.query);
+
+  try {
+    res.json(activateLicense(store, {
+      productSlug: 'vjstudio',
+      token: query.token,
+      hwid: query.hwid
+    }));
+  } catch (error) {
+    res.status(400).json({
+      status: 'error',
+      message: error instanceof Error ? error.message : 'Invalid parameters'
+    });
+  }
+});
+
+app.get('/packages', (_req, res) => {
+  res.json(publicPlansForProduct(store, 'vjstudio'));
+});
+
+app.get('/announcement', (_req, res) => {
+  const product = store.data.products.find((item) => item.slug === 'vjstudio');
+  const announcement = store.data.announcements.find((item) => item.productId === product?.id && item.enabled);
+
+  res.json(announcement ?? {});
+});
+
+app.get('/banned', (_req, res) => {
+  const product = store.data.products.find((item) => item.slug === 'vjstudio');
+  const banned = store.data.bannedHwids
+    .filter((item) => item.productId === product?.id)
+    .map((item) => item.hwid);
+
+  res.type('text/plain').send(banned.join('\n'));
+});
+
+app.get('/verify_voucher', (req, res) => {
+  const query = z.object({
+    code: z.string().min(1)
+  }).parse(req.query);
+
+  res.json(verifyVoucher(store, {
+    productSlug: 'vjstudio',
+    code: query.code
+  }));
+});
+
 app.post('/api/admin/login', async (req, res) => {
   const body = loginSchema.parse(req.body);
   const admin = await verifyAdminLogin(store, body.email, body.password);
