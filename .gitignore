@@ -9,3 +9,6 @@ coverage/
 *.log
 __pycache__/
 *.py[cod]
+*.env.bot
+telegram-bot.env
+data/telegram-bot-state.json

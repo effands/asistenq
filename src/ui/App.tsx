@@ -1168,7 +1168,7 @@ function ProductForm({ onCreateProduct }: {
   const [description, setDescription] = useState('Produk AsistenQ untuk workflow editing dan YouTube.');
 
   return (
-    <form className="panel stack wide" onSubmit={async (event) => {
+    <form className="panel stack wide product-create-form" onSubmit={async (event) => {
       event.preventDefault();
       await onCreateProduct({
         name,
@@ -1194,37 +1194,47 @@ function ProductForm({ onCreateProduct }: {
         <div>
           <p className="section-kicker">Catalog control</p>
           <h2>Tambah Produk</h2>
+          <p className="form-intro">Isi data utama dulu. Pengaturan landing dan promo bisa dibuka bila diperlukan.</p>
         </div>
         <span className="soft-badge">{type}</span>
       </div>
-      <div className="form-grid">
-        <input value={name} onChange={(event) => setName(event.target.value)} placeholder="Nama produk" />
-        <input value={slug} onChange={(event) => setSlug(event.target.value)} placeholder="slug-produk" />
-        <select value={type} onChange={(event) => setType(event.target.value as ProductType)}>
-          {productTypes.map((item) => <option key={item}>{item}</option>)}
-        </select>
-        <select value={visibility} onChange={(event) => setVisibility(event.target.value as ProductVisibility)}>
-          {productVisibilities.map((item) => <option key={item} value={item}>{item === 'public' ? 'Public marketplace' : item === 'private' ? 'Private link' : 'Draft/admin only'}</option>)}
-        </select>
-        <select value={accessMode} onChange={(event) => setAccessMode(event.target.value as ProductAccessMode)}>
-          {productAccessModes.map((item) => <option key={item} value={item}>{item === 'public' ? 'Public page' : item === 'free_member' ? 'Free member' : item === 'trial' ? 'Trial/subscription' : item === 'paid' ? 'Paid only' : 'Admin only'}</option>)}
-        </select>
-        <select value={billingPeriod} onChange={(event) => setBillingPeriod(event.target.value as BillingPeriod)}>
-          {billingPeriods.map((item) => <option key={item}>{item}</option>)}
-        </select>
-        <input value={price} onChange={(event) => setPrice(Number(event.target.value))} type="number" />
-        <input value={compareAtPrice} onChange={(event) => setCompareAtPrice(Number(event.target.value))} type="number" placeholder="Harga coret/diskon" />
-        <input value={discountLabel} onChange={(event) => setDiscountLabel(event.target.value)} placeholder="Badge diskon, contoh: Free Beta" />
-        <input value={promoText} onChange={(event) => setPromoText(event.target.value)} placeholder="Promo singkat" />
-        <input value={logoUrl} onChange={(event) => setLogoUrl(event.target.value)} placeholder="URL logo produk" />
-        <input value={landingPath} onChange={(event) => setLandingPath(event.target.value)} placeholder="/mixin9" />
-        <input value={landingTemplate} onChange={(event) => setLandingTemplate(event.target.value)} placeholder="Template landing, contoh: mixin9" />
-        <input value={ctaLabel} onChange={(event) => setCtaLabel(event.target.value)} placeholder="Label tombol CTA" />
-        <input value={headline} onChange={(event) => setHeadline(event.target.value)} placeholder="Headline" />
+      <div className="product-form-section">
+        <div className="product-form-section-title"><span>01</span><div><strong>Informasi utama</strong><small>Identitas yang terlihat oleh member.</small></div></div>
+        <div className="product-form-grid three">
+          <label>Nama produk<input required value={name} onChange={(event) => setName(event.target.value)} placeholder="Contoh: MIXIN9" /></label>
+          <label>Slug / alamat<input required value={slug} onChange={(event) => setSlug(event.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '-'))} placeholder="mixin9" /><small>Huruf kecil, angka, dan tanda minus.</small></label>
+          <label>Jenis produk<select value={type} onChange={(event) => setType(event.target.value as ProductType)}>{productTypes.map((item) => <option key={item}>{item}</option>)}</select></label>
+        </div>
       </div>
-      <textarea value={accessRequirement} onChange={(event) => setAccessRequirement(event.target.value)} placeholder="Syarat akses" />
-      <textarea value={description} onChange={(event) => setDescription(event.target.value)} />
-      <button className="primary"><PackagePlus size={18} /> Simpan Produk</button>
+      <div className="product-form-section">
+        <div className="product-form-section-title"><span>02</span><div><strong>Akses & harga</strong><small>Atur siapa yang dapat melihat dan membuka produk.</small></div></div>
+        <div className="product-form-grid four">
+          <label>Tampil di katalog<select value={visibility} onChange={(event) => setVisibility(event.target.value as ProductVisibility)}>{productVisibilities.map((item) => <option key={item} value={item}>{item === 'public' ? 'Publik' : item === 'private' ? 'Link privat' : 'Draft'}</option>)}</select></label>
+          <label>Syarat akses<select value={accessMode} onChange={(event) => setAccessMode(event.target.value as ProductAccessMode)}>{productAccessModes.map((item) => <option key={item} value={item}>{item === 'public' ? 'Tanpa login' : item === 'free_member' ? 'Member gratis' : item === 'trial' ? 'Trial aktif' : item === 'paid' ? 'Sudah bayar' : 'Admin saja'}</option>)}</select></label>
+          <label>Periode<select value={billingPeriod} onChange={(event) => setBillingPeriod(event.target.value as BillingPeriod)}>{billingPeriods.map((item) => <option key={item}>{item}</option>)}</select></label>
+          <label>Harga (Rp)<input min="0" value={price} onChange={(event) => setPrice(Number(event.target.value))} type="number" /></label>
+        </div>
+      </div>
+      <details className="product-advanced">
+        <summary>Pengaturan lanjutan <small>Landing, promo, logo, dan teks produk</small></summary>
+        <div className="product-advanced-content">
+          <div className="product-form-grid three">
+            <label>Harga coret (Rp)<input min="0" value={compareAtPrice} onChange={(event) => setCompareAtPrice(Number(event.target.value))} type="number" placeholder="0" /></label>
+            <label>Badge promo<input value={discountLabel} onChange={(event) => setDiscountLabel(event.target.value)} placeholder="Contoh: Free Beta" /></label>
+            <label>Teks promo<input value={promoText} onChange={(event) => setPromoText(event.target.value)} placeholder="Promo singkat" /></label>
+            <label>URL logo<input value={logoUrl} onChange={(event) => setLogoUrl(event.target.value)} placeholder="https://.../logo.png" /></label>
+            <label>Path halaman<input value={landingPath} onChange={(event) => setLandingPath(event.target.value)} placeholder="/mixin9" /></label>
+            <label>Template<input value={landingTemplate} onChange={(event) => setLandingTemplate(event.target.value)} placeholder="mixin9 atau tool-app" /></label>
+            <label>Label tombol<input value={ctaLabel} onChange={(event) => setCtaLabel(event.target.value)} placeholder="Ambil sekarang" /></label>
+            <label className="span-two">Headline<input value={headline} onChange={(event) => setHeadline(event.target.value)} placeholder="Manfaat utama produk" /></label>
+          </div>
+          <div className="product-form-grid two">
+            <label>Syarat akses<textarea value={accessRequirement} onChange={(event) => setAccessRequirement(event.target.value)} placeholder="Contoh: Daftar sebagai member" /></label>
+            <label>Deskripsi<textarea value={description} onChange={(event) => setDescription(event.target.value)} placeholder="Jelaskan fungsi produk secara singkat" /></label>
+          </div>
+        </div>
+      </details>
+      <div className="product-form-footer"><span>Produk bisa diedit kembali setelah disimpan.</span><button className="primary"><PackagePlus size={18} /> Simpan Produk</button></div>
     </form>
   );
 }

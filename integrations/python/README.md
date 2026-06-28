@@ -29,6 +29,14 @@ Saat sudah live, arahkan ke domain web AsistenQ:
 
 ```powershell
 $env:ASISTENQ_API_BASE="https://domain-kamu.com/api"
+
+## Telegram operator bot
+
+`telegram_license_bot.py` mengelola lisensi melalui API AsistenQ, bukan database
+terpisah. Salin `telegram-bot.env.example` menjadi file environment di server,
+isi token baru dan akun admin, lalu jalankan bot sebagai proses terpisah.
+
+Token Telegram, password admin, dan token GitHub tidak boleh disimpan di Git.
 ```
 
 ## Event Ke Web / Telegram
