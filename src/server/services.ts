@@ -174,6 +174,8 @@ export async function createMember(store: Store, input: {
   name: string;
   email: string;
   password: string;
+  whatsapp?: string;
+  telegramId?: string;
 }): Promise<MemberAccount> {
   const email = normalizeEmail(input.email);
 
@@ -185,6 +187,8 @@ export async function createMember(store: Store, input: {
     id: createId('member'),
     name: input.name,
     email,
+    whatsapp: input.whatsapp?.trim() ?? '',
+    telegramId: input.telegramId?.trim() ?? '',
     passwordHash: await bcrypt.hash(input.password, 12),
     active: true,
     createdAt: new Date().toISOString()
@@ -648,6 +652,7 @@ export function publicPlansForProduct(store: Store, productSlug: string) {
     .filter((plan) => plan.productId === product.id && plan.isActive)
     .map((plan) => ({
       productSlug: product.slug,
+      id: plan.code,
       code: plan.code,
       name: plan.name,
       price: plan.price,

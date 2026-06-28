@@ -53,7 +53,9 @@ const loginSchema = z.object({
 });
 
 const memberRegisterSchema = loginSchema.extend({
-  name: z.string().min(2)
+  name: z.string().min(2),
+  whatsapp: z.string().min(8),
+  telegramId: z.string().min(3)
 });
 
 const forgotPasswordSchema = z.object({
@@ -127,7 +129,7 @@ app.get('/api/health', (_req, res) => {
   res.json({ ok: true, app: 'AsistenQ' });
 });
 
-app.get('/activate', (req, res) => {
+function handleLegacyActivation(req: express.Request, res: express.Response) {
   const query = z.object({
     token: z.string().min(1),
     hwid: z.string().min(1)
@@ -145,13 +147,27 @@ app.get('/activate', (req, res) => {
       message: error instanceof Error ? error.message : 'Invalid parameters'
     });
   }
-});
+}
+
+app.get('/activate', handleLegacyActivation);
+app.get('/api/activate', handleLegacyActivation);
 
 app.get('/packages', (_req, res) => {
   res.json(publicPlansForProduct(store, 'vjstudio'));
 });
 
+app.get('/api/packages', (_req, res) => {
+  res.json(publicPlansForProduct(store, 'vjstudio'));
+});
+
 app.get('/announcement', (_req, res) => {
+  const product = store.data.products.find((item) => item.slug === 'vjstudio');
+  const announcement = store.data.announcements.find((item) => item.productId === product?.id && item.enabled);
+
+  res.json(announcement ?? {});
+});
+
+app.get('/api/announcement', (_req, res) => {
   const product = store.data.products.find((item) => item.slug === 'vjstudio');
   const announcement = store.data.announcements.find((item) => item.productId === product?.id && item.enabled);
 
@@ -167,7 +183,27 @@ app.get('/banned', (_req, res) => {
   res.type('text/plain').send(banned.join('\n'));
 });
 
+app.get('/api/banned', (_req, res) => {
+  const product = store.data.products.find((item) => item.slug === 'vjstudio');
+  const banned = store.data.bannedHwids
+    .filter((item) => item.productId === product?.id)
+    .map((item) => item.hwid);
+
+  res.type('text/plain').send(banned.join('\n'));
+});
+
 app.get('/verify_voucher', (req, res) => {
+  const query = z.object({
+    code: z.string().min(1)
+  }).parse(req.query);
+
+  res.json(verifyVoucher(store, {
+    productSlug: 'vjstudio',
+    code: query.code
+  }));
+});
+
+app.get('/api/verify_voucher', (req, res) => {
   const query = z.object({
     code: z.string().min(1)
   }).parse(req.query);
@@ -313,6 +349,19 @@ app.get('/api/admin/summary', requireSession, requireAdminScope('products'), (_r
     orders: store.data.orders.length,
     activeSubscriptions: store.data.subscriptions.filter((item) => item.status === 'active').length
   });
+});
+
+app.post('/api/admin/reset-operational-data', requireSession, requireAdminScope('products'), (_req, res) => {
+  store.data.orders = [];
+  store.data.subscriptions = [];
+  store.data.licenses = [];
+  store.data.bannedHwids = [];
+  store.data.vouchers = [];
+  store.data.passwordResets = [];
+  store.data.auditLogs = [];
+  store.save();
+
+  res.json({ ok: true, message: 'Data operasional berhasil direset.' });
 });
 
 app.get('/api/admin/admins', requireSession, requireAdminScope('admins'), (_req, res) => {

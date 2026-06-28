@@ -36,7 +36,7 @@ import {
 } from './api';
 
 type Route = 'home' | 'admin' | 'member' | 'product';
-type AdminSection = 'dashboard' | 'landing' | 'licenses' | 'members' | 'deploy';
+type AdminSection = 'dashboard' | 'landing' | 'products' | 'licenses' | 'members' | 'deploy';
 type AdminTheme = 'light' | 'dark';
 
 const productTypes: ProductType[] = ['tool', 'course', 'ebook', 'video', 'bundle', 'free', 'class'];
@@ -171,6 +171,17 @@ export function App() {
             await loadAdminMembers();
             setMessage('Data member diperbarui.');
           }}
+          onResetOperationalData={async () => {
+            if (!adminSession) throw new Error('Login admin dulu.');
+            const result = await apiRequest<{ ok: true; message: string }>('/admin/reset-operational-data', {
+              token: adminSession.token,
+              method: 'POST'
+            });
+            await loadAdminSummary(adminSession.token);
+            await loadAdminLicenses(adminSession.token);
+            await loadAdminMembers(adminSession.token);
+            setMessage(result.message);
+          }}
           onGenerateLicense={async (input) => {
             if (!adminSession) throw new Error('Login admin dulu.');
             await apiRequest('/license/generate', { token: adminSession.token, method: 'POST', body: input });
@@ -237,8 +248,8 @@ export function App() {
             setMemberDashboard(null);
             setMessage('Member logout.');
           }}
-          onRegister={async (name, email, password) => {
-            const result = await apiRequest<LoginResult>('/member/register', { method: 'POST', body: { name, email, password } });
+          onRegister={async (name, email, password, whatsapp, telegramId) => {
+            const result = await apiRequest<LoginResult>('/member/register', { method: 'POST', body: { name, email, password, whatsapp, telegramId } });
             setMemberSession(result);
             setMessage(`Member aktif: ${result.user.name}`);
             await loadLicenses(result.token);
@@ -351,7 +362,7 @@ function AdminShell({ activeSection, children, message, navigate, onSectionChang
         <nav className="admin-nav">
           <button className={activeSection === 'dashboard' ? 'active' : ''} onClick={() => onSectionChange('dashboard')}><LayoutDashboard size={18} /> Dashboard</button>
           <button className={activeSection === 'landing' ? 'active' : ''} onClick={() => onSectionChange('landing')}><Sparkles size={18} /> Landing</button>
-          <button><Boxes size={18} /> Produk</button>
+          <button className={activeSection === 'products' ? 'active' : ''} onClick={() => onSectionChange('products')}><Boxes size={18} /> Produk</button>
           <button className={activeSection === 'licenses' ? 'active' : ''} onClick={() => onSectionChange('licenses')}><KeyRound size={18} /> Lisensi</button>
           <button className={activeSection === 'members' ? 'active' : ''} onClick={() => onSectionChange('members')}><Users size={18} /> Member</button>
           <button className={activeSection === 'deploy' ? 'active' : ''} onClick={() => onSectionChange('deploy')}><UploadCloud size={18} /> Update</button>
@@ -384,10 +395,12 @@ function LoginBox({ title, accountType = 'member', footer, onSubmit, showName = 
   footer?: ReactNode;
   showName?: boolean;
   submitLabel?: string;
-  onSubmit: (name: string, email: string, password: string) => Promise<void>;
+  onSubmit: (name: string, email: string, password: string, whatsapp: string, telegramId: string) => Promise<void>;
 }) {
   const [name, setName] = useState('Member AsistenQ');
   const [email, setEmail] = useState('');
+  const [whatsapp, setWhatsapp] = useState('');
+  const [telegramId, setTelegramId] = useState('');
   const [password, setPassword] = useState('');
   const [resetToken, setResetToken] = useState(() => new URLSearchParams(window.location.search).get('reset') ?? '');
   const [mode, setMode] = useState<'login' | 'forgot' | 'reset'>(() => resetToken ? 'reset' : 'login');
@@ -422,7 +435,7 @@ function LoginBox({ title, accountType = 'member', footer, onSubmit, showName = 
           return;
         }
 
-        await onSubmit(name, email, password);
+        await onSubmit(name, email, password, whatsapp, telegramId);
       } finally {
         setBusy(false);
       }
@@ -432,6 +445,8 @@ function LoginBox({ title, accountType = 'member', footer, onSubmit, showName = 
         <h2>{mode === 'forgot' ? 'Lupa Password' : mode === 'reset' ? 'Buat Password Baru' : title}</h2>
       </div>
       {showName && mode === 'login' && <label>Nama<input value={name} onChange={(event) => setName(event.target.value)} placeholder="Nama lengkap" /></label>}
+      {showName && mode === 'login' && <label>Nomor WhatsApp Aktif<input value={whatsapp} onChange={(event) => setWhatsapp(event.target.value)} placeholder="62812..." inputMode="tel" /></label>}
+      {showName && mode === 'login' && <label>ID Telegram<input value={telegramId} onChange={(event) => setTelegramId(event.target.value)} placeholder="@username atau user id" /></label>}
       {mode !== 'reset' && <label>Email<input value={email} onChange={(event) => setEmail(event.target.value)} placeholder="effands@gmail.com" type="email" /></label>}
       {mode !== 'forgot' && <label>Password<input value={password} onChange={(event) => setPassword(event.target.value)} placeholder="Minimal 8 karakter" type="password" /></label>}
       {mode === 'reset' && <label>Token Reset<input value={resetToken} onChange={(event) => setResetToken(event.target.value)} placeholder="Token reset password" /></label>}
@@ -467,6 +482,7 @@ function AdminPanel({
   onCreateProduct,
   onRefreshLicenses,
   onRefreshMembers,
+  onResetOperationalData,
   onGenerateLicense,
   onResetLicense,
   onBanLicense,
@@ -491,6 +507,7 @@ function AdminPanel({
   }) => Promise<void>;
   onRefreshLicenses: () => Promise<void>;
   onRefreshMembers: () => Promise<void>;
+  onResetOperationalData: () => Promise<void>;
   onGenerateLicense: (input: { productSlug: string; planCode: string; email: string; hwid: string }) => Promise<void>;
   onResetLicense: (licenseId: string, newHwid: string) => Promise<void>;
   onBanLicense: (license: LicenseDashboardRow) => Promise<void>;
@@ -512,6 +529,15 @@ function AdminPanel({
 
   if (activeSection === 'landing') {
     return <LandingManager products={products} />;
+  }
+
+  if (activeSection === 'products') {
+    return (
+      <section className="admin-content-grid">
+        <ProductForm onCreateProduct={onCreateProduct} />
+        <ProductTable products={products} />
+      </section>
+    );
   }
 
   if (activeSection === 'licenses') {
@@ -544,8 +570,17 @@ function AdminPanel({
         <Metric icon={<CreditCard />} label="Order" value={summary?.orders ?? 0} />
         <Metric icon={<KeyRound />} label="Subscription" value={summary?.activeSubscriptions ?? 0} />
       </div>
-      <ProductForm onCreateProduct={onCreateProduct} />
-      <ProductTable products={products} />
+      <div className="panel stack wide">
+        <div className="panel-heading">
+          <div>
+            <p className="section-kicker">Maintenance</p>
+            <h2>Reset Data Operasional</h2>
+          </div>
+          <span className="soft-badge">Local</span>
+        </div>
+        <p className="muted">Members dan produk tetap disimpan. Order, subscription, lisensi, banned HWID, voucher, dan log sementara akan dikosongkan.</p>
+        <button className="ghost-button danger-lite reset-data-button" onClick={onResetOperationalData}>Reset Data</button>
+      </div>
     </section>
   );
 }
@@ -755,6 +790,7 @@ function AdminMemberPanel({ members, onRefresh }: {
               <div className="member-admin-main">
                 <h3>{member.name}</h3>
                 <p>{member.email}</p>
+                <p>{member.whatsapp || '-'} · {member.telegramId || '-'}</p>
               </div>
               <div className="member-admin-stats">
                 <span>{member.licenseCount}<small>Lisensi</small></span>
@@ -1165,7 +1201,7 @@ function MemberPanel({ session, products, dashboard, onRegister, onLogin, onChec
   session: LoginResult | null;
   products: PublicProduct[];
   dashboard: MemberLicenseDashboard | null;
-  onRegister: (name: string, email: string, password: string) => Promise<void>;
+  onRegister: (name: string, email: string, password: string, whatsapp: string, telegramId: string) => Promise<void>;
   onLogin: (email: string, password: string) => Promise<void>;
   onCheckout: (productId: string) => Promise<void>;
   onLogout: () => void;

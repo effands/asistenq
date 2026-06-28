@@ -23,6 +23,8 @@ export interface MemberAccount {
   id: string;
   name: string;
   email: string;
+  whatsapp?: string;
+  telegramId?: string;
   passwordHash: string;
   active: boolean;
   createdAt: string;
