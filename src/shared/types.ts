@@ -115,9 +115,14 @@ export interface Order {
   id: string;
   memberId: string;
   productId: string;
+  invoiceNumber?: string;
+  productName?: string;
+  uniqueCode?: number;
   amount: number;
+  totalAmount?: number;
   status: OrderStatus;
   qrisPayload: string;
+  paymentQrUrl?: string;
   createdAt: string;
   paidAt?: string;
 }

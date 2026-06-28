@@ -1856,6 +1856,19 @@ textarea {
   text-align: left;
 }
 
+.member-product-link {
+  justify-self: start;
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+  border: 0;
+  background: transparent;
+  color: var(--teal);
+  padding: 0;
+  font-size: 12px;
+  font-weight: 950;
+}
+
 .member-product-card span {
   width: fit-content;
   border-radius: 999px;
@@ -1906,6 +1919,106 @@ textarea {
 .member-product-footer .primary {
   min-height: 40px;
   padding: 9px 14px;
+}
+
+.order-history-list {
+  display: grid;
+  gap: 10px;
+}
+
+.order-history-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 12px;
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, .62);
+  padding: 14px;
+}
+
+.admin-dark .order-history-card {
+  background: var(--panel-strong);
+}
+
+.order-history-card strong,
+.order-history-card b,
+.order-history-card span {
+  display: block;
+}
+
+.order-history-card span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.invoice-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: grid;
+  place-items: center;
+  background: rgba(2, 16, 14, .62);
+  padding: 18px;
+}
+
+.invoice-modal {
+  width: min(860px, 100%);
+  border: 1px solid var(--line);
+  border-radius: 28px;
+  background: var(--paper);
+  box-shadow: var(--shadow);
+  padding: 22px;
+}
+
+.invoice-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(260px, 360px);
+  gap: 16px;
+}
+
+.invoice-summary {
+  display: grid;
+  gap: 10px;
+}
+
+.invoice-summary span {
+  display: grid;
+  gap: 5px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, .68);
+  color: var(--muted);
+  padding: 12px;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.invoice-summary b {
+  color: var(--ink);
+  font-size: 18px;
+}
+
+.qris-box {
+  display: grid;
+  gap: 10px;
+  align-content: start;
+  border: 1px solid var(--line);
+  border-radius: 22px;
+  background: #fff;
+  padding: 14px;
+}
+
+.qris-box img {
+  width: 100%;
+  border-radius: 16px;
+}
+
+.qris-box p {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.45;
 }
 
 .member-admin-list {

@@ -3,6 +3,7 @@ dist/
 server-dist/
 .env
 data/*.json
+data/landing-imports/
 coverage/
 *.log
 __pycache__/

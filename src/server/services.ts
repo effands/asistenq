@@ -424,13 +424,24 @@ export function createCheckout(store: Store, memberId: string, productId: string
     throw new Error('product not found');
   }
 
+  const uniqueCode = product.price > 0 ? Math.floor(Math.random() * 900) + 100 : 0;
+  const totalAmount = product.price + uniqueCode;
+  const invoiceNumber = `INV-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${String(store.data.orders.length + 1).padStart(4, '0')}`;
+
   const order: Order = {
     id: createId('order'),
     memberId,
     productId,
+    invoiceNumber,
+    productName: product.name,
+    uniqueCode,
     amount: product.price,
+    totalAmount,
     status: 'pending',
-    qrisPayload: `ASISTENQ|${product.slug}|${product.price}|${member.email}`,
+    qrisPayload: product.price > 0
+      ? `ASISTENQ|${invoiceNumber}|${product.slug}|${totalAmount}|${member.email}`
+      : `ASISTENQ|${invoiceNumber}|${product.slug}|FREE|${member.email}`,
+    paymentQrUrl: 'https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEhut4hFJ1371v4Z-Xxd4_-ndcBaup55rpoiBgk066hJ-K1c5Lt9tgJIElFFdUL32KX7_2XRpZfgz8sAWNU8OEpr2dh_xYxkeL4I0ZQyTn76lBYAEdcfzp_WMQ9QkI8tYpagEqmJdGg9k8KzPMOBUgvqW_Ck9YR6RghxapNCkfcV7fUoAe_p3y_Ngg7BiWI/s735/photo_2026-06-16_07-23-26.jpg',
     createdAt: new Date().toISOString()
   };
 

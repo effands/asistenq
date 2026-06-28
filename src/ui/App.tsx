@@ -32,6 +32,7 @@ import {
   type LoginResult,
   type MemberLicenseDashboard,
   type PublicCatalog,
+  type PublicOrder,
   type PublicProduct,
   type Summary
 } from './api';
@@ -66,6 +67,7 @@ export function App() {
   const [memberSession, setMemberSession] = useState<LoginResult | null>(null);
   const [summary, setSummary] = useState<Summary | null>(null);
   const [memberDashboard, setMemberDashboard] = useState<MemberLicenseDashboard | null>(null);
+  const [memberOrders, setMemberOrders] = useState<PublicOrder[]>([]);
   const [adminLicenses, setAdminLicenses] = useState<AdminLicenseDashboard | null>(null);
   const [adminMembers, setAdminMembers] = useState<AdminMemberRow[]>([]);
   const [deploymentSettings, setDeploymentSettings] = useState<DeploymentSettingsResult | null>(null);
@@ -125,6 +127,11 @@ export function App() {
   async function loadLicenses(token = memberSession?.token) {
     if (!token) return;
     setMemberDashboard(await apiRequest<MemberLicenseDashboard>('/member/licenses', { token }));
+  }
+
+  async function loadMemberOrders(token = memberSession?.token) {
+    if (!token) return;
+    setMemberOrders(await apiRequest<PublicOrder[]>('/member/orders', { token }));
   }
 
   useEffect(() => {
@@ -285,6 +292,7 @@ export function App() {
         onMemberLogout={() => {
           setMemberSession(null);
           setMemberDashboard(null);
+          setMemberOrders([]);
           setMessage('Member logout.');
         }}
       >
@@ -292,9 +300,11 @@ export function App() {
           session={memberSession}
           products={products}
           dashboard={memberDashboard}
+          orders={memberOrders}
           onLogout={() => {
             setMemberSession(null);
             setMemberDashboard(null);
+            setMemberOrders([]);
             setMessage('Member logout.');
           }}
           onRegister={async (name, email, password, whatsapp, telegramId) => {
@@ -302,22 +312,26 @@ export function App() {
             setMemberSession(result);
             setMessage(`Member aktif: ${result.user.name}`);
             await loadLicenses(result.token);
+            await loadMemberOrders(result.token);
           }}
           onLogin={async (email, password) => {
             const result = await apiRequest<LoginResult>('/member/login', { method: 'POST', body: { email, password } });
             setMemberSession(result);
             setMessage(`Member login: ${result.user.name}`);
             await loadLicenses(result.token);
+            await loadMemberOrders(result.token);
           }}
           onCheckout={async (productId) => {
-            if (!memberSession) return;
-            const order = await apiRequest<{ qrisPayload: string }>('/checkout', {
+            if (!memberSession) throw new Error('Login member dulu.');
+            const order = await apiRequest<PublicOrder>('/checkout', {
               token: memberSession.token,
               method: 'POST',
               body: { productId }
             });
-            setMessage(`QRIS dibuat: ${order.qrisPayload}`);
+            setMessage(`Invoice ${order.invoiceNumber} dibuat.`);
             await loadLicenses(memberSession.token);
+            await loadMemberOrders(memberSession.token);
+            return order;
           }}
         />
       </PublicShell>
@@ -1534,18 +1548,20 @@ function Mixin9Landing({ product, onJoin }: { product: PublicProduct; onJoin: ()
   );
 }
 
-function MemberPanel({ session, products, dashboard, onRegister, onLogin, onCheckout, onLogout }: {
+function MemberPanel({ session, products, dashboard, orders, onRegister, onLogin, onCheckout, onLogout }: {
   session: LoginResult | null;
   products: PublicProduct[];
   dashboard: MemberLicenseDashboard | null;
+  orders: PublicOrder[];
   onRegister: (name: string, email: string, password: string, whatsapp: string, telegramId: string) => Promise<void>;
   onLogin: (email: string, password: string) => Promise<void>;
-  onCheckout: (productId: string) => Promise<void>;
+  onCheckout: (productId: string) => Promise<PublicOrder | undefined>;
   onLogout: () => void;
 }) {
   const [checkoutNotice, setCheckoutNotice] = useState('');
+  const [activeOrder, setActiveOrder] = useState<PublicOrder | null>(null);
   const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
-  const [activeMemberTab, setActiveMemberTab] = useState<'licenses' | 'products' | 'course' | 'help'>('licenses');
+  const [activeMemberTab, setActiveMemberTab] = useState<'licenses' | 'products' | 'orders' | 'course' | 'help'>('licenses');
 
   if (!session) {
     return (
@@ -1600,6 +1616,7 @@ function MemberPanel({ session, products, dashboard, onRegister, onLogin, onChec
         <div className="member-tab-list" aria-label="Menu member">
           <button className={activeMemberTab === 'licenses' ? 'active' : ''} onClick={() => setActiveMemberTab('licenses')}>Lisensi</button>
           <button className={activeMemberTab === 'products' ? 'active' : ''} onClick={() => setActiveMemberTab('products')}>Beli Produk</button>
+          <button className={activeMemberTab === 'orders' ? 'active' : ''} onClick={() => setActiveMemberTab('orders')}>History</button>
           <button className={activeMemberTab === 'course' ? 'active' : ''} onClick={() => setActiveMemberTab('course')}>Course</button>
           <button className={activeMemberTab === 'help' ? 'active' : ''} onClick={() => setActiveMemberTab('help')}>Bantuan</button>
         </div>
@@ -1654,6 +1671,12 @@ function MemberPanel({ session, products, dashboard, onRegister, onLogin, onChec
             <div className="member-product-list">
               {paidProducts.map((product) => (
                 <article className="member-product-card" key={product.id}>
+                  <button className="member-product-link" type="button" onClick={() => {
+                    window.history.pushState({}, '', product.landingPath ?? `/produk/${product.slug}`);
+                    window.dispatchEvent(new PopStateEvent('popstate'));
+                  }}>
+                    Lihat landing <ArrowRight size={14} />
+                  </button>
                   <div className="member-product-top">
                     <span>{product.type}</span>
                     {productIcon(product)}
@@ -1664,8 +1687,11 @@ function MemberPanel({ session, products, dashboard, onRegister, onLogin, onChec
                     <b>{product.price === 0 ? 'Gratis' : product.formattedPrice}</b>
                     <button className="primary" onClick={async () => {
                       setCheckoutNotice('');
-                      await onCheckout(product.id);
-                      setCheckoutNotice(`Order QRIS dibuat untuk ${product.name}. Cek instruksi pembayaran dari admin.`);
+                      const order = await onCheckout(product.id);
+                      if (order) {
+                        setActiveOrder(order);
+                        setCheckoutNotice(`Invoice ${order.invoiceNumber} dibuat untuk ${product.name}.`);
+                      }
                     }}>
                       {product.price === 0 ? 'Ambil' : 'Beli'}
                     </button>
@@ -1674,6 +1700,34 @@ function MemberPanel({ session, products, dashboard, onRegister, onLogin, onChec
               ))}
             </div>
             {checkoutNotice && <p className="form-notice">{checkoutNotice}</p>}
+          </div>
+        )}
+
+        {activeMemberTab === 'orders' && (
+          <div className="panel stack member-order-panel">
+            <div className="panel-heading">
+              <div>
+                <p className="section-kicker">Riwayat Pembelian</p>
+                <h2>Invoice & Order</h2>
+              </div>
+              <span className="soft-badge">{orders.length} order</span>
+            </div>
+            {orders.length === 0 && <div className="empty-state">Belum ada order. Pilih produk dulu untuk membuat invoice.</div>}
+            <div className="order-history-list">
+              {orders.map((order) => (
+                <article className="order-history-card" key={order.id}>
+                  <div>
+                    <strong>{order.invoiceNumber ?? order.id}</strong>
+                    <span>{order.product?.name ?? order.productName ?? order.productId}</span>
+                  </div>
+                  <div>
+                    <b>{order.formattedTotalAmount}</b>
+                    <span>{order.status}</span>
+                  </div>
+                  <button className="ghost-button" onClick={() => setActiveOrder(order)}>Lihat QRIS</button>
+                </article>
+              ))}
+            </div>
           </div>
         )}
 
@@ -1703,6 +1757,36 @@ function MemberPanel({ session, products, dashboard, onRegister, onLogin, onChec
           </div>
         )}
       </section>
+      {activeOrder && <InvoiceModal order={activeOrder} onClose={() => setActiveOrder(null)} />}
     </main>
+  );
+}
+
+function InvoiceModal({ order, onClose }: { order: PublicOrder; onClose: () => void }) {
+  return (
+    <div className="invoice-backdrop" role="dialog" aria-modal="true">
+      <article className="invoice-modal">
+        <div className="panel-heading">
+          <div>
+            <p className="section-kicker">Invoice QRIS</p>
+            <h2>{order.invoiceNumber ?? 'Invoice'}</h2>
+          </div>
+          <button className="ghost-button" onClick={onClose}>Tutup</button>
+        </div>
+        <div className="invoice-body">
+          <div className="invoice-summary">
+            <span>Produk<b>{order.product?.name ?? order.productName ?? order.productId}</b></span>
+            <span>Harga<b>{order.formattedAmount}</b></span>
+            <span>Kode unik<b>{order.uniqueCode ?? 0}</b></span>
+            <span>Total bayar<b>{order.formattedTotalAmount}</b></span>
+            <span>Status<b>{order.status}</b></span>
+          </div>
+          <div className="qris-box">
+            {order.paymentQrUrl && <img src={order.paymentQrUrl} alt="QRIS pembayaran" />}
+            <p>Scan QRIS ini lalu bayar sesuai total invoice. Kode unik membantu admin mencocokkan transaksi.</p>
+          </div>
+        </div>
+      </article>
+    </div>
   );
 }

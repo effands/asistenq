@@ -63,6 +63,10 @@ describe('server services', () => {
 
     const order = createCheckout(store, member.id, product.id);
     expect(order.status).toBe('pending');
+    expect(order.invoiceNumber).toMatch(/^INV-/);
+    expect(order.uniqueCode).toBeGreaterThanOrEqual(100);
+    expect(order.totalAmount).toBeGreaterThan(order.amount);
+    expect(order.paymentQrUrl).toContain('blogger.googleusercontent.com');
     expect(order.qrisPayload).toContain('ASISTENQ');
 
     const result = markOrderPaid(store, order.id, new Date('2026-06-28T00:00:00.000Z'));

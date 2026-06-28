@@ -36,6 +36,11 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
 }
 
 export type PublicProduct = Product & { formattedPrice: string };
+export type PublicOrder = Order & {
+  product?: PublicProduct;
+  formattedAmount: string;
+  formattedTotalAmount: string;
+};
 export type PublicCatalog = {
   featured: PublicProduct[];
   paid: PublicProduct[];

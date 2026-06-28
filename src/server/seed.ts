@@ -108,14 +108,14 @@ export async function seedInitialData(store: Store): Promise<void> {
     promoText: 'Batch mixing audio cepat untuk creator. Daftar member untuk ambil akses gratis.',
     logoUrl: '',
     landingPath: '/mixin9',
-    landingTemplate: 'mixin9',
+    landingTemplate: 'zip-html',
     ctaLabel: 'Ambil MIXIN9 Gratis',
     accessRequirement: 'Daftar jadi member untuk membuka akses download dan update.',
     featured: true,
     headline: 'Batch mixing audio banyak file dalam satu alur cepat.',
     description: 'MIXIN9 membantu creator merapikan loudness, balance, dan proses mixing audio secara batch tanpa membuka file satu per satu.',
     coverUrl: '',
-    accessUrl: '/member'
+    accessUrl: '/landing-imports/mixin9/index.html'
   });
 
   ensureProduct(store, {

@@ -51,6 +51,7 @@ if (!isProduction) {
 app.use(express.json());
 
 const landingImportDir = path.resolve('data/landing-imports');
+const bundledLandingDir = path.resolve('landings');
 
 const loginSchema = z.object({
   email: z.string().email(),
@@ -150,6 +151,16 @@ function publicProduct(product: typeof store.data.products[number]) {
   return {
     ...product,
     formattedPrice: formatCurrency(product.price)
+  };
+}
+
+function publicOrder(order: typeof store.data.orders[number]) {
+  const product = store.data.products.find((item) => item.id === order.productId);
+  return {
+    ...order,
+    product: product ? publicProduct(product) : undefined,
+    formattedAmount: formatCurrency(order.amount),
+    formattedTotalAmount: formatCurrency(order.totalAmount ?? order.amount)
   };
 }
 
@@ -643,7 +654,19 @@ app.post('/api/checkout', requireSession, (req, res) => {
   }
 
   const body = z.object({ productId: z.string() }).parse(req.body);
-  res.status(201).json(createCheckout(store, req.user.id, body.productId));
+  res.status(201).json(publicOrder(createCheckout(store, req.user.id, body.productId)));
+});
+
+app.get('/api/member/orders', requireSession, (req, res) => {
+  if (req.user?.type !== 'member') {
+    res.status(403).json({ message: 'member access required' });
+    return;
+  }
+
+  res.json(store.data.orders
+    .filter((order) => order.memberId === req.user?.id)
+    .sort((left, right) => right.createdAt.localeCompare(left.createdAt))
+    .map(publicOrder));
 });
 
 app.get('/api/member/licenses', requireSession, (req, res) => {
@@ -657,6 +680,24 @@ app.get('/api/member/licenses', requireSession, (req, res) => {
 
 if (shouldServeFrontend) {
   app.use('/landing-imports', express.static(landingImportDir));
+  app.use('/landing-imports', express.static(bundledLandingDir));
+  app.get(/^\/[a-z0-9-]+$/, (req, res, next) => {
+    const product = store.data.products.find((item) => item.landingPath === req.path || `/${item.slug}` === req.path);
+    if (!product) {
+      next();
+      return;
+    }
+
+    const importedIndexPath = path.join(landingImportDir, product.slug, 'index.html');
+    const bundledIndexPath = path.join(bundledLandingDir, product.slug, 'index.html');
+    const indexPath = fs.existsSync(importedIndexPath) ? importedIndexPath : bundledIndexPath;
+    if (!fs.existsSync(indexPath)) {
+      next();
+      return;
+    }
+
+    res.sendFile(indexPath);
+  });
   app.use(express.static(publicDir));
   app.get('*', (_req, res) => {
     res.sendFile(path.join(publicDir, 'index.html'));
