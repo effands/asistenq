@@ -561,8 +561,8 @@ function MemberPanel({ session, products, licenses, onRegister, onLogin, onCheck
       <main className="member-page">
         <section className="member-hero">
           <span className="chip">Member Area</span>
-          <h1>Akses lisensi, pembelian QRIS, dan materi kelas dari satu akun.</h1>
-          <p>Daftar sebagai member untuk membeli tools, menyimpan lisensi, dan nanti mengakses course YouTube.</p>
+          <h1>Masuk ke akun AsistenQ</h1>
+          <p>Kelola pembelian, lisensi tools, dan akses kelas dari satu tempat.</p>
         </section>
         <div className="member-auth-grid">
           <LoginBox title="Daftar Member" showName onSubmit={onRegister} />
