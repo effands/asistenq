@@ -5,7 +5,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import { z } from 'zod';
-import { formatCurrency } from '../shared/domain';
+import { createId, formatCurrency } from '../shared/domain';
 import { signSession, requireAdminScope, requireSession } from './auth';
 import { seedInitialData } from './seed';
 import {
@@ -116,6 +116,15 @@ const hwidActionSchema = z.object({
   productSlug: z.string().min(1),
   hwid: z.string().min(1),
   reason: z.string().default('')
+});
+
+const toolEventSchema = z.object({
+  productSlug: z.string().min(1),
+  eventType: z.string().min(1),
+  hwid: z.string().optional(),
+  email: z.string().email().optional(),
+  message: z.string().optional(),
+  metadata: z.record(z.unknown()).optional()
 });
 
 function publicProduct(product: typeof store.data.products[number]) {
@@ -320,6 +329,27 @@ app.post('/api/license/activate', (req, res) => {
 app.post('/api/license/verify', (req, res) => {
   const body = licenseTokenSchema.parse(req.body);
   res.json(verifyLicense(store, body));
+});
+
+app.post('/api/tool-events', (req, res) => {
+  const eventSecret = process.env.TOOL_EVENT_SECRET;
+  if (eventSecret && req.header('x-asistenq-tool-secret') !== eventSecret) {
+    res.status(403).json({ message: 'invalid tool event secret' });
+    return;
+  }
+
+  const body = toolEventSchema.parse(req.body);
+  store.data.auditLogs.push({
+    id: createId('audit'),
+    actorId: body.email ?? body.hwid ?? 'anonymous-tool',
+    action: `tool:${body.eventType}`,
+    targetType: body.productSlug,
+    targetId: body.hwid ?? body.email ?? body.productSlug,
+    createdAt: new Date().toISOString()
+  });
+  store.save();
+
+  res.status(201).json({ ok: true, message: 'Tool event received' });
 });
 
 app.post('/api/license/generate', requireSession, requireAdminScope('products'), (req, res) => {
