@@ -892,6 +892,7 @@ function DeployPanel({ settings, onDeployUpdate, onSaveSettings }: {
   const [busy, setBusy] = useState(false);
   const [saving, setSaving] = useState(false);
   const [log, setLog] = useState('Belum ada update dijalankan.');
+  const [settingsNotice, setSettingsNotice] = useState('');
   const [githubRepo, setGithubRepo] = useState(settings?.githubRepo ?? 'effands/asistenq');
   const [githubBranch, setGithubBranch] = useState(settings?.githubBranch ?? 'master');
   const [githubToken, setGithubToken] = useState('');
@@ -913,7 +914,7 @@ function DeployPanel({ settings, onDeployUpdate, onSaveSettings }: {
           </div>
           <span className="soft-badge">Safe mode</span>
         </div>
-        <p className="muted">Klik tombol ini setelah ada push ke GitHub. Sistem akan pull, install dependency, dan build. Setelah selesai, restart aplikasi Node.js dari panel hosting agar proses memakai build terbaru.</p>
+        <p className="muted">Setelah push ke GitHub, klik update lalu restart app Node.js di hosting.</p>
         <button
           className="primary deploy-button"
           disabled={busy}
@@ -937,9 +938,17 @@ function DeployPanel({ settings, onDeployUpdate, onSaveSettings }: {
       <form className="panel stack" onSubmit={async (event) => {
         event.preventDefault();
         setSaving(true);
+        setSettingsNotice('Menyimpan token...');
         try {
-          await onSaveSettings({ githubRepo, githubBranch, githubToken });
+          await onSaveSettings({
+            githubRepo: githubRepo.trim(),
+            githubBranch: githubBranch.trim(),
+            githubToken: githubToken.trim()
+          });
           setGithubToken('');
+          setSettingsNotice('Token GitHub tersimpan.');
+        } catch (error) {
+          setSettingsNotice(error instanceof Error ? error.message : 'Token gagal disimpan.');
         } finally {
           setSaving(false);
         }
@@ -963,6 +972,7 @@ function DeployPanel({ settings, onDeployUpdate, onSaveSettings }: {
         </label>
         {settings?.maskedGithubToken && <p className="form-notice">Token tersimpan: {settings.maskedGithubToken}</p>}
         <button className="primary" disabled={saving}>{saving ? 'Menyimpan...' : 'Simpan Token GitHub'}</button>
+        {settingsNotice && <p className="form-notice">{settingsNotice}</p>}
       </form>
     </section>
   );
