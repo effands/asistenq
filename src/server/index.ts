@@ -102,6 +102,7 @@ const productSchema = z.object({
   name: z.string().min(2),
   slug: z.string().min(2).regex(/^[a-z0-9-]+$/),
   type: z.enum(['tool', 'course', 'ebook', 'video', 'bundle', 'free', 'class']),
+  visibility: z.enum(['public', 'private', 'draft']).optional(),
   accessMode: z.enum(['public', 'free_member', 'trial', 'paid', 'admin']).optional(),
   billingPeriod: z.enum(['trial', 'monthly', 'annual', 'lifetime', 'one_time']),
   price: z.number().int().nonnegative(),
@@ -136,7 +137,7 @@ const generateLicenseSchema = z.object({
   productSlug: z.string().min(1),
   planCode: z.string().min(1),
   email: z.string().email(),
-  hwid: z.string().min(1)
+  hwid: z.string().trim().regex(/^[A-Za-z0-9]{16}$/, 'HWID harus tepat 16 karakter huruf/angka.')
 });
 
 const licenseTokenSchema = z.object({
@@ -491,8 +492,15 @@ app.post('/api/tool-events', (req, res) => {
 });
 
 app.post('/api/license/generate', requireSession, requireAdminScope('products'), (req, res) => {
-  const body = generateLicenseSchema.parse(req.body);
-  res.status(201).json(generateToolLicense(store, body));
+  try {
+    const body = generateLicenseSchema.parse(req.body);
+    res.status(201).json(generateToolLicense(store, body));
+  } catch (error) {
+    const message = error instanceof z.ZodError
+      ? error.issues.map((issue) => issue.message).join(', ')
+      : error instanceof Error ? error.message : 'Data lisensi tidak valid.';
+    res.status(400).json({ message });
+  }
 });
 
 app.post('/api/license/reset-device', requireSession, requireAdminScope('products'), (req, res) => {
@@ -515,6 +523,7 @@ app.get('/api/admin/summary', requireSession, requireAdminScope('products'), (_r
     products: store.data.products.length,
     members: store.data.members.length,
     orders: store.data.orders.length,
+    licenses: store.data.licenses.length,
     activeSubscriptions: store.data.subscriptions.filter((item) => item.status === 'active').length
   });
 });
@@ -914,7 +923,7 @@ Output JSON object dengan title, description, tags, isAiGenerated.`,
 });
 
 app.get('/api/admin/orders', requireSession, requireAdminScope('orders'), (_req, res) => {
-  res.json(store.data.orders);
+  res.json(store.data.orders.map(publicOrder));
 });
 
 app.post('/api/admin/orders/:id/paid', requireSession, requireAdminScope('orders'), (req, res) => {
@@ -950,6 +959,13 @@ app.get('/api/member/licenses', requireSession, (req, res) => {
   }
 
   res.json(memberLicenseDashboard(store, req.user.id));
+});
+
+app.use('/api', (error: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+  const message = error instanceof z.ZodError
+    ? error.issues.map((issue) => issue.message).join(', ')
+    : error instanceof Error ? error.message : 'Permintaan gagal diproses.';
+  res.status(error instanceof z.ZodError ? 400 : 500).json({ message });
 });
 
 if (shouldServeFrontend) {

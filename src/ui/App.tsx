@@ -38,7 +38,7 @@ import {
 } from './api';
 
 type Route = 'home' | 'admin' | 'member' | 'product';
-type AdminSection = 'dashboard' | 'landing' | 'products' | 'licenses' | 'members' | 'deploy';
+type AdminSection = 'dashboard' | 'landing' | 'products' | 'orders' | 'licenses' | 'members' | 'deploy';
 type AdminTheme = 'light' | 'dark';
 
 const productTypes: ProductType[] = ['tool', 'course', 'ebook', 'video', 'bundle', 'free', 'class'];
@@ -72,6 +72,7 @@ export function App() {
   const [memberOrders, setMemberOrders] = useState<PublicOrder[]>([]);
   const [adminLicenses, setAdminLicenses] = useState<AdminLicenseDashboard | null>(null);
   const [adminMembers, setAdminMembers] = useState<AdminMemberRow[]>([]);
+  const [adminOrders, setAdminOrders] = useState<PublicOrder[]>([]);
   const [deploymentSettings, setDeploymentSettings] = useState<DeploymentSettingsResult | null>(null);
   const [message, setMessage] = useState('Sistem AsistenQ siap.');
   const [adminSection, setAdminSection] = useState<AdminSection>('dashboard');
@@ -121,6 +122,11 @@ export function App() {
     setAdminMembers(await apiRequest<AdminMemberRow[]>('/admin/members', { token }));
   }
 
+  async function loadAdminOrders(token = adminSession?.token) {
+    if (!token) return;
+    setAdminOrders(await apiRequest<PublicOrder[]>('/admin/orders', { token }));
+  }
+
   async function loadDeploymentSettings(token = adminSession?.token) {
     if (!token) return;
     setDeploymentSettings(await apiRequest<DeploymentSettingsResult>('/admin/deploy/settings', { token }));
@@ -162,11 +168,13 @@ export function App() {
       >
         <AdminPanel
           activeSection={adminSection}
+          onSectionChange={setAdminSection}
           session={adminSession}
           summary={summary}
           products={products}
           licenses={adminLicenses}
           members={adminMembers}
+          orders={adminOrders}
           onLogin={async (email, password) => {
             const result = await apiRequest<LoginResult>('/admin/login', { method: 'POST', body: { email, password } });
             setAdminSession(result);
@@ -174,6 +182,7 @@ export function App() {
             await loadAdminSummary(result.token);
             await loadAdminLicenses(result.token);
             await loadAdminMembers(result.token);
+            await loadAdminOrders(result.token);
             await loadDeploymentSettings(result.token);
           }}
           onCreateProduct={async (input) => {
@@ -227,6 +236,7 @@ export function App() {
             await loadAdminSummary(adminSession.token);
             await loadAdminLicenses(adminSession.token);
             await loadAdminMembers(adminSession.token);
+            await loadAdminOrders(adminSession.token);
             setMessage(result.message);
           }}
           onGenerateLicense={async (input) => {
@@ -430,6 +440,7 @@ function AdminShell({ activeSection, children, message, navigate, onSectionChang
           <button className={activeSection === 'dashboard' ? 'active' : ''} onClick={() => onSectionChange('dashboard')}><LayoutDashboard size={18} /> Dashboard</button>
           <button className={activeSection === 'landing' ? 'active' : ''} onClick={() => onSectionChange('landing')}><Sparkles size={18} /> Landing</button>
           <button className={activeSection === 'products' ? 'active' : ''} onClick={() => onSectionChange('products')}><Boxes size={18} /> Produk</button>
+          <button className={activeSection === 'orders' ? 'active' : ''} onClick={() => onSectionChange('orders')}><CreditCard size={18} /> Order</button>
           <button className={activeSection === 'licenses' ? 'active' : ''} onClick={() => onSectionChange('licenses')}><KeyRound size={18} /> Lisensi</button>
           <button className={activeSection === 'members' ? 'active' : ''} onClick={() => onSectionChange('members')}><Users size={18} /> Member</button>
           <button className={activeSection === 'deploy' ? 'active' : ''} onClick={() => onSectionChange('deploy')}><UploadCloud size={18} /> Update</button>
@@ -540,11 +551,13 @@ function LoginBox({ title, accountType = 'member', footer, onSubmit, showName = 
 
 function AdminPanel({
   activeSection,
+  onSectionChange,
   session,
   summary,
   products,
   licenses,
   members,
+  orders,
   onLogin,
   onCreateProduct,
   onUpdateProduct,
@@ -561,11 +574,13 @@ function AdminPanel({
   onSaveDeploymentSettings
 }: {
   activeSection: AdminSection;
+  onSectionChange: (section: AdminSection) => void;
   session: LoginResult | null;
   summary: Summary | null;
   products: PublicProduct[];
   licenses: AdminLicenseDashboard | null;
   members: AdminMemberRow[];
+  orders: PublicOrder[];
   onLogin: (email: string, password: string) => Promise<void>;
   onCreateProduct: (input: {
     name: string;
@@ -639,6 +654,10 @@ function AdminPanel({
     );
   }
 
+  if (activeSection === 'orders') {
+    return <AdminOrderPanel orders={orders} />;
+  }
+
   if (activeSection === 'members') {
     return <AdminMemberPanel members={members} onRefresh={onRefreshMembers} />;
   }
@@ -647,13 +666,14 @@ function AdminPanel({
     return <DeployPanel settings={deploymentSettings} onDeployUpdate={onDeployUpdate} onSaveSettings={onSaveDeploymentSettings} />;
   }
 
-  return <AdminDashboardPanel onResetOperationalData={onResetOperationalData} products={products} summary={summary} />;
+  return <AdminDashboardPanel onNavigate={onSectionChange} onResetOperationalData={onResetOperationalData} products={products} summary={summary} />;
 }
 
-function AdminDashboardPanel({ products, summary, onResetOperationalData }: {
+function AdminDashboardPanel({ products, summary, onResetOperationalData, onNavigate }: {
   products: PublicProduct[];
   summary: Summary | null;
   onResetOperationalData: () => Promise<void>;
+  onNavigate: (section: AdminSection) => void;
 }) {
   const [resetBusy, setResetBusy] = useState(false);
   const [resetNotice, setResetNotice] = useState('');
@@ -661,10 +681,10 @@ function AdminDashboardPanel({ products, summary, onResetOperationalData }: {
   return (
     <section className="admin-content-grid">
       <div className="metrics">
-        <Metric icon={<PackagePlus />} label="Produk" value={summary?.products ?? products.length} />
-        <Metric icon={<Users />} label="Member" value={summary?.members ?? 0} />
-        <Metric icon={<CreditCard />} label="Order" value={summary?.orders ?? 0} />
-        <Metric icon={<KeyRound />} label="Subscription" value={summary?.activeSubscriptions ?? 0} />
+        <Metric icon={<PackagePlus />} label="Produk" value={summary?.products ?? products.length} onClick={() => onNavigate('products')} />
+        <Metric icon={<Users />} label="Member" value={summary?.members ?? 0} onClick={() => onNavigate('members')} />
+        <Metric icon={<CreditCard />} label="Order" value={summary?.orders ?? 0} onClick={() => onNavigate('orders')} />
+        <Metric icon={<KeyRound />} label="Lisensi" value={summary?.licenses ?? 0} onClick={() => onNavigate('licenses')} />
       </div>
       <div className="panel stack wide">
         <div className="panel-heading">
@@ -704,6 +724,31 @@ function formatDate(value?: string | null) {
   return new Date(value).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' });
 }
 
+function AdminOrderPanel({ orders }: { orders: PublicOrder[] }) {
+  return (
+    <section className="panel stack">
+      <div className="panel-heading">
+        <div><p className="section-kicker">Transaksi</p><h2>Daftar Order</h2></div>
+        <span className="soft-badge">{orders.length} order</span>
+      </div>
+      <div className="order-admin-table-wrap">
+        <div className="order-admin-row order-admin-head"><span>Invoice</span><span>Member ID</span><span>Produk</span><span>Total</span><span>Status</span><span>Tanggal</span></div>
+        {orders.length === 0 && <div className="empty-state">Belum ada order.</div>}
+        {orders.map((order) => (
+          <div className="order-admin-row" key={order.id}>
+            <strong>{order.invoiceNumber ?? order.id}</strong>
+            <span>{order.memberId}</span>
+            <span>{order.product?.name ?? order.productName ?? order.productId}</span>
+            <b>{order.formattedTotalAmount}</b>
+            <span className={`status-dot status-${order.status}`}>{order.status}</span>
+            <span>{formatDate(order.createdAt)}</span>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 function licenseStatusLabel(license: LicenseDashboardRow) {
   if (license.status === 'generated') return 'Belum diaktivasi';
   if (license.status === 'active') return 'Aktif';
@@ -721,7 +766,9 @@ function AdminLicensePanel({ dashboard, products, onGenerateLicense, onRefresh, 
   onBanLicense: (license: LicenseDashboardRow) => Promise<void>;
   onUnbanLicense: (license: LicenseDashboardRow) => Promise<void>;
 }) {
-  const vjProduct = products.find((product) => product.slug === 'vjstudio') ?? products.find((product) => product.type === 'tool') ?? products[0];
+  const licensedSlugs = new Set((dashboard?.plans ?? []).map((plan) => plan.productSlug));
+  const licenseProducts = products.filter((product) => licensedSlugs.has(product.slug));
+  const vjProduct = licenseProducts.find((product) => product.slug === 'vjstudio') ?? licenseProducts[0];
   const [productSlug, setProductSlug] = useState(vjProduct?.slug ?? 'vjstudio');
   const productPlans = (dashboard?.plans ?? []).filter((plan) => plan.productSlug === productSlug);
   const [planCode, setPlanCode] = useState('1M');
@@ -782,7 +829,7 @@ function AdminLicensePanel({ dashboard, products, onGenerateLicense, onRefresh, 
         }}>
           <label>Produk
             <select value={productSlug} onChange={(event) => setProductSlug(event.target.value)}>
-              {products.filter((product) => product.type === 'tool').map((product) => (
+              {licenseProducts.map((product) => (
                 <option key={product.id} value={product.slug}>{product.name}</option>
               ))}
             </select>
@@ -800,8 +847,9 @@ function AdminLicensePanel({ dashboard, products, onGenerateLicense, onRefresh, 
           <label>Device ID / HWID
             <input value={hwid} onChange={(event) => setHwid(event.target.value.toUpperCase())} maxLength={16} placeholder="16 digit HWID pembeli" />
           </label>
-          <button className="primary" disabled={busy}><KeyRound size={18} /> Generate Token</button>
+          <button className="primary" disabled={busy || !productSlug || !planCode || productPlans.length === 0}><KeyRound size={18} /> Generate Token</button>
         </form>
+        {licenseProducts.length === 0 && <p className="form-notice">Belum ada produk dengan paket lisensi aktif.</p>}
         {notice && <p className="form-notice">{notice}</p>}
       </div>
 
@@ -868,7 +916,7 @@ function AdminMemberPanel({ members, onRefresh }: {
   const [search, setSearch] = useState('');
   const [busy, setBusy] = useState(false);
   const filteredMembers = members.filter((member) => {
-    const haystack = `${member.name} ${member.email}`.toLowerCase();
+    const haystack = `${member.name} ${member.email} ${member.whatsapp ?? ''} ${member.telegramId ?? ''}`.toLowerCase();
     return haystack.includes(search.toLowerCase());
   });
 
@@ -895,29 +943,33 @@ function AdminMemberPanel({ members, onRefresh }: {
             <RefreshCw size={16} /> Refresh
           </button>
         </div>
-        <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Cari nama atau email member..." />
-        <div className="member-admin-list">
+        <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Cari nama, email, WhatsApp, atau Telegram..." />
+        <div className="member-table-wrap">
+          <div className="member-table member-table-head" aria-hidden="true">
+            <span>Member</span><span>Kontak</span><span>Status</span><span>Aktivitas</span><span>Daftar</span>
+          </div>
+          <div className="member-admin-list">
           {filteredMembers.length === 0 && <div className="empty-state">Belum ada member yang cocok.</div>}
           {filteredMembers.map((member) => (
             <article className="member-admin-card" key={member.id}>
-              <div className="member-admin-avatar">{member.name.slice(0, 2).toUpperCase()}</div>
               <div className="member-admin-main">
                 <h3>{member.name}</h3>
                 <p>{member.email}</p>
-                <p>{member.whatsapp || '-'} · {member.telegramId || '-'}</p>
               </div>
+              <div className="member-admin-contact"><span>WA: {member.whatsapp || '-'}</span><span>TG: {member.telegramId || '-'}</span></div>
+              <span className={`status-dot ${member.active ? 'status-active' : 'status-expired'}`}>{member.active ? 'Aktif' : 'Nonaktif'}</span>
               <div className="member-admin-stats">
-                <span>{member.licenseCount}<small>Lisensi</small></span>
-                <span>{member.orderCount}<small>Order</small></span>
-                <span>{member.subscriptionCount}<small>Akses</small></span>
+                <span>{member.licenseCount} lisensi</span>
+                <span>{member.orderCount} order</span>
+                <span>{member.subscriptionCount} akses</span>
               </div>
               <div className="member-admin-meta">
-                <span className={`status-dot ${member.active ? 'status-active' : 'status-expired'}`}>{member.active ? 'Aktif' : 'Nonaktif'}</span>
-                <span>Daftar: {formatDate(member.createdAt)}</span>
-                <span>Order terakhir: {member.latestOrder ? formatDate(member.latestOrder.createdAt) : '-'}</span>
+                <span>{formatDate(member.createdAt)}</span>
+                <small>Order: {member.latestOrder ? formatDate(member.latestOrder.createdAt) : '-'}</small>
               </div>
             </article>
           ))}
+          </div>
         </div>
       </div>
     </section>
@@ -1170,13 +1222,14 @@ function ProductForm({ onCreateProduct }: {
   );
 }
 
-function Metric({ icon, label, value }: { icon: ReactNode; label: string; value: number }) {
+function Metric({ icon, label, value, onClick }: { icon: ReactNode; label: string; value: number; onClick: () => void }) {
   return (
-    <div className="metric">
+    <button className="metric" type="button" onClick={onClick}>
       {icon}
       <span>{label}</span>
       <strong>{value}</strong>
-    </div>
+      <ArrowRight className="metric-arrow" size={16} />
+    </button>
   );
 }
 
@@ -1188,6 +1241,11 @@ function ProductTable({ products, onUpdateProduct, onImportLandingZip }: {
   const [editingId, setEditingId] = useState('');
   const [draft, setDraft] = useState<Partial<PublicProduct>>({});
   const [notice, setNotice] = useState('');
+  const [filter, setFilter] = useState<'all' | 'landing' | 'tool'>('all');
+  const filteredProducts = products.filter((product) => {
+    const isToolApp = product.landingTemplate === 'tool-app';
+    return filter === 'all' || (filter === 'tool' ? isToolApp : !isToolApp);
+  });
 
   function startEdit(product: PublicProduct) {
     setEditingId(product.id);
@@ -1218,16 +1276,20 @@ function ProductTable({ products, onUpdateProduct, onImportLandingZip }: {
           <p className="section-kicker">Inventory</p>
           <h2>Produk Aktif</h2>
         </div>
-        <span className="soft-badge">{products.length} produk</span>
+        <div className="product-filter-tabs">
+          <button className={filter === 'all' ? 'active' : ''} onClick={() => setFilter('all')} type="button">Semua</button>
+          <button className={filter === 'landing' ? 'active' : ''} onClick={() => setFilter('landing')} type="button">Landing</button>
+          <button className={filter === 'tool' ? 'active' : ''} onClick={() => setFilter('tool')} type="button">Tools</button>
+        </div>
       </div>
       <div className="product-admin-list">
-        {products.map((product) => (
+        {filteredProducts.map((product) => (
           <article className="product-admin-card" key={product.id}>
             <div className="product-admin-summary">
               <div className="product-icon">{product.logoUrl ? <img src={product.logoUrl} alt="" /> : productIcon(product)}</div>
               <div>
                 <strong>{product.name}</strong>
-                <span>{product.landingPath ?? `/produk/${product.slug}`} · {product.visibility ?? 'public'} · {product.accessMode ?? 'public'} · {product.price === 0 ? 'Gratis' : product.formattedPrice}</span>
+                <span><b>{product.landingTemplate === 'tool-app' ? 'TOOL APP' : 'LANDING'}</b> · {product.landingPath ?? `/produk/${product.slug}`} · {product.visibility ?? 'public'} · {product.accessMode ?? 'public'} · {product.price === 0 ? 'Gratis' : product.formattedPrice}</span>
               </div>
               <button className="ghost-button" type="button" onClick={() => startEdit(product)}>Edit</button>
             </div>

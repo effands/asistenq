@@ -47,7 +47,7 @@ export type PublicCatalog = {
   free: PublicProduct[];
 };
 export type LoginResult = { token: string; user: { id: string; name: string; email: string; role?: string; scopes?: string[] } };
-export type Summary = { products: number; members: number; orders: number; activeSubscriptions: number };
+export type Summary = { products: number; members: number; orders: number; licenses: number; activeSubscriptions: number };
 export type ForgotPasswordResult = { ok: true; message: string; resetUrl?: string; expiresAt?: string };
 export type DeploymentSettingsResult = {
   ok?: true;
