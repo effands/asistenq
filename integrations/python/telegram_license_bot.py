@@ -4,8 +4,6 @@ No secret is stored in this file. Configure TELEGRAM_BOT_TOKEN,
 TELEGRAM_OWNER_ID, ASISTENQ_ADMIN_EMAIL, and ASISTENQ_ADMIN_PASSWORD.
 """
 
-from __future__ import annotations
-
 import json
 import os
 import time
@@ -13,7 +11,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from pathlib import Path
-from typing import Any
+from typing import Any, Dict, Optional
 
 
 API_BASE = os.environ.get("ASISTENQ_API_BASE", "https://asistenq.com/api").rstrip("/")
@@ -24,8 +22,8 @@ ADMIN_PASSWORD = os.environ.get("ASISTENQ_ADMIN_PASSWORD", "").strip()
 STATE_FILE = Path(os.environ.get("ASISTENQ_BOT_STATE", "data/telegram-bot-state.json"))
 
 
-def request_json(url: str, method: str = "GET", body: dict[str, Any] | None = None,
-                 headers: dict[str, str] | None = None) -> Any:
+def request_json(url: str, method: str = "GET", body: Optional[Dict[str, Any]] = None,
+                 headers: Optional[Dict[str, str]] = None) -> Any:
     payload = json.dumps(body).encode("utf-8") if body is not None else None
     request_headers = {"Accept": "application/json", **(headers or {})}
     if payload is not None:
@@ -44,7 +42,7 @@ def request_json(url: str, method: str = "GET", body: dict[str, Any] | None = No
         raise RuntimeError(f"API {error.code}: {message}") from error
 
 
-def telegram(method: str, body: dict[str, Any] | None = None) -> Any:
+def telegram(method: str, body: Optional[Dict[str, Any]] = None) -> Any:
     return request_json(f"https://api.telegram.org/bot{BOT_TOKEN}/{method}", "POST", body or {})
 
 
@@ -56,7 +54,7 @@ def admin_token() -> str:
     return str(result["token"])
 
 
-def api(path: str, method: str = "GET", body: dict[str, Any] | None = None) -> Any:
+def api(path: str, method: str = "GET", body: Optional[Dict[str, Any]] = None) -> Any:
     return request_json(f"{API_BASE}{path}", method, body, {
         "Authorization": f"Bearer {admin_token()}"
     })
