@@ -19,6 +19,7 @@ Marketplace digital untuk tools, ebook, video, dan kelas.
 ## Akun Awal Lokal
 - Email: `admin@asistenq.com`
 - Password: `AsistenQ2026!`
+- Admin panel lokal: `http://127.0.0.1:3000/adminasistenq`
 
 Ganti `SESSION_SECRET`, `ADMIN_EMAIL`, dan `ADMIN_PASSWORD` sebelum dipakai di hosting.
 

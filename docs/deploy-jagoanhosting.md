@@ -50,8 +50,9 @@ Jika panel hosting menyediakan fitur Node.js app:
 5. Set environment production.
 6. Start Node.js app.
 7. Aktifkan SSL untuk `asistenq.com`.
-8. Tes halaman utama, login admin, dan API health.
+8. Tes halaman utama, admin internal, dan API health.
 
 ## URL Tes
 - Website: `https://asistenq.com`
+- Admin internal: `https://asistenq.com/adminasistenq`
 - Health check: `https://asistenq.com/api/health`

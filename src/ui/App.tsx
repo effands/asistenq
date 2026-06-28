@@ -27,7 +27,7 @@ const billingPeriods: BillingPeriod[] = ['trial', 'monthly', 'annual', 'lifetime
 const emptyCatalog: PublicCatalog = { featured: [], paid: [], free: [] };
 
 function routeFromPath(pathname: string): Route {
-  if (pathname.startsWith('/admin')) return 'admin';
+  if (pathname.startsWith('/adminasistenq')) return 'admin';
   if (pathname.startsWith('/member')) return 'member';
   return 'home';
 }
@@ -43,7 +43,7 @@ export function App() {
   const [message, setMessage] = useState('Sistem AsistenQ siap.');
 
   function navigate(nextRoute: Route) {
-    const path = nextRoute === 'home' ? '/' : `/${nextRoute}`;
+    const path = nextRoute === 'home' ? '/' : nextRoute === 'admin' ? '/adminasistenq' : `/${nextRoute}`;
     window.history.pushState({}, '', path);
     setRoute(nextRoute);
   }
@@ -172,7 +172,6 @@ function PublicShell({ children, navigate, activeRoute }: {
           <button className={activeRoute === 'member' ? 'active' : ''} onClick={() => navigate('member')}>Member</button>
         </nav>
         <div className="nav-actions">
-          <button className="ghost-button" onClick={() => navigate('admin')}>Admin</button>
           <button className="primary public-cta" onClick={() => navigate('member')}>Masuk Member</button>
         </div>
       </header>
@@ -406,11 +405,11 @@ function Marketplace({ catalog, onJoin }: { catalog: PublicCatalog; onJoin: () =
         <div className="hero-orb hero-orb-a" />
         <div className="hero-orb hero-orb-b" />
         <div className="hero-content">
-          <div className="hero-badge"><Sparkles size={16} /> Marketplace tools, lisensi, dan kelas creator</div>
-          <h1>Asisten digital untuk kerja creator yang lebih cepat, rapi, dan terukur.</h1>
-          <p>AsistenQ mengumpulkan tools video, lisensi software, resource gratis, dan kelas YouTube dalam satu ekosistem. Hari ini dimulai dari VJ Studio Pro, besok tinggal tambah produk baru tanpa bongkar sistem.</p>
+          <div className="hero-badge"><Sparkles size={16} /> Tools, kelas, dan resource untuk creator YouTube</div>
+          <h1>Kerja video lebih cepat, channel lebih rapi, hasil lebih siap upload.</h1>
+          <p>AsistenQ menyediakan tools pendukung editing video, template workflow, resource gratis, dan kelas YouTube berbayar agar proses produksi konten terasa lebih ringan dari ide sampai publish.</p>
           <div className="hero-actions">
-            <button className="primary public-hero-button" onClick={onJoin}>Mulai jadi member <ArrowRight size={18} /></button>
+            <button className="primary public-hero-button" onClick={onJoin}>Lihat paket member <ArrowRight size={18} /></button>
             <a className="text-link" href="#produk">Lihat produk</a>
           </div>
           <div className="trust-row">
@@ -446,7 +445,7 @@ function Marketplace({ catalog, onJoin }: { catalog: PublicCatalog; onJoin: () =
       <section className="brand-strip">
         <span>Video tools</span>
         <span>YouTube workflow</span>
-        <span>License center</span>
+        <span>Lisensi resmi</span>
         <span>E-learning</span>
         <span>Free resource</span>
       </section>
@@ -457,7 +456,7 @@ function Marketplace({ catalog, onJoin }: { catalog: PublicCatalog; onJoin: () =
             <p className="section-kicker">Featured Products</p>
             <h2>Layanan utama AsistenQ</h2>
           </div>
-          <p>Produk dibuat modular: tools, course, ebook, video, bundle, maupun resource gratis.</p>
+          <p>Pilih tools, kelas, atau resource yang paling cocok untuk mempercepat produksi kontenmu.</p>
         </div>
         <div className="market-grid featured-market-grid">
           {catalog.featured.map((product) => (
@@ -468,10 +467,10 @@ function Marketplace({ catalog, onJoin }: { catalog: PublicCatalog; onJoin: () =
 
       <section className="landing-section split-section" id="course">
         <div className="course-panel">
-          <span className="chip">Course roadmap</span>
-          <h2>Kelas YouTube online, offline, dan update tahunan.</h2>
-          <p>AsistenQ disiapkan agar kelas baru tinggal ditambahkan: materi video, ebook pendamping, tools support, dan akses member.</p>
-          <button className="ghost-button" onClick={onJoin}>Masuk daftar tunggu</button>
+          <span className="chip">Kelas YouTube</span>
+          <h2>Belajar produksi konten dengan alur yang jelas, bukan tebak-tebakan.</h2>
+          <p>Kelas berisi video tutorial, materi pendamping, dan update berkala. Cocok untuk creator yang ingin belajar dari dasar, merapikan workflow, atau mempercepat proses upload.</p>
+          <button className="ghost-button" onClick={onJoin}>Lihat akses kelas</button>
         </div>
         <div className="mini-stack">
           <div><PlayCircle /> Video tutorial bertahap</div>
@@ -499,8 +498,8 @@ function Marketplace({ catalog, onJoin }: { catalog: PublicCatalog; onJoin: () =
 
       <section className="final-cta">
         <div>
-          <p className="section-kicker">AsistenQ ecosystem</p>
-          <h2>Mulai dari satu tools, siap tumbuh jadi marketplace digital.</h2>
+          <p className="section-kicker">Mulai sekarang</p>
+          <h2>Pilih tools atau kelas yang kamu butuhkan, lalu aktifkan lewat akun member.</h2>
         </div>
         <button className="primary public-hero-button" onClick={onJoin}>Buat akun member</button>
       </section>
