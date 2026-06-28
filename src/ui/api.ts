@@ -19,8 +19,17 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
   });
 
   if (!response.ok) {
-    const error = await response.json().catch(() => ({ message: 'request failed' }));
-    throw new Error(error.message ?? 'request failed');
+    const rawError = await response.text();
+    let message = rawError || `Request gagal (${response.status})`;
+
+    try {
+      const error = JSON.parse(rawError) as { message?: string; detail?: string };
+      message = error.message ?? error.detail ?? message;
+    } catch {
+      message = rawError ? rawError.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim() : message;
+    }
+
+    throw new Error(message || `Request gagal (${response.status})`);
   }
 
   return response.json() as Promise<T>;

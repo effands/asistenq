@@ -960,7 +960,7 @@ function DeployPanel({ settings, onDeployUpdate, onSaveSettings }: {
           </div>
           <span className="soft-badge">{settings?.hasGithubToken ? 'Token aktif' : 'Belum ada token'}</span>
         </div>
-        <p className="muted">Masukkan token GitHub awalan `ghp_` untuk repo private. Token tersimpan di data server yang tidak ikut GitHub dan hanya ditampilkan dalam bentuk masked.</p>
+        <p className="muted">Masukkan token GitHub untuk repo private. Token disimpan di server dan ditampilkan masked.</p>
         <label>Repository
           <input value={githubRepo} onChange={(event) => setGithubRepo(event.target.value)} placeholder="effands/asistenq" />
         </label>

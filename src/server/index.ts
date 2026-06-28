@@ -466,27 +466,41 @@ app.get('/api/admin/deploy/settings', requireSession, requireAdminScope('product
 });
 
 app.post('/api/admin/deploy/settings', requireSession, requireAdminScope('products'), (req, res) => {
-  const body = deploymentSettingsSchema.parse(req.body);
+  const parsed = deploymentSettingsSchema.safeParse(req.body);
+
+  if (!parsed.success) {
+    res.status(400).json({ message: 'Data GitHub belum lengkap. Cek repository, branch, dan token.' });
+    return;
+  }
+
+  const body = parsed.data;
   const current = store.data.deploymentSettings ?? {};
   const nextToken = body.githubToken?.trim() || current.githubToken || process.env.GITHUB_TOKEN || '';
 
-  store.data.deploymentSettings = {
-    githubRepo: body.githubRepo.trim(),
-    githubBranch: body.githubBranch.trim(),
-    githubToken: nextToken,
-    updatedAt: new Date().toISOString()
-  };
-  store.save();
+  try {
+    store.data.deploymentSettings = {
+      githubRepo: body.githubRepo.trim(),
+      githubBranch: body.githubBranch.trim(),
+      githubToken: nextToken,
+      updatedAt: new Date().toISOString()
+    };
+    store.save();
 
-  res.json({
-    ok: true,
-    message: 'GitHub deployment settings tersimpan.',
-    githubRepo: store.data.deploymentSettings.githubRepo,
-    githubBranch: store.data.deploymentSettings.githubBranch,
-    hasGithubToken: Boolean(nextToken),
-    maskedGithubToken: maskedSecret(nextToken),
-    updatedAt: store.data.deploymentSettings.updatedAt
-  });
+    res.json({
+      ok: true,
+      message: 'Token GitHub tersimpan.',
+      githubRepo: store.data.deploymentSettings.githubRepo,
+      githubBranch: store.data.deploymentSettings.githubBranch,
+      hasGithubToken: Boolean(nextToken),
+      maskedGithubToken: maskedSecret(nextToken),
+      updatedAt: store.data.deploymentSettings.updatedAt
+    });
+  } catch (error) {
+    res.status(500).json({
+      message: 'Token gagal disimpan ke data server.',
+      detail: error instanceof Error ? error.message : 'unknown save error'
+    });
+  }
 });
 
 app.post('/api/admin/deploy/update', requireSession, requireAdminScope('products'), async (_req, res) => {
