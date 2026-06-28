@@ -1,36 +1,52 @@
 import {
+  ArrowRight,
   BadgeCheck,
   BookOpen,
   Boxes,
   CreditCard,
   Film,
+  GraduationCap,
   KeyRound,
   LayoutDashboard,
   LogIn,
   PackagePlus,
+  PlayCircle,
   ShieldCheck,
   Sparkles,
-  Users
+  Users,
+  WandSparkles
 } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import type { BillingPeriod, ProductType } from '../shared/types';
 import { apiRequest, type LoginResult, type MemberLicense, type PublicCatalog, type PublicProduct, type Summary } from './api';
 
-type View = 'marketplace' | 'member' | 'admin';
+type Route = 'home' | 'admin' | 'member';
 
 const productTypes: ProductType[] = ['tool', 'course', 'ebook', 'video', 'bundle', 'free', 'class'];
 const billingPeriods: BillingPeriod[] = ['trial', 'monthly', 'annual', 'lifetime', 'one_time'];
 const emptyCatalog: PublicCatalog = { featured: [], paid: [], free: [] };
 
+function routeFromPath(pathname: string): Route {
+  if (pathname.startsWith('/admin')) return 'admin';
+  if (pathname.startsWith('/member')) return 'member';
+  return 'home';
+}
+
 export function App() {
-  const [view, setView] = useState<View>('marketplace');
+  const [route, setRoute] = useState<Route>(() => routeFromPath(window.location.pathname));
   const [products, setProducts] = useState<PublicProduct[]>([]);
   const [catalog, setCatalog] = useState<PublicCatalog>(emptyCatalog);
   const [adminSession, setAdminSession] = useState<LoginResult | null>(null);
   const [memberSession, setMemberSession] = useState<LoginResult | null>(null);
   const [summary, setSummary] = useState<Summary | null>(null);
   const [licenses, setLicenses] = useState<MemberLicense[]>([]);
-  const [message, setMessage] = useState('Siap mengelola AsistenQ.');
+  const [message, setMessage] = useState('Sistem AsistenQ siap.');
+
+  function navigate(nextRoute: Route) {
+    const path = nextRoute === 'home' ? '/' : `/${nextRoute}`;
+    window.history.pushState({}, '', path);
+    setRoute(nextRoute);
+  }
 
   async function loadProducts() {
     setProducts(await apiRequest<PublicProduct[]>('/products'));
@@ -51,96 +67,146 @@ export function App() {
   }
 
   useEffect(() => {
+    const onPopState = () => setRoute(routeFromPath(window.location.pathname));
+    window.addEventListener('popstate', onPopState);
+    return () => window.removeEventListener('popstate', onPopState);
+  }, []);
+
+  useEffect(() => {
     loadProducts().catch((error) => setMessage(error.message));
     loadCatalog().catch((error) => setMessage(error.message));
   }, []);
 
+  if (route === 'admin') {
+    return (
+      <AdminShell message={message} navigate={navigate}>
+        <AdminPanel
+          session={adminSession}
+          summary={summary}
+          products={products}
+          onLogin={async (email, password) => {
+            const result = await apiRequest<LoginResult>('/admin/login', { method: 'POST', body: { email, password } });
+            setAdminSession(result);
+            setMessage(`Login admin: ${result.user.name}`);
+            await loadAdminSummary(result.token);
+          }}
+          onCreateProduct={async (input) => {
+            if (!adminSession) return;
+            await apiRequest('/admin/products', { token: adminSession.token, method: 'POST', body: input });
+            await loadProducts();
+            await loadCatalog();
+            await loadAdminSummary();
+            setMessage('Produk baru tersimpan.');
+          }}
+        />
+      </AdminShell>
+    );
+  }
+
+  if (route === 'member') {
+    return (
+      <PublicShell navigate={navigate} activeRoute="member">
+        <MemberPanel
+          session={memberSession}
+          products={products}
+          licenses={licenses}
+          onRegister={async (name, email, password) => {
+            const result = await apiRequest<LoginResult>('/member/register', { method: 'POST', body: { name, email, password } });
+            setMemberSession(result);
+            setMessage(`Member aktif: ${result.user.name}`);
+            await loadLicenses(result.token);
+          }}
+          onLogin={async (email, password) => {
+            const result = await apiRequest<LoginResult>('/member/login', { method: 'POST', body: { email, password } });
+            setMemberSession(result);
+            setMessage(`Member login: ${result.user.name}`);
+            await loadLicenses(result.token);
+          }}
+          onCheckout={async (productId) => {
+            if (!memberSession) return;
+            const order = await apiRequest<{ qrisPayload: string }>('/checkout', {
+              token: memberSession.token,
+              method: 'POST',
+              body: { productId }
+            });
+            setMessage(`QRIS dibuat: ${order.qrisPayload}`);
+          }}
+        />
+      </PublicShell>
+    );
+  }
+
   return (
-    <div className="app-shell">
-      <aside className="sidebar">
-        <div className="brand">
-          <div className="brand-mark">AQ</div>
-          <div>
-            <strong>AsistenQ</strong>
-            <span>asistenq.com</span>
-          </div>
-        </div>
+    <PublicShell navigate={navigate} activeRoute="home">
+      <Marketplace catalog={catalog} onJoin={() => navigate('member')} />
+    </PublicShell>
+  );
+}
 
-        <nav className="nav">
-          <button className={view === 'admin' ? 'active' : ''} onClick={() => setView('admin')}><LayoutDashboard size={18} /> Admin</button>
-          <button className={view === 'marketplace' ? 'active' : ''} onClick={() => setView('marketplace')}><Boxes size={18} /> Produk</button>
-          <button className={view === 'member' ? 'active' : ''} onClick={() => setView('member')}><BadgeCheck size={18} /> Member</button>
+function Brand({ compact = false }: { compact?: boolean }) {
+  return (
+    <button className={compact ? 'brand brand-compact' : 'brand'} onClick={() => window.location.assign('/')}>
+      <div className="brand-mark">AQ</div>
+      <div>
+        <strong>AsistenQ</strong>
+        <span>asistenq.com</span>
+      </div>
+    </button>
+  );
+}
+
+function PublicShell({ children, navigate, activeRoute }: {
+  children: ReactNode;
+  navigate: (route: Route) => void;
+  activeRoute: Route;
+}) {
+  return (
+    <div className="public-page">
+      <div className="noise-layer" />
+      <header className="public-nav">
+        <Brand />
+        <nav>
+          <button className={activeRoute === 'home' ? 'active' : ''} onClick={() => navigate('home')}>Marketplace</button>
+          <a href="#produk">Produk</a>
+          <a href="#course">Course</a>
+          <button className={activeRoute === 'member' ? 'active' : ''} onClick={() => navigate('member')}>Member</button>
         </nav>
-
-        <div className="sidebar-note">
-          <ShieldCheck size={18} />
-          <span>Tools bulanan, kelas tahunan, pembayaran QRIS.</span>
+        <div className="nav-actions">
+          <button className="ghost-button" onClick={() => navigate('admin')}>Admin</button>
+          <button className="primary public-cta" onClick={() => navigate('member')}>Masuk Member</button>
         </div>
-      </aside>
+      </header>
+      {children}
+    </div>
+  );
+}
 
-      <main className="workspace">
-        <header className="topbar">
+function AdminShell({ children, message, navigate }: {
+  children: ReactNode;
+  message: string;
+  navigate: (route: Route) => void;
+}) {
+  return (
+    <div className="admin-shell">
+      <aside className="admin-sidebar">
+        <Brand compact />
+        <nav className="admin-nav">
+          <button className="active"><LayoutDashboard size={18} /> Dashboard</button>
+          <button><Boxes size={18} /> Produk</button>
+          <button><KeyRound size={18} /> Lisensi</button>
+          <button><Users size={18} /> Member</button>
+        </nav>
+        <button className="admin-public-link" onClick={() => navigate('home')}><ArrowRight size={16} /> Lihat website</button>
+      </aside>
+      <main className="admin-workspace">
+        <header className="admin-topbar">
           <div>
-            <p className="eyebrow">AsistenQ Operations</p>
-            <h1>{view === 'admin' ? 'Admin Panel' : view === 'member' ? 'Member Area' : 'Marketplace Produk'}</h1>
+            <p className="section-kicker">AsistenQ Operations</p>
+            <h1>Admin Panel</h1>
           </div>
           <div className="status-pill">{message}</div>
         </header>
-
-        {view === 'admin' && (
-          <AdminPanel
-            session={adminSession}
-            summary={summary}
-            products={products}
-            onLogin={async (email, password) => {
-              const result = await apiRequest<LoginResult>('/admin/login', { method: 'POST', body: { email, password } });
-              setAdminSession(result);
-              setMessage(`Login admin: ${result.user.name}`);
-              await loadAdminSummary(result.token);
-            }}
-            onCreateProduct={async (input) => {
-              if (!adminSession) return;
-              await apiRequest('/admin/products', { token: adminSession.token, method: 'POST', body: input });
-              await loadProducts();
-              await loadCatalog();
-              await loadAdminSummary();
-              setMessage('Produk baru tersimpan.');
-            }}
-          />
-        )}
-
-        {view === 'marketplace' && (
-          <Marketplace catalog={catalog} onJoin={() => setView('member')} />
-        )}
-
-        {view === 'member' && (
-          <MemberPanel
-            session={memberSession}
-            products={products}
-            licenses={licenses}
-            onRegister={async (name, email, password) => {
-              const result = await apiRequest<LoginResult>('/member/register', { method: 'POST', body: { name, email, password } });
-              setMemberSession(result);
-              setMessage(`Member aktif: ${result.user.name}`);
-              await loadLicenses(result.token);
-            }}
-            onLogin={async (email, password) => {
-              const result = await apiRequest<LoginResult>('/member/login', { method: 'POST', body: { email, password } });
-              setMemberSession(result);
-              setMessage(`Member login: ${result.user.name}`);
-              await loadLicenses(result.token);
-            }}
-            onCheckout={async (productId) => {
-              if (!memberSession) return;
-              const order = await apiRequest<{ qrisPayload: string }>('/checkout', {
-                token: memberSession.token,
-                method: 'POST',
-                body: { productId }
-              });
-              setMessage(`QRIS dibuat: ${order.qrisPayload}`);
-            }}
-          />
-        )}
+        {children}
       </main>
     </div>
   );
@@ -171,7 +237,7 @@ function LoginBox({ title, onSubmit, showName = false }: {
         <h2>{title}</h2>
       </div>
       {showName && <label>Nama<input value={name} onChange={(event) => setName(event.target.value)} placeholder="Nama lengkap" /></label>}
-      <label>Email<input value={email} onChange={(event) => setEmail(event.target.value)} placeholder="admin@asistenq.com" type="email" /></label>
+      <label>Email<input value={email} onChange={(event) => setEmail(event.target.value)} placeholder="effands@gmail.com" type="email" /></label>
       <label>Password<input value={password} onChange={(event) => setPassword(event.target.value)} placeholder="Minimal 8 karakter" type="password" /></label>
       <button className="primary" disabled={busy}><LogIn size={18} /> Masuk</button>
     </form>
@@ -195,16 +261,11 @@ function AdminPanel({ session, summary, products, onLogin, onCreateProduct }: {
 }) {
   if (!session) {
     return (
-      <section className="auth-screen">
-        <div className="auth-copy">
-          <p className="section-kicker">Command center</p>
-          <h2>Kelola produk digital, lisensi, dan kelas premium dari satu tempat.</h2>
-          <p>Admin panel AsistenQ dibuat untuk operasional harian: menambah produk, mengatur akses, melihat order, dan menyiapkan ekspansi tools editing video serta YouTube.</p>
-          <div className="auth-features">
-            <span><ShieldCheck size={16} /> Super admin</span>
-            <span><CreditCard size={16} /> QRIS ready</span>
-            <span><Sparkles size={16} /> Multi produk</span>
-          </div>
+      <section className="admin-login-screen">
+        <div className="admin-login-copy">
+          <span className="chip">Command center</span>
+          <h2>Kelola produk, lisensi, order QRIS, dan kelas premium dari satu panel.</h2>
+          <p>Panel ini untuk operasional internal. Website publik sudah dipisah agar pengunjung melihat marketplace yang bersih.</p>
         </div>
         <LoginBox title="Login Super Admin" onSubmit={(_, email, password) => onLogin(email, password)} />
       </section>
@@ -212,7 +273,7 @@ function AdminPanel({ session, summary, products, onLogin, onCreateProduct }: {
   }
 
   return (
-    <section className="content-grid">
+    <section className="admin-content-grid">
       <div className="metrics">
         <Metric icon={<PackagePlus />} label="Produk" value={summary?.products ?? products.length} />
         <Metric icon={<Users />} label="Member" value={summary?.members ?? 0} />
@@ -274,7 +335,7 @@ function ProductForm({ onCreateProduct }: {
   );
 }
 
-function Metric({ icon, label, value }: { icon: React.ReactNode; label: string; value: number }) {
+function Metric({ icon, label, value }: { icon: ReactNode; label: string; value: number }) {
   return (
     <div className="metric">
       {icon}
@@ -309,33 +370,28 @@ function ProductTable({ products }: { products: PublicProduct[] }) {
 }
 
 function productIcon(product: PublicProduct) {
-  if (product.type === 'course' || product.type === 'class') {
-    return <BookOpen />;
-  }
-
-  if (product.type === 'video') {
-    return <Film />;
-  }
-
-  if (product.type === 'free') {
-    return <Sparkles />;
-  }
-
-  return <Boxes />;
+  if (product.type === 'course' || product.type === 'class') return <GraduationCap />;
+  if (product.type === 'video') return <Film />;
+  if (product.type === 'free') return <Sparkles />;
+  return <WandSparkles />;
 }
 
-function ProductCard({ product, label }: { product: PublicProduct; label?: string }) {
+function ProductCard({ product, label, featured = false }: {
+  product: PublicProduct;
+  label?: string;
+  featured?: boolean;
+}) {
   return (
-    <article className="product-card">
-      <div className="product-topline">
+    <article className={featured ? 'market-card featured-product-card' : 'market-card'}>
+      <div className="market-card-top">
         <div className="product-icon">{productIcon(product)}</div>
-        <span>{label ?? product.type} · {product.billingPeriod}</span>
+        <span>{label ?? product.type}</span>
       </div>
-      <h2>{product.name}</h2>
+      <h3>{product.name}</h3>
       <p>{product.description || product.headline}</p>
-      <div className="product-card-footer">
+      <div className="market-card-footer">
         <strong>{product.price === 0 ? 'Gratis' : product.formattedPrice}</strong>
-        <button className="ghost-button">Detail</button>
+        <button className="ghost-button">Lihat detail <ArrowRight size={15} /></button>
       </div>
     </article>
   );
@@ -345,64 +401,110 @@ function Marketplace({ catalog, onJoin }: { catalog: PublicCatalog; onJoin: () =
   const primaryProduct = catalog.featured[0] ?? catalog.paid[0];
 
   return (
-    <section className="storefront">
-      <div className="home-hero">
-        <div className="hero-copy">
-          <p className="section-kicker">AsistenQ Marketplace</p>
-          <h2>Tools dan kelas digital untuk mempercepat pekerjaan creator.</h2>
-          <p>Mulai dari VJ Studio untuk workflow video, kelas YouTube online/offline, sampai resource gratis yang membantu pekerjaan harian lebih rapi.</p>
+    <main className="landing">
+      <section className="landing-hero">
+        <div className="hero-orb hero-orb-a" />
+        <div className="hero-orb hero-orb-b" />
+        <div className="hero-content">
+          <div className="hero-badge"><Sparkles size={16} /> Marketplace tools, lisensi, dan kelas creator</div>
+          <h1>Asisten digital untuk kerja creator yang lebih cepat, rapi, dan terukur.</h1>
+          <p>AsistenQ mengumpulkan tools video, lisensi software, resource gratis, dan kelas YouTube dalam satu ekosistem. Hari ini dimulai dari VJ Studio Pro, besok tinggal tambah produk baru tanpa bongkar sistem.</p>
           <div className="hero-actions">
-            <button className="primary" onClick={onJoin}><LogIn size={18} /> Buat Akun Member</button>
-            <span>QRIS ready · lisensi per tools · course tahunan</span>
+            <button className="primary public-hero-button" onClick={onJoin}>Mulai jadi member <ArrowRight size={18} /></button>
+            <a className="text-link" href="#produk">Lihat produk</a>
+          </div>
+          <div className="trust-row">
+            <span><ShieldCheck size={16} /> Lisensi per device</span>
+            <span><CreditCard size={16} /> QRIS ready</span>
+            <span><BookOpen size={16} /> Course online/offline</span>
           </div>
         </div>
-        <div className="hero-spotlight">
-          <p className="section-kicker">Produk pertama</p>
-          <h3>{primaryProduct?.name ?? 'VJ Studio Pro'}</h3>
-          <p>{primaryProduct?.headline ?? 'Lisensi resmi untuk workflow video YouTube yang lebih cepat.'}</p>
-          <div className="spotlight-price">{primaryProduct?.formattedPrice ?? 'Mulai Rp49.900'}</div>
-        </div>
-      </div>
+        <aside className="hero-console">
+          <div className="console-header">
+            <span />
+            <span />
+            <span />
+          </div>
+          <div className="console-product">
+            <p>Produk unggulan</p>
+            <h2>{primaryProduct?.name ?? 'VJ Studio Pro'}</h2>
+            <span>{primaryProduct?.headline ?? 'Lisensi resmi untuk workflow video YouTube yang lebih cepat.'}</span>
+          </div>
+          <div className="license-preview">
+            <div>
+              <small>Paket mulai</small>
+              <strong>{primaryProduct?.formattedPrice ?? 'Rp49.900'}</strong>
+            </div>
+            <div>
+              <small>Status</small>
+              <strong>Ready</strong>
+            </div>
+          </div>
+        </aside>
+      </section>
 
-      <div className="section-title-row">
-        <div>
-          <p className="section-kicker">Featured</p>
-          <h2>Layanan utama AsistenQ</h2>
-        </div>
-        <span className="soft-badge">{catalog.featured.length} unggulan</span>
-      </div>
-      <div className="catalog featured-catalog">
-        {catalog.featured.map((product) => (
-          <ProductCard key={product.id} product={product} label="unggulan" />
-        ))}
-      </div>
+      <section className="brand-strip">
+        <span>Video tools</span>
+        <span>YouTube workflow</span>
+        <span>License center</span>
+        <span>E-learning</span>
+        <span>Free resource</span>
+      </section>
 
-      <div className="section-title-row">
-        <div>
-          <p className="section-kicker">Berbayar</p>
-          <h2>Tools dan kelas premium</h2>
+      <section className="landing-section" id="produk">
+        <div className="section-head">
+          <div>
+            <p className="section-kicker">Featured Products</p>
+            <h2>Layanan utama AsistenQ</h2>
+          </div>
+          <p>Produk dibuat modular: tools, course, ebook, video, bundle, maupun resource gratis.</p>
         </div>
-        <span className="muted">Langganan bulanan, tahunan, atau lifetime.</span>
-      </div>
-      <div className="catalog">
-        {catalog.paid.map((product) => (
-          <ProductCard key={product.id} product={product} />
-        ))}
-      </div>
+        <div className="market-grid featured-market-grid">
+          {catalog.featured.map((product) => (
+            <ProductCard key={product.id} product={product} label="unggulan" featured />
+          ))}
+        </div>
+      </section>
 
-      <div className="section-title-row">
-        <div>
-          <p className="section-kicker">Free Resource</p>
-          <h2>Mulai dari yang gratis dulu</h2>
+      <section className="landing-section split-section" id="course">
+        <div className="course-panel">
+          <span className="chip">Course roadmap</span>
+          <h2>Kelas YouTube online, offline, dan update tahunan.</h2>
+          <p>AsistenQ disiapkan agar kelas baru tinggal ditambahkan: materi video, ebook pendamping, tools support, dan akses member.</p>
+          <button className="ghost-button" onClick={onJoin}>Masuk daftar tunggu</button>
         </div>
-        <span className="muted">Cocok untuk onboarding member baru.</span>
-      </div>
-      <div className="catalog compact-catalog">
-        {catalog.free.map((product) => (
-          <ProductCard key={product.id} product={product} label="gratis" />
-        ))}
-      </div>
-    </section>
+        <div className="mini-stack">
+          <div><PlayCircle /> Video tutorial bertahap</div>
+          <div><BookOpen /> Ebook dan template</div>
+          <div><BadgeCheck /> Akses member tahunan</div>
+        </div>
+      </section>
+
+      <section className="landing-section">
+        <div className="section-head">
+          <div>
+            <p className="section-kicker">Paid & Free</p>
+            <h2>Pilih sesuai kebutuhan</h2>
+          </div>
+        </div>
+        <div className="market-grid">
+          {catalog.paid.map((product) => (
+            <ProductCard key={product.id} product={product} />
+          ))}
+          {catalog.free.map((product) => (
+            <ProductCard key={product.id} product={product} label="gratis" />
+          ))}
+        </div>
+      </section>
+
+      <section className="final-cta">
+        <div>
+          <p className="section-kicker">AsistenQ ecosystem</p>
+          <h2>Mulai dari satu tools, siap tumbuh jadi marketplace digital.</h2>
+        </div>
+        <button className="primary public-hero-button" onClick={onJoin}>Buat akun member</button>
+      </section>
+    </main>
   );
 }
 
@@ -416,34 +518,43 @@ function MemberPanel({ session, products, licenses, onRegister, onLogin, onCheck
 }) {
   if (!session) {
     return (
-      <div className="content-grid two auth-columns">
-        <LoginBox title="Daftar Member" showName onSubmit={onRegister} />
-        <LoginBox title="Login Member" onSubmit={(_, email, password) => onLogin(email, password)} />
-      </div>
+      <main className="member-page">
+        <section className="member-hero">
+          <span className="chip">Member Area</span>
+          <h1>Akses lisensi, pembelian QRIS, dan materi kelas dari satu akun.</h1>
+          <p>Daftar sebagai member untuk membeli tools, menyimpan lisensi, dan nanti mengakses course YouTube.</p>
+        </section>
+        <div className="member-auth-grid">
+          <LoginBox title="Daftar Member" showName onSubmit={onRegister} />
+          <LoginBox title="Login Member" onSubmit={(_, email, password) => onLogin(email, password)} />
+        </div>
+      </main>
     );
   }
 
   return (
-    <section className="content-grid two">
-      <div className="panel stack">
-        <h2>Beli Produk</h2>
-        {products.map((product) => (
-          <button className="list-button" key={product.id} onClick={() => onCheckout(product.id)}>
-            <span>{product.name}</span>
-            <strong>{product.formattedPrice}</strong>
-          </button>
-        ))}
-      </div>
-      <div className="panel stack">
-        <h2>Lisensi Saya</h2>
-        {licenses.length === 0 && <p className="muted">Belum ada lisensi aktif.</p>}
-        {licenses.map((license) => (
-          <div className="license" key={license.id}>
-            <strong>{license.product?.name ?? license.productId}</strong>
-            <span>{license.status} sampai {new Date(license.endsAt).toLocaleDateString('id-ID')}</span>
-          </div>
-        ))}
-      </div>
-    </section>
+    <main className="member-page">
+      <section className="admin-content-grid two">
+        <div className="panel stack">
+          <h2>Beli Produk</h2>
+          {products.map((product) => (
+            <button className="list-button" key={product.id} onClick={() => onCheckout(product.id)}>
+              <span>{product.name}</span>
+              <strong>{product.formattedPrice}</strong>
+            </button>
+          ))}
+        </div>
+        <div className="panel stack">
+          <h2>Lisensi Saya</h2>
+          {licenses.length === 0 && <p className="muted">Belum ada lisensi aktif.</p>}
+          {licenses.map((license) => (
+            <div className="license" key={license.id}>
+              <strong>{license.product?.name ?? license.productId}</strong>
+              <span>{license.status} sampai {new Date(license.endsAt).toLocaleDateString('id-ID')}</span>
+            </div>
+          ))}
+        </div>
+      </section>
+    </main>
   );
 }
