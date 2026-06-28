@@ -3,11 +3,13 @@ import {
   BookOpen,
   Boxes,
   CreditCard,
+  Film,
   KeyRound,
   LayoutDashboard,
   LogIn,
   PackagePlus,
   ShieldCheck,
+  Sparkles,
   Users
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
@@ -147,7 +149,7 @@ function LoginBox({ title, onSubmit, showName = false }: {
   const [busy, setBusy] = useState(false);
 
   return (
-    <form className="panel stack" onSubmit={async (event) => {
+    <form className="auth-form stack" onSubmit={async (event) => {
       event.preventDefault();
       setBusy(true);
       try {
@@ -156,10 +158,13 @@ function LoginBox({ title, onSubmit, showName = false }: {
         setBusy(false);
       }
     }}>
-      <h2>{title}</h2>
-      {showName && <input value={name} onChange={(event) => setName(event.target.value)} placeholder="Nama" />}
-      <input value={email} onChange={(event) => setEmail(event.target.value)} placeholder="Email" type="email" />
-      <input value={password} onChange={(event) => setPassword(event.target.value)} placeholder="Password" type="password" />
+      <div>
+        <p className="section-kicker">Secure access</p>
+        <h2>{title}</h2>
+      </div>
+      {showName && <label>Nama<input value={name} onChange={(event) => setName(event.target.value)} placeholder="Nama lengkap" /></label>}
+      <label>Email<input value={email} onChange={(event) => setEmail(event.target.value)} placeholder="admin@asistenq.com" type="email" /></label>
+      <label>Password<input value={password} onChange={(event) => setPassword(event.target.value)} placeholder="Minimal 8 karakter" type="password" /></label>
       <button className="primary" disabled={busy}><LogIn size={18} /> Masuk</button>
     </form>
   );
@@ -181,7 +186,21 @@ function AdminPanel({ session, summary, products, onLogin, onCreateProduct }: {
   }) => Promise<void>;
 }) {
   if (!session) {
-    return <LoginBox title="Login Super Admin" onSubmit={(_, email, password) => onLogin(email, password)} />;
+    return (
+      <section className="auth-screen">
+        <div className="auth-copy">
+          <p className="section-kicker">Command center</p>
+          <h2>Kelola produk digital, lisensi, dan kelas premium dari satu tempat.</h2>
+          <p>Admin panel AsistenQ dibuat untuk operasional harian: menambah produk, mengatur akses, melihat order, dan menyiapkan ekspansi tools editing video serta YouTube.</p>
+          <div className="auth-features">
+            <span><ShieldCheck size={16} /> Super admin</span>
+            <span><CreditCard size={16} /> QRIS ready</span>
+            <span><Sparkles size={16} /> Multi produk</span>
+          </div>
+        </div>
+        <LoginBox title="Login Super Admin" onSubmit={(_, email, password) => onLogin(email, password)} />
+      </section>
+    );
   }
 
   return (
@@ -222,7 +241,13 @@ function ProductForm({ onCreateProduct }: {
       event.preventDefault();
       await onCreateProduct({ name, slug, type, billingPeriod, price, headline, description });
     }}>
-      <h2>Tambah Produk</h2>
+      <div className="panel-heading">
+        <div>
+          <p className="section-kicker">Catalog control</p>
+          <h2>Tambah Produk</h2>
+        </div>
+        <span className="soft-badge">{type}</span>
+      </div>
       <div className="form-grid">
         <input value={name} onChange={(event) => setName(event.target.value)} placeholder="Nama produk" />
         <input value={slug} onChange={(event) => setSlug(event.target.value)} placeholder="slug-produk" />
@@ -254,7 +279,13 @@ function Metric({ icon, label, value }: { icon: React.ReactNode; label: string; 
 function ProductTable({ products }: { products: PublicProduct[] }) {
   return (
     <div className="panel wide">
-      <h2>Produk Aktif</h2>
+      <div className="panel-heading">
+        <div>
+          <p className="section-kicker">Inventory</p>
+          <h2>Produk Aktif</h2>
+        </div>
+        <span className="soft-badge">{products.length} produk</span>
+      </div>
       <div className="table">
         {products.map((product) => (
           <div className="table-row" key={product.id}>
@@ -271,16 +302,25 @@ function ProductTable({ products }: { products: PublicProduct[] }) {
 
 function Marketplace({ products }: { products: PublicProduct[] }) {
   return (
-    <section className="catalog">
-      {products.map((product) => (
-        <article className="product-card" key={product.id}>
-          <div className="product-icon">{product.type === 'class' ? <BookOpen /> : <Boxes />}</div>
-          <span>{product.type} · {product.billingPeriod}</span>
-          <h2>{product.name}</h2>
-          <p>{product.description}</p>
-          <strong>{product.formattedPrice}</strong>
-        </article>
-      ))}
+    <section className="storefront">
+      <div className="storefront-lead">
+        <p className="section-kicker">Digital workspace</p>
+        <h2>Produk AsistenQ untuk mempercepat workflow creator.</h2>
+        <p>Mulai dari tools editing video, utilitas YouTube, ebook, sampai kelas premium tahunan.</p>
+      </div>
+      <div className="catalog">
+        {products.map((product) => (
+          <article className="product-card" key={product.id}>
+            <div className="product-topline">
+              <div className="product-icon">{product.type === 'class' ? <BookOpen /> : product.type === 'video' ? <Film /> : <Boxes />}</div>
+              <span>{product.type} · {product.billingPeriod}</span>
+            </div>
+            <h2>{product.name}</h2>
+            <p>{product.description}</p>
+            <strong>{product.formattedPrice}</strong>
+          </article>
+        ))}
+      </div>
     </section>
   );
 }
@@ -295,7 +335,7 @@ function MemberPanel({ session, products, licenses, onRegister, onLogin, onCheck
 }) {
   if (!session) {
     return (
-      <div className="content-grid two">
+      <div className="content-grid two auth-columns">
         <LoginBox title="Daftar Member" showName onSubmit={onRegister} />
         <LoginBox title="Login Member" onSubmit={(_, email, password) => onLogin(email, password)} />
       </div>
