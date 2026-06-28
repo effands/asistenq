@@ -306,6 +306,14 @@ export function createProductRecord(store: Store, input: {
   visibility?: ProductVisibility;
   billingPeriod: BillingPeriod;
   price: number;
+  compareAtPrice?: number;
+  discountLabel?: string;
+  promoText?: string;
+  logoUrl?: string;
+  landingPath?: string;
+  landingTemplate?: string;
+  ctaLabel?: string;
+  accessRequirement?: string;
   active?: boolean;
   featured?: boolean;
   headline?: string;
@@ -319,6 +327,47 @@ export function createProductRecord(store: Store, input: {
 
   const product = createProduct(input);
   store.data.products.push(product);
+  store.save();
+  return product;
+}
+
+export function updateProductRecord(store: Store, productId: string, input: Partial<{
+  name: string;
+  slug: string;
+  type: ProductType;
+  category: string;
+  visibility: ProductVisibility;
+  billingPeriod: BillingPeriod;
+  price: number;
+  compareAtPrice: number;
+  discountLabel: string;
+  promoText: string;
+  logoUrl: string;
+  landingPath: string;
+  landingTemplate: string;
+  ctaLabel: string;
+  accessRequirement: string;
+  active: boolean;
+  featured: boolean;
+  headline: string;
+  description: string;
+  coverUrl: string;
+  accessUrl: string;
+}>): Product {
+  const product = store.data.products.find((item) => item.id === productId);
+
+  if (!product) {
+    throw new Error('product not found');
+  }
+
+  if (input.slug && input.slug !== product.slug && store.data.products.some((item) => item.slug === input.slug)) {
+    throw new Error('product slug already exists');
+  }
+
+  Object.assign(product, {
+    ...input,
+    updatedAt: new Date().toISOString()
+  });
   store.save();
   return product;
 }

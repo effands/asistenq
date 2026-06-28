@@ -39,6 +39,14 @@ export interface Product {
   visibility?: ProductVisibility;
   billingPeriod: BillingPeriod;
   price: number;
+  compareAtPrice?: number;
+  discountLabel?: string;
+  promoText?: string;
+  logoUrl?: string;
+  landingPath?: string;
+  landingTemplate?: string;
+  ctaLabel?: string;
+  accessRequirement?: string;
   active: boolean;
   featured?: boolean;
   headline: string;

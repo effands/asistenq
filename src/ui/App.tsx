@@ -48,11 +48,14 @@ function routeFromPath(pathname: string): Route {
   if (pathname.startsWith('/adminasistenq')) return 'admin';
   if (pathname.startsWith('/member')) return 'member';
   if (pathname.startsWith('/produk/')) return 'product';
+  if (/^\/[a-z0-9-]+$/.test(pathname)) return 'product';
   return 'home';
 }
 
 function productSlugFromPath(pathname: string): string {
-  return pathname.startsWith('/produk/') ? decodeURIComponent(pathname.replace('/produk/', '').split('/')[0]) : '';
+  if (pathname.startsWith('/produk/')) return decodeURIComponent(pathname.replace('/produk/', '').split('/')[0]);
+  if (/^\/[a-z0-9-]+$/.test(pathname)) return decodeURIComponent(pathname.slice(1));
+  return '';
 }
 
 export function App() {
@@ -80,7 +83,8 @@ export function App() {
   }
 
   function navigateProduct(slug: string) {
-    window.history.pushState({}, '', `/produk/${slug}`);
+    const product = products.find((item) => item.slug === slug);
+    window.history.pushState({}, '', product?.landingPath ?? `/produk/${slug}`);
     setProductSlug(slug);
     setRoute('product');
   }
@@ -170,6 +174,32 @@ export function App() {
             await loadCatalog();
             await loadAdminSummary();
             setMessage('Produk baru tersimpan.');
+          }}
+          onUpdateProduct={async (productId, input) => {
+            if (!adminSession) return;
+            await apiRequest(`/admin/products/${productId}`, { token: adminSession.token, method: 'PUT', body: input });
+            await loadProducts();
+            await loadCatalog();
+            await loadAdminSummary();
+            setMessage('Produk diperbarui.');
+          }}
+          onImportLandingZip={async (productId, file) => {
+            if (!adminSession) return;
+            const response = await fetch(`/api/admin/products/${productId}/landing-zip`, {
+              method: 'POST',
+              headers: {
+                Authorization: `Bearer ${adminSession.token}`,
+                'Content-Type': 'application/zip'
+              },
+              body: await file.arrayBuffer()
+            });
+            if (!response.ok) {
+              const error = await response.json().catch(() => ({ message: 'Import ZIP gagal.' }));
+              throw new Error(error.message ?? 'Import ZIP gagal.');
+            }
+            await loadProducts();
+            await loadCatalog();
+            setMessage('Landing ZIP berhasil diimport.');
           }}
           onRefreshLicenses={async () => {
             await loadAdminLicenses();
@@ -297,7 +327,7 @@ export function App() {
   return (
     <PublicShell navigate={navigate} activeRoute="home">
       {route === 'product'
-        ? <ProductLanding isLoading={products.length === 0} product={products.find((item) => item.slug === productSlug)} onJoin={() => navigate('member')} />
+        ? <ProductLanding isLoading={products.length === 0} product={products.find((item) => item.slug === productSlug || item.landingPath === `/${productSlug}`)} onJoin={() => navigate('member')} />
         : <Marketplace catalog={catalog} onJoin={() => navigate('member')} onProductOpen={navigateProduct} />}
     </PublicShell>
   );
@@ -499,6 +529,8 @@ function AdminPanel({
   members,
   onLogin,
   onCreateProduct,
+  onUpdateProduct,
+  onImportLandingZip,
   onRefreshLicenses,
   onRefreshMembers,
   onResetOperationalData,
@@ -523,9 +555,19 @@ function AdminPanel({
     type: ProductType;
     billingPeriod: BillingPeriod;
     price: number;
+    compareAtPrice?: number;
+    discountLabel?: string;
+    promoText?: string;
+    logoUrl?: string;
+    landingPath?: string;
+    landingTemplate?: string;
+    ctaLabel?: string;
+    accessRequirement?: string;
     headline: string;
     description: string;
   }) => Promise<void>;
+  onUpdateProduct: (productId: string, input: Partial<PublicProduct>) => Promise<void>;
+  onImportLandingZip: (productId: string, file: File) => Promise<void>;
   onRefreshLicenses: () => Promise<void>;
   onRefreshMembers: () => Promise<void>;
   onResetOperationalData: () => Promise<void>;
@@ -558,7 +600,7 @@ function AdminPanel({
     return (
       <section className="admin-content-grid">
         <ProductForm onCreateProduct={onCreateProduct} />
-        <ProductTable products={products} />
+        <ProductTable onImportLandingZip={onImportLandingZip} onUpdateProduct={onUpdateProduct} products={products} />
       </section>
     );
   }
@@ -1014,6 +1056,14 @@ function ProductForm({ onCreateProduct }: {
     type: ProductType;
     billingPeriod: BillingPeriod;
     price: number;
+    compareAtPrice?: number;
+    discountLabel?: string;
+    promoText?: string;
+    logoUrl?: string;
+    landingPath?: string;
+    landingTemplate?: string;
+    ctaLabel?: string;
+    accessRequirement?: string;
     headline: string;
     description: string;
   }) => Promise<void>;
@@ -1023,13 +1073,37 @@ function ProductForm({ onCreateProduct }: {
   const [type, setType] = useState<ProductType>('tool');
   const [billingPeriod, setBillingPeriod] = useState<BillingPeriod>('monthly');
   const [price, setPrice] = useState(149000);
+  const [compareAtPrice, setCompareAtPrice] = useState(0);
+  const [discountLabel, setDiscountLabel] = useState('');
+  const [promoText, setPromoText] = useState('');
+  const [logoUrl, setLogoUrl] = useState('');
+  const [landingPath, setLandingPath] = useState('');
+  const [landingTemplate, setLandingTemplate] = useState('');
+  const [ctaLabel, setCtaLabel] = useState('Daftar jadi member');
+  const [accessRequirement, setAccessRequirement] = useState('Daftar jadi member untuk membuka akses.');
   const [headline, setHeadline] = useState('Bantu produksi video lebih cepat.');
   const [description, setDescription] = useState('Produk AsistenQ untuk workflow editing dan YouTube.');
 
   return (
     <form className="panel stack wide" onSubmit={async (event) => {
       event.preventDefault();
-      await onCreateProduct({ name, slug, type, billingPeriod, price, headline, description });
+      await onCreateProduct({
+        name,
+        slug,
+        type,
+        billingPeriod,
+        price,
+        compareAtPrice: compareAtPrice || undefined,
+        discountLabel: discountLabel.trim() || undefined,
+        promoText: promoText.trim() || undefined,
+        logoUrl: logoUrl.trim() || undefined,
+        landingPath: landingPath.trim() || undefined,
+        landingTemplate: landingTemplate.trim() || undefined,
+        ctaLabel: ctaLabel.trim() || undefined,
+        accessRequirement: accessRequirement.trim() || undefined,
+        headline,
+        description
+      });
     }}>
       <div className="panel-heading">
         <div>
@@ -1048,8 +1122,16 @@ function ProductForm({ onCreateProduct }: {
           {billingPeriods.map((item) => <option key={item}>{item}</option>)}
         </select>
         <input value={price} onChange={(event) => setPrice(Number(event.target.value))} type="number" />
+        <input value={compareAtPrice} onChange={(event) => setCompareAtPrice(Number(event.target.value))} type="number" placeholder="Harga coret/diskon" />
+        <input value={discountLabel} onChange={(event) => setDiscountLabel(event.target.value)} placeholder="Badge diskon, contoh: Free Beta" />
+        <input value={promoText} onChange={(event) => setPromoText(event.target.value)} placeholder="Promo singkat" />
+        <input value={logoUrl} onChange={(event) => setLogoUrl(event.target.value)} placeholder="URL logo produk" />
+        <input value={landingPath} onChange={(event) => setLandingPath(event.target.value)} placeholder="/mixin9" />
+        <input value={landingTemplate} onChange={(event) => setLandingTemplate(event.target.value)} placeholder="Template landing, contoh: mixin9" />
+        <input value={ctaLabel} onChange={(event) => setCtaLabel(event.target.value)} placeholder="Label tombol CTA" />
         <input value={headline} onChange={(event) => setHeadline(event.target.value)} placeholder="Headline" />
       </div>
+      <textarea value={accessRequirement} onChange={(event) => setAccessRequirement(event.target.value)} placeholder="Syarat akses" />
       <textarea value={description} onChange={(event) => setDescription(event.target.value)} />
       <button className="primary"><PackagePlus size={18} /> Simpan Produk</button>
     </form>
@@ -1066,7 +1148,35 @@ function Metric({ icon, label, value }: { icon: ReactNode; label: string; value:
   );
 }
 
-function ProductTable({ products }: { products: PublicProduct[] }) {
+function ProductTable({ products, onUpdateProduct, onImportLandingZip }: {
+  products: PublicProduct[];
+  onUpdateProduct: (productId: string, input: Partial<PublicProduct>) => Promise<void>;
+  onImportLandingZip: (productId: string, file: File) => Promise<void>;
+}) {
+  const [editingId, setEditingId] = useState('');
+  const [draft, setDraft] = useState<Partial<PublicProduct>>({});
+  const [notice, setNotice] = useState('');
+
+  function startEdit(product: PublicProduct) {
+    setEditingId(product.id);
+    setDraft({
+      name: product.name,
+      slug: product.slug,
+      price: product.price,
+      compareAtPrice: product.compareAtPrice,
+      discountLabel: product.discountLabel,
+      promoText: product.promoText,
+      logoUrl: product.logoUrl,
+      landingPath: product.landingPath,
+      landingTemplate: product.landingTemplate,
+      ctaLabel: product.ctaLabel,
+      accessRequirement: product.accessRequirement,
+      headline: product.headline,
+      description: product.description,
+      accessUrl: product.accessUrl
+    });
+  }
+
   return (
     <div className="panel wide">
       <div className="panel-heading">
@@ -1076,16 +1186,66 @@ function ProductTable({ products }: { products: PublicProduct[] }) {
         </div>
         <span className="soft-badge">{products.length} produk</span>
       </div>
-      <div className="table">
+      <div className="product-admin-list">
         {products.map((product) => (
-          <div className="table-row" key={product.id}>
-            <strong>{product.name}</strong>
-            <span>{product.type}</span>
-            <span>{product.billingPeriod}</span>
-            <span>{product.formattedPrice}</span>
-          </div>
+          <article className="product-admin-card" key={product.id}>
+            <div className="product-admin-summary">
+              <div className="product-icon">{product.logoUrl ? <img src={product.logoUrl} alt="" /> : productIcon(product)}</div>
+              <div>
+                <strong>{product.name}</strong>
+                <span>{product.landingPath ?? `/produk/${product.slug}`} · {product.price === 0 ? 'Gratis' : product.formattedPrice}</span>
+              </div>
+              <button className="ghost-button" type="button" onClick={() => startEdit(product)}>Edit</button>
+            </div>
+            {editingId === product.id && (
+              <div className="product-edit-box">
+                <div className="form-grid">
+                  <input value={draft.name ?? ''} onChange={(event) => setDraft({ ...draft, name: event.target.value })} placeholder="Nama" />
+                  <input value={draft.slug ?? ''} onChange={(event) => setDraft({ ...draft, slug: event.target.value })} placeholder="slug" />
+                  <input value={draft.price ?? 0} onChange={(event) => setDraft({ ...draft, price: Number(event.target.value) })} type="number" placeholder="Harga" />
+                  <input value={draft.compareAtPrice ?? 0} onChange={(event) => setDraft({ ...draft, compareAtPrice: Number(event.target.value) || undefined })} type="number" placeholder="Harga coret" />
+                  <input value={draft.discountLabel ?? ''} onChange={(event) => setDraft({ ...draft, discountLabel: event.target.value })} placeholder="Badge promo" />
+                  <input value={draft.promoText ?? ''} onChange={(event) => setDraft({ ...draft, promoText: event.target.value })} placeholder="Promo text" />
+                  <input value={draft.logoUrl ?? ''} onChange={(event) => setDraft({ ...draft, logoUrl: event.target.value })} placeholder="URL logo" />
+                  <input value={draft.landingPath ?? ''} onChange={(event) => setDraft({ ...draft, landingPath: event.target.value })} placeholder="/mixin9" />
+                  <input value={draft.landingTemplate ?? ''} onChange={(event) => setDraft({ ...draft, landingTemplate: event.target.value })} placeholder="mixin9 / zip-html" />
+                  <input value={draft.ctaLabel ?? ''} onChange={(event) => setDraft({ ...draft, ctaLabel: event.target.value })} placeholder="CTA" />
+                </div>
+                <textarea value={draft.headline ?? ''} onChange={(event) => setDraft({ ...draft, headline: event.target.value })} placeholder="Headline" />
+                <textarea value={draft.description ?? ''} onChange={(event) => setDraft({ ...draft, description: event.target.value })} placeholder="Deskripsi" />
+                <textarea value={draft.accessRequirement ?? ''} onChange={(event) => setDraft({ ...draft, accessRequirement: event.target.value })} placeholder="Syarat akses" />
+                <div className="product-edit-actions">
+                  <button className="primary" type="button" onClick={async () => {
+                    await onUpdateProduct(product.id, {
+                      ...draft,
+                      discountLabel: draft.discountLabel?.trim() || undefined,
+                      promoText: draft.promoText?.trim() || undefined,
+                      logoUrl: draft.logoUrl?.trim() || undefined,
+                      landingPath: draft.landingPath?.trim() || undefined,
+                      landingTemplate: draft.landingTemplate?.trim() || undefined,
+                      ctaLabel: draft.ctaLabel?.trim() || undefined,
+                      accessRequirement: draft.accessRequirement?.trim() || undefined
+                    });
+                    setNotice(`${product.name} tersimpan.`);
+                    setEditingId('');
+                  }}>Simpan Perubahan</button>
+                  <label className="zip-upload-button">
+                    Import ZIP landing
+                    <input type="file" accept=".zip,application/zip" onChange={async (event) => {
+                      const file = event.target.files?.[0];
+                      if (!file) return;
+                      await onImportLandingZip(product.id, file);
+                      setNotice(`ZIP landing ${product.name} berhasil diimport.`);
+                      event.target.value = '';
+                    }} />
+                  </label>
+                </div>
+              </div>
+            )}
+          </article>
         ))}
       </div>
+      {notice && <p className="form-notice">{notice}</p>}
     </div>
   );
 }
@@ -1094,6 +1254,7 @@ function productIcon(product: PublicProduct) {
   if (product.type === 'course' || product.type === 'class') return <GraduationCap />;
   if (product.type === 'video') return <Film />;
   if (product.type === 'free') return <Sparkles />;
+  if (product.category?.toLowerCase().includes('audio')) return <Monitor />;
   return <WandSparkles />;
 }
 
@@ -1106,13 +1267,18 @@ function ProductCard({ product, label, featured = false, onOpen }: {
   return (
     <article className={featured ? 'market-card featured-product-card' : 'market-card'}>
       <div className="market-card-top">
-        <div className="product-icon">{productIcon(product)}</div>
-        <span>{label ?? product.type}</span>
+        <div className="product-icon">
+          {product.logoUrl ? <img src={product.logoUrl} alt="" /> : productIcon(product)}
+        </div>
+        <span>{product.discountLabel || label || product.type}</span>
       </div>
       <h3>{product.name}</h3>
-      <p>{product.description || product.headline}</p>
+      <p>{product.promoText || product.description || product.headline}</p>
       <div className="market-card-footer">
-        <strong>{product.price === 0 ? 'Gratis' : product.formattedPrice}</strong>
+        <div className="price-stack">
+          {product.compareAtPrice ? <small>{new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(product.compareAtPrice).replace(/\s/g, '')}</small> : null}
+          <strong>{product.price === 0 ? 'Gratis' : product.formattedPrice}</strong>
+        </div>
         <button className="ghost-button" onClick={() => onOpen?.(product.slug)}>Lihat detail <ArrowRight size={15} /></button>
       </div>
     </article>
@@ -1132,17 +1298,17 @@ function Marketplace({ catalog, onJoin, onProductOpen }: {
         <div className="hero-orb hero-orb-a" />
         <div className="hero-orb hero-orb-b" />
         <div className="hero-content">
-          <div className="hero-badge"><Sparkles size={16} /> Tools, kelas, dan resource untuk creator YouTube</div>
-          <h1>Tools YouTube, lisensi, dan kelas dalam satu tempat.</h1>
-          <p>Mulai dari VJ Studio Pro, resource gratis, sampai kelas YouTube online/offline untuk mempercepat workflow konten.</p>
+          <div className="hero-badge"><Sparkles size={16} /> Tools AI Studio, lisensi, course, dan freebies</div>
+          <h1>Rumah tools creator: gratis, premium, dan member-only.</h1>
+          <p>Kumpulan aplikasi AsistenQ dan eksperimen AI Studio. Banyak tools gratis, cukup daftar member untuk ambil akses dan update.</p>
           <div className="hero-actions">
-            <button className="primary public-hero-button" onClick={onJoin}>Lihat paket member <ArrowRight size={18} /></button>
+            <button className="primary public-hero-button" onClick={onJoin}>Daftar member gratis <ArrowRight size={18} /></button>
             <a className="text-link" href="#produk">Lihat produk</a>
           </div>
           <div className="trust-row">
-            <span><ShieldCheck size={16} /> Lisensi per device</span>
+            <span><ShieldCheck size={16} /> Member-only access</span>
             <span><CreditCard size={16} /> QRIS ready</span>
-            <span><BookOpen size={16} /> Course online/offline</span>
+            <span><BookOpen size={16} /> Free tools & course</span>
           </div>
         </div>
         <aside className="hero-console">
@@ -1152,13 +1318,13 @@ function Marketplace({ catalog, onJoin, onProductOpen }: {
             <span />
           </div>
           <div className="console-product">
-            <p>Produk unggulan</p>
+            <p>Tools unggulan</p>
             <h2>{primaryProduct?.name ?? 'VJ Studio Pro'}</h2>
             <span>{primaryProduct?.headline ?? 'Lisensi resmi untuk workflow video YouTube yang lebih cepat.'}</span>
           </div>
           <div className="license-preview">
             <div>
-              <small>Paket mulai</small>
+              <small>Akses mulai</small>
               <strong>{primaryProduct?.formattedPrice ?? 'Rp49.900'}</strong>
             </div>
             <div>
@@ -1170,20 +1336,20 @@ function Marketplace({ catalog, onJoin, onProductOpen }: {
       </section>
 
       <section className="brand-strip">
-        <span>Video tools</span>
+        <span>AI Studio apps</span>
+        <span>Free tools</span>
+        <span>Audio tools</span>
         <span>YouTube workflow</span>
-        <span>Lisensi resmi</span>
         <span>E-learning</span>
-        <span>Free resource</span>
       </section>
 
       <section className="landing-section" id="produk">
         <div className="section-head">
           <div>
-            <p className="section-kicker">Featured Products</p>
-            <h2>Layanan utama AsistenQ</h2>
+            <p className="section-kicker">Featured Tools</p>
+            <h2>Tools yang siap kamu pakai</h2>
           </div>
-          <p>Pilih tools, kelas, atau resource yang paling cocok untuk mempercepat produksi kontenmu.</p>
+          <p>Pilih aplikasi gratis, tools premium, atau kelas. Semua aksesnya dirapikan lewat akun member.</p>
         </div>
         <div className="market-grid featured-market-grid">
           {catalog.featured.map((product) => (
@@ -1264,20 +1430,25 @@ function ProductLanding({ isLoading, product, onJoin }: { isLoading: boolean; pr
     ? ['Materi bertahap dan mudah diikuti', 'Akses kelas melalui akun member', 'Update materi untuk workflow YouTube']
     : ['Aktivasi lisensi per perangkat', 'Membantu workflow produksi video', 'Cocok untuk creator YouTube yang ingin lebih cepat'];
 
+  if (product.landingTemplate === 'mixin9' || product.slug === 'mixin9') {
+    return <Mixin9Landing product={product} onJoin={onJoin} />;
+  }
+
   return (
     <main className="product-landing">
       <section className="product-sales-hero">
         <div>
-          <span className="chip">{product.category ?? product.type}</span>
+          <span className="chip">{product.discountLabel || product.category || product.type}</span>
           <h1>{product.headline || product.name}</h1>
-          <p>{product.description}</p>
+          <p>{product.promoText || product.description}</p>
           <div className="hero-actions">
-            <button className="primary public-hero-button" onClick={onJoin}>Aktifkan lewat member <ArrowRight size={18} /></button>
+            <button className="primary public-hero-button" onClick={onJoin}>{product.ctaLabel || 'Aktifkan lewat member'} <ArrowRight size={18} /></button>
             <a className="text-link dark-link" href="#harga">Lihat harga</a>
           </div>
         </div>
         <aside className="product-price-card" id="harga">
           <p>Paket mulai</p>
+          {product.compareAtPrice ? <small className="compare-price">{new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(product.compareAtPrice).replace(/\s/g, '')}</small> : null}
           <h2>{product.price === 0 ? 'Gratis' : product.formattedPrice}</h2>
           <span>{product.billingPeriod}</span>
           <button className="primary" onClick={onJoin}>Masuk member</button>
@@ -1295,8 +1466,69 @@ function ProductLanding({ isLoading, product, onJoin }: { isLoading: boolean; pr
         <div className="panel stack">
           <p className="section-kicker">Cara mulai</p>
           <h2>Daftar, bayar QRIS, lalu akses.</h2>
-          <p>Alur dibuat simpel: buat akun member, pilih produk, lakukan pembayaran, lalu akses lisensi atau materi dari member area.</p>
+          <p>{product.accessRequirement || 'Alur dibuat simpel: buat akun member, pilih produk, lakukan pembayaran, lalu akses lisensi atau materi dari member area.'}</p>
         </div>
+      </section>
+    </main>
+  );
+}
+
+function Mixin9Landing({ product, onJoin }: { product: PublicProduct; onJoin: () => void }) {
+  const price = product.price === 0 ? 'Gratis' : product.formattedPrice;
+  const comparePrice = product.compareAtPrice
+    ? new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(product.compareAtPrice).replace(/\s/g, '')
+    : '';
+
+  return (
+    <main className="mixin9-page">
+      <section className="mixin9-hero">
+        <div className="mixin9-copy">
+          <span className="mixin9-pill">{product.discountLabel || 'MIXIN9 Audio Batch Mixing'}</span>
+          <h1>{product.headline}</h1>
+          <p>{product.promoText || product.description}</p>
+          <div className="hero-actions">
+            <button className="primary mixin9-cta" onClick={onJoin}>{product.ctaLabel || 'Ambil MIXIN9 Gratis'} <ArrowRight size={18} /></button>
+            <a className="text-link" href="#mixin9-fitur">Lihat fitur</a>
+          </div>
+          <div className="mixin9-meter">
+            <span>Batch normalize</span>
+            <span>Auto balance</span>
+            <span>Export ready</span>
+          </div>
+        </div>
+        <aside className="mixin9-console">
+          <div className="mixin9-logo">{product.logoUrl ? <img src={product.logoUrl} alt="MIXIN9" /> : 'M9'}</div>
+          <div className="wave-bars">
+            {Array.from({ length: 24 }).map((_, index) => <span key={index} style={{ height: `${22 + (index % 7) * 9}px` }} />)}
+          </div>
+          <div className="mixin9-price">
+            {comparePrice && <small>{comparePrice}</small>}
+            <strong>{price}</strong>
+            <span>{product.accessRequirement || 'Daftar jadi member untuk membuka akses.'}</span>
+          </div>
+        </aside>
+      </section>
+
+      <section className="mixin9-grid" id="mixin9-fitur">
+        {[
+          ['01', 'Batch workflow', 'Masukkan banyak file audio dan proses dalam satu antrian kerja.'],
+          ['02', 'Creator friendly', 'Cocok untuk konten YouTube, podcast pendek, voice over, dan materi kelas.'],
+          ['03', 'Member access', 'Akses download dan update disimpan rapi di area member AsistenQ.']
+        ].map(([num, title, text]) => (
+          <article key={num} className="mixin9-feature-card">
+            <span>{num}</span>
+            <h3>{title}</h3>
+            <p>{text}</p>
+          </article>
+        ))}
+      </section>
+
+      <section className="mixin9-final">
+        <div>
+          <p className="section-kicker">Free access</p>
+          <h2>Cukup daftar member, lalu ambil akses MIXIN9.</h2>
+        </div>
+        <button className="primary mixin9-cta" onClick={onJoin}>Daftar member</button>
       </section>
     </main>
   );

@@ -16,6 +16,14 @@ type ProductInput = {
   visibility?: ProductVisibility;
   billingPeriod: BillingPeriod;
   price: number;
+  compareAtPrice?: number;
+  discountLabel?: string;
+  promoText?: string;
+  logoUrl?: string;
+  landingPath?: string;
+  landingTemplate?: string;
+  ctaLabel?: string;
+  accessRequirement?: string;
   active?: boolean;
   featured?: boolean;
   headline?: string;
@@ -40,6 +48,14 @@ export function createProduct(input: ProductInput): Product {
     visibility: input.visibility ?? 'public',
     billingPeriod: input.billingPeriod,
     price: input.price,
+    compareAtPrice: input.compareAtPrice,
+    discountLabel: input.discountLabel,
+    promoText: input.promoText,
+    logoUrl: input.logoUrl ?? '',
+    landingPath: input.landingPath,
+    landingTemplate: input.landingTemplate,
+    ctaLabel: input.ctaLabel,
+    accessRequirement: input.accessRequirement,
     active: input.active ?? true,
     featured: input.featured ?? false,
     headline: input.headline ?? input.name,

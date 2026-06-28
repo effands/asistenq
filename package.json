@@ -15,6 +15,7 @@
     "reset:local-admin": "tsx src/server/scripts/reset-local-admin.ts"
   },
   "dependencies": {
+    "adm-zip": "^0.5.17",
     "bcryptjs": "^2.4.3",
     "cors": "^2.8.5",
     "express": "^4.21.2",
@@ -25,6 +26,7 @@
     "zod": "^3.24.1"
   },
   "devDependencies": {
+    "@types/adm-zip": "^0.5.8",
     "@types/bcryptjs": "^2.4.6",
     "@types/cors": "^2.8.17",
     "@types/express": "^5.0.0",

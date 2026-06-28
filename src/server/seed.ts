@@ -11,6 +11,14 @@ type SeedProduct = {
   visibility: ProductVisibility;
   billingPeriod: BillingPeriod;
   price: number;
+  compareAtPrice?: number;
+  discountLabel?: string;
+  promoText?: string;
+  logoUrl?: string;
+  landingPath?: string;
+  landingTemplate?: string;
+  ctaLabel?: string;
+  accessRequirement?: string;
   featured: boolean;
   headline: string;
   description: string;
@@ -85,6 +93,29 @@ export async function seedInitialData(store: Store): Promise<void> {
     description: 'Akses video tutorial, materi pendukung, dan update kelas untuk produksi konten YouTube.',
     coverUrl: '',
     accessUrl: '/member/courses'
+  });
+
+  ensureProduct(store, {
+    name: 'MIXIN9',
+    slug: 'mixin9',
+    type: 'tool',
+    category: 'Audio Tools',
+    visibility: 'public',
+    billingPeriod: 'one_time',
+    price: 0,
+    compareAtPrice: 299000,
+    discountLabel: 'Free Beta',
+    promoText: 'Batch mixing audio cepat untuk creator. Daftar member untuk ambil akses gratis.',
+    logoUrl: '',
+    landingPath: '/mixin9',
+    landingTemplate: 'mixin9',
+    ctaLabel: 'Ambil MIXIN9 Gratis',
+    accessRequirement: 'Daftar jadi member untuk membuka akses download dan update.',
+    featured: true,
+    headline: 'Batch mixing audio banyak file dalam satu alur cepat.',
+    description: 'MIXIN9 membantu creator merapikan loudness, balance, dan proses mixing audio secara batch tanpa membuka file satu per satu.',
+    coverUrl: '',
+    accessUrl: '/member'
   });
 
   ensureProduct(store, {

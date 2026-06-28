@@ -1,5 +1,6 @@
 import cors from 'cors';
 import express from 'express';
+import AdmZip from 'adm-zip';
 import { exec } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -24,6 +25,7 @@ import {
   requestPasswordReset,
   resetPassword,
   resetLicenseDevice,
+  updateProductRecord,
   unbanHwid,
   verifyLicense,
   verifyAdminLogin,
@@ -47,6 +49,8 @@ if (!isProduction) {
 }
 
 app.use(express.json());
+
+const landingImportDir = path.resolve('data/landing-imports');
 
 const loginSchema = z.object({
   email: z.string().email(),
@@ -76,6 +80,14 @@ const productSchema = z.object({
   type: z.enum(['tool', 'course', 'ebook', 'video', 'bundle', 'free', 'class']),
   billingPeriod: z.enum(['trial', 'monthly', 'annual', 'lifetime', 'one_time']),
   price: z.number().int().nonnegative(),
+  compareAtPrice: z.number().int().nonnegative().optional(),
+  discountLabel: z.string().optional(),
+  promoText: z.string().optional(),
+  logoUrl: z.string().optional(),
+  landingPath: z.string().regex(/^\/[a-z0-9-]+$/).optional(),
+  landingTemplate: z.string().optional(),
+  ctaLabel: z.string().optional(),
+  accessRequirement: z.string().optional(),
   headline: z.string().optional(),
   description: z.string().optional(),
   coverUrl: z.string().optional(),
@@ -444,6 +456,72 @@ app.post('/api/admin/products', requireSession, requireAdminScope('products'), (
   res.status(201).json(publicProduct(product));
 });
 
+app.put('/api/admin/products/:id', requireSession, requireAdminScope('products'), (req, res) => {
+  const body = productSchema.partial().parse(req.body);
+  const product = updateProductRecord(store, String(req.params.id), body);
+
+  res.json(publicProduct(product));
+});
+
+app.post(
+  '/api/admin/products/:id/landing-zip',
+  requireSession,
+  requireAdminScope('products'),
+  express.raw({ type: ['application/zip', 'application/x-zip-compressed', 'application/octet-stream'], limit: '25mb' }),
+  (req, res) => {
+    const product = store.data.products.find((item) => item.id === String(req.params.id));
+
+    if (!product) {
+      res.status(404).json({ message: 'product not found' });
+      return;
+    }
+
+    if (!Buffer.isBuffer(req.body) || req.body.length === 0) {
+      res.status(400).json({ message: 'File ZIP kosong atau tidak terbaca.' });
+      return;
+    }
+
+    const safeSlug = product.slug.replace(/[^a-z0-9-]/g, '');
+    const targetDir = path.join(landingImportDir, safeSlug);
+    fs.rmSync(targetDir, { recursive: true, force: true });
+    fs.mkdirSync(targetDir, { recursive: true });
+
+    const zip = new AdmZip(req.body);
+    let fileCount = 0;
+
+    for (const entry of zip.getEntries()) {
+      if (entry.isDirectory) continue;
+      fileCount += 1;
+
+      if (fileCount > 300) {
+        res.status(400).json({ message: 'ZIP terlalu besar: maksimal 300 file.' });
+        return;
+      }
+
+      const normalizedName = entry.entryName.replace(/\\/g, '/').replace(/^\/+/, '');
+      if (!normalizedName || normalizedName.includes('../')) continue;
+
+      const outputPath = path.resolve(targetDir, normalizedName);
+      if (!outputPath.startsWith(targetDir)) continue;
+
+      fs.mkdirSync(path.dirname(outputPath), { recursive: true });
+      fs.writeFileSync(outputPath, entry.getData());
+    }
+
+    product.landingTemplate = 'zip-html';
+    product.accessUrl = `/landing-imports/${safeSlug}/index.html`;
+    product.updatedAt = new Date().toISOString();
+    store.save();
+
+    res.json({
+      ok: true,
+      message: `Landing ZIP tersimpan untuk ${product.name}.`,
+      fileCount,
+      url: product.accessUrl
+    });
+  }
+);
+
 function maskedSecret(value?: string): string {
   if (!value) return '';
   if (value.length <= 10) return '********';
@@ -578,6 +656,7 @@ app.get('/api/member/licenses', requireSession, (req, res) => {
 });
 
 if (shouldServeFrontend) {
+  app.use('/landing-imports', express.static(landingImportDir));
   app.use(express.static(publicDir));
   app.get('*', (_req, res) => {
     res.sendFile(path.join(publicDir, 'index.html'));
