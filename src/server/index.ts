@@ -169,7 +169,9 @@ const toolEventSchema = z.object({
 const deploymentSettingsSchema = z.object({
   githubToken: z.string().optional(),
   githubRepo: z.string().min(3).default('effands/asistenq'),
-  githubBranch: z.string().min(1).default('master')
+  githubBranch: z.string().min(1).default('master'),
+  telegramBotToken: z.string().optional(),
+  telegramOwnerId: z.string().optional()
 });
 
 function publicProduct(product: typeof store.data.products[number]) {
@@ -682,11 +684,15 @@ function hideSecret(text: string, secret: string): string {
 app.get('/api/admin/deploy/settings', requireSession, requireAdminScope('products'), (_req, res) => {
   const settings = store.data.deploymentSettings ?? {};
   const token = settings.githubToken ?? process.env.GITHUB_TOKEN ?? '';
+  const telegramToken = settings.telegramBotToken ?? process.env.TELEGRAM_BOT_TOKEN ?? '';
   res.json({
     githubRepo: settings.githubRepo ?? 'effands/asistenq',
     githubBranch: settings.githubBranch ?? 'master',
     hasGithubToken: Boolean(token),
     maskedGithubToken: maskedSecret(token),
+    hasTelegramBotToken: Boolean(telegramToken),
+    maskedTelegramBotToken: maskedSecret(telegramToken),
+    telegramOwnerId: settings.telegramOwnerId ?? process.env.TELEGRAM_OWNER_ID ?? '',
     updatedAt: settings.updatedAt
   });
 });
@@ -702,12 +708,16 @@ app.post('/api/admin/deploy/settings', requireSession, requireAdminScope('produc
   const body = parsed.data;
   const current = store.data.deploymentSettings ?? {};
   const nextToken = body.githubToken?.trim() || current.githubToken || process.env.GITHUB_TOKEN || '';
+  const nextTelegramToken = body.telegramBotToken?.trim() || current.telegramBotToken || process.env.TELEGRAM_BOT_TOKEN || '';
+  const nextTelegramOwnerId = body.telegramOwnerId?.trim() || current.telegramOwnerId || process.env.TELEGRAM_OWNER_ID || '';
 
   try {
     store.data.deploymentSettings = {
       githubRepo: body.githubRepo.trim(),
       githubBranch: body.githubBranch.trim(),
       githubToken: nextToken,
+      telegramBotToken: nextTelegramToken,
+      telegramOwnerId: nextTelegramOwnerId,
       updatedAt: new Date().toISOString()
     };
     store.save();
@@ -719,6 +729,9 @@ app.post('/api/admin/deploy/settings', requireSession, requireAdminScope('produc
       githubBranch: store.data.deploymentSettings.githubBranch,
       hasGithubToken: Boolean(nextToken),
       maskedGithubToken: maskedSecret(nextToken),
+      hasTelegramBotToken: Boolean(nextTelegramToken),
+      maskedTelegramBotToken: maskedSecret(nextTelegramToken),
+      telegramOwnerId: nextTelegramOwnerId,
       updatedAt: store.data.deploymentSettings.updatedAt
     });
   } catch (error) {

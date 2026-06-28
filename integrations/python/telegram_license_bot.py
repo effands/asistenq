@@ -14,9 +14,18 @@ from pathlib import Path
 from typing import Any, Dict, Optional
 
 
+def local_deployment_settings() -> Dict[str, Any]:
+    try:
+        data = json.loads(Path("data/asistenq.json").read_text(encoding="utf-8"))
+        return data.get("deploymentSettings", {})
+    except (FileNotFoundError, ValueError, json.JSONDecodeError):
+        return {}
+
+
+LOCAL_SETTINGS = local_deployment_settings()
 API_BASE = os.environ.get("ASISTENQ_API_BASE", "https://asistenq.com/api").rstrip("/")
-BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "").strip()
-OWNER_ID = os.environ.get("TELEGRAM_OWNER_ID", "").strip()
+BOT_TOKEN = (os.environ.get("TELEGRAM_BOT_TOKEN") or LOCAL_SETTINGS.get("telegramBotToken") or "").strip()
+OWNER_ID = (os.environ.get("TELEGRAM_OWNER_ID") or LOCAL_SETTINGS.get("telegramOwnerId") or "").strip()
 ADMIN_EMAIL = os.environ.get("ASISTENQ_ADMIN_EMAIL", "").strip()
 ADMIN_PASSWORD = os.environ.get("ASISTENQ_ADMIN_PASSWORD", "").strip()
 STATE_FILE = Path(os.environ.get("ASISTENQ_BOT_STATE", "data/telegram-bot-state.json"))

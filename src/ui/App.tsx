@@ -614,7 +614,7 @@ function AdminPanel({
   onUnbanLicense: (license: LicenseDashboardRow) => Promise<void>;
   onDeployUpdate: () => Promise<{ ok: boolean; message: string; stdout?: string; stderr?: string; detail?: string }>;
   deploymentSettings: DeploymentSettingsResult | null;
-  onSaveDeploymentSettings: (input: { githubRepo: string; githubBranch: string; githubToken?: string }) => Promise<void>;
+  onSaveDeploymentSettings: (input: { githubRepo: string; githubBranch: string; githubToken?: string; telegramBotToken?: string; telegramOwnerId?: string }) => Promise<void>;
 }) {
   if (!session) {
     return (
@@ -1037,7 +1037,7 @@ function LandingManager({ products }: { products: PublicProduct[] }) {
 function DeployPanel({ settings, onDeployUpdate, onSaveSettings }: {
   settings: DeploymentSettingsResult | null;
   onDeployUpdate: () => Promise<{ ok: boolean; message: string; stdout?: string; stderr?: string; detail?: string }>;
-  onSaveSettings: (input: { githubRepo: string; githubBranch: string; githubToken?: string }) => Promise<void>;
+  onSaveSettings: (input: { githubRepo: string; githubBranch: string; githubToken?: string; telegramBotToken?: string; telegramOwnerId?: string }) => Promise<void>;
 }) {
   const [busy, setBusy] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -1046,17 +1046,21 @@ function DeployPanel({ settings, onDeployUpdate, onSaveSettings }: {
   const [githubRepo, setGithubRepo] = useState(settings?.githubRepo ?? 'effands/asistenq');
   const [githubBranch, setGithubBranch] = useState(settings?.githubBranch ?? 'master');
   const [githubToken, setGithubToken] = useState('');
+  const [telegramBotToken, setTelegramBotToken] = useState('');
+  const [telegramOwnerId, setTelegramOwnerId] = useState(settings?.telegramOwnerId ?? '');
+  const [telegramNotice, setTelegramNotice] = useState('');
 
   useEffect(() => {
     if (settings) {
       setGithubRepo(settings.githubRepo);
       setGithubBranch(settings.githubBranch);
+      setTelegramOwnerId(settings.telegramOwnerId);
     }
   }, [settings]);
 
   return (
-    <section className="admin-content-grid compact-admin-grid">
-      <div className="panel stack wide">
+    <section className="deploy-settings-grid">
+      <div className="panel deploy-action-panel">
         <div className="panel-heading">
           <div>
             <p className="section-kicker">GitHub Deployment</p>
@@ -1064,9 +1068,9 @@ function DeployPanel({ settings, onDeployUpdate, onSaveSettings }: {
           </div>
           <span className="soft-badge">Safe mode</span>
         </div>
-        <p className="muted">Setelah push ke GitHub, klik update lalu restart app Node.js di hosting.</p>
-        <button
-          className="primary deploy-button"
+        <div className="deploy-action-row">
+          <p className="muted">Tarik versi terbaru dari repository.</p>
+          <button className="primary deploy-button"
           disabled={busy}
           onClick={async () => {
             setBusy(true);
@@ -1082,10 +1086,11 @@ function DeployPanel({ settings, onDeployUpdate, onSaveSettings }: {
           }}
         >
           <UploadCloud size={18} /> {busy ? 'Mengupdate...' : 'Update dari GitHub'}
-        </button>
-        <pre className="deploy-log">{log}</pre>
+          </button>
+        </div>
+        <pre className="deploy-log compact-log">{log}</pre>
       </div>
-      <form className="panel stack" onSubmit={async (event) => {
+      <form className="panel compact-token-card" onSubmit={async (event) => {
         event.preventDefault();
         setSaving(true);
         setSettingsNotice('Menyimpan token...');
@@ -1093,7 +1098,9 @@ function DeployPanel({ settings, onDeployUpdate, onSaveSettings }: {
           await onSaveSettings({
             githubRepo: githubRepo.trim(),
             githubBranch: githubBranch.trim(),
-            githubToken: githubToken.trim()
+            githubToken: githubToken.trim(),
+            telegramBotToken: '',
+            telegramOwnerId
           });
           setGithubToken('');
           setSettingsNotice('Token GitHub tersimpan.');
@@ -1110,19 +1117,44 @@ function DeployPanel({ settings, onDeployUpdate, onSaveSettings }: {
           </div>
           <span className="soft-badge">{settings?.hasGithubToken ? 'Token aktif' : 'Belum ada token'}</span>
         </div>
-        <p className="muted">Masukkan token GitHub untuk repo private. Token disimpan di server dan ditampilkan masked.</p>
-        <label>Repository
-          <input value={githubRepo} onChange={(event) => setGithubRepo(event.target.value)} placeholder="effands/asistenq" />
-        </label>
-        <label>Branch
-          <input value={githubBranch} onChange={(event) => setGithubBranch(event.target.value)} placeholder="master" />
-        </label>
-        <label>GitHub Token
-          <input value={githubToken} onChange={(event) => setGithubToken(event.target.value)} placeholder={settings?.maskedGithubToken || 'ghp_...'} type="password" />
-        </label>
-        {settings?.maskedGithubToken && <p className="form-notice">Token tersimpan: {settings.maskedGithubToken}</p>}
+        <div className="compact-token-fields">
+          <label>Repository<input value={githubRepo} onChange={(event) => setGithubRepo(event.target.value)} placeholder="effands/asistenq" /></label>
+          <label>Branch<input value={githubBranch} onChange={(event) => setGithubBranch(event.target.value)} placeholder="master" /></label>
+          <label className="span-two">GitHub Token<input value={githubToken} onChange={(event) => setGithubToken(event.target.value)} placeholder={settings?.maskedGithubToken || 'ghp_...'} type="password" /></label>
+        </div>
         <button className="primary" disabled={saving}>{saving ? 'Menyimpan...' : 'Simpan Token GitHub'}</button>
         {settingsNotice && <p className="form-notice">{settingsNotice}</p>}
+      </form>
+      <form className="panel compact-token-card" onSubmit={async (event) => {
+        event.preventDefault();
+        setSaving(true);
+        setTelegramNotice('Menyimpan...');
+        try {
+          await onSaveSettings({
+            githubRepo: githubRepo.trim(),
+            githubBranch: githubBranch.trim(),
+            githubToken: '',
+            telegramBotToken: telegramBotToken.trim(),
+            telegramOwnerId: telegramOwnerId.trim()
+          });
+          setTelegramBotToken('');
+          setTelegramNotice('Konfigurasi Telegram tersimpan.');
+        } catch (error) {
+          setTelegramNotice(error instanceof Error ? error.message : 'Token Telegram gagal disimpan.');
+        } finally {
+          setSaving(false);
+        }
+      }}>
+        <div className="panel-heading">
+          <div><p className="section-kicker">Telegram Bot</p><h2>Token Telegram</h2></div>
+          <span className="soft-badge">{settings?.hasTelegramBotToken ? 'Token aktif' : 'Belum ada token'}</span>
+        </div>
+        <div className="compact-token-fields">
+          <label>Owner ID<input value={telegramOwnerId} onChange={(event) => setTelegramOwnerId(event.target.value.replace(/\D/g, ''))} placeholder="ID Telegram angka" inputMode="numeric" /></label>
+          <label>Bot Token<input value={telegramBotToken} onChange={(event) => setTelegramBotToken(event.target.value)} placeholder={settings?.maskedTelegramBotToken || 'Token dari BotFather'} type="password" /></label>
+        </div>
+        <button className="primary" disabled={saving}>{saving ? 'Menyimpan...' : 'Simpan Token Telegram'}</button>
+        {telegramNotice && <p className="form-notice">{telegramNotice}</p>}
       </form>
     </section>
   );

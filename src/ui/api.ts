@@ -56,6 +56,9 @@ export type DeploymentSettingsResult = {
   githubBranch: string;
   hasGithubToken: boolean;
   maskedGithubToken: string;
+  hasTelegramBotToken: boolean;
+  maskedTelegramBotToken: string;
+  telegramOwnerId: string;
   updatedAt?: string;
 };
 export type AdminMemberRow = Omit<MemberAccount, 'passwordHash'> & {
