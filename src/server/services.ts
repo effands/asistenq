@@ -1,16 +1,27 @@
 import bcrypt from 'bcryptjs';
-import { createId, createProduct, createSubscription } from '../shared/domain';
+import {
+  createId,
+  createProduct,
+  createSubscription,
+  generateLicenseKey,
+  normalizeHwid,
+  resolveLicenseExpiry
+} from '../shared/domain';
 import type {
   AdminAccount,
   AdminScope,
+  BannedHwid,
   BillingPeriod,
+  LicenseStatus,
   MemberAccount,
   Order,
   Product,
   ProductPlan,
   ProductType,
   ProductVisibility,
-  Subscription
+  Subscription,
+  ToolLicense,
+  Voucher
 } from '../shared/types';
 import type { Store } from './store';
 
@@ -27,6 +38,39 @@ function assertSuperAdmin(actor: Actor): void {
   if (actor.role !== 'super_admin') {
     throw new Error('super admin access required');
   }
+}
+
+function findProductBySlug(store: Store, productSlug: string): Product {
+  const product = store.data.products.find((item) => item.slug === productSlug);
+
+  if (!product) {
+    throw new Error('product not found');
+  }
+
+  return product;
+}
+
+function findPlanByCode(store: Store, productId: string, planCode: string): ProductPlan {
+  const normalizedCode = planCode.trim().toUpperCase();
+  const plan = store.data.plans.find((item) => (
+    item.productId === productId &&
+    item.code === normalizedCode &&
+    item.isActive
+  ));
+
+  if (!plan) {
+    throw new Error('plan not found');
+  }
+
+  return plan;
+}
+
+function formatExpiryDate(expiryCode: string): string | null {
+  if (expiryCode === 'LIFETIME') {
+    return null;
+  }
+
+  return `${expiryCode.slice(0, 4)}-${expiryCode.slice(4, 6)}-${expiryCode.slice(6, 8)}`;
 }
 
 export async function createAdmin(store: Store, input: {
@@ -197,6 +241,197 @@ export function createCheckout(store: Store, memberId: string, productId: string
   store.data.orders.push(order);
   store.save();
   return order;
+}
+
+export function generateToolLicense(store: Store, input: {
+  productSlug: string;
+  planCode: string;
+  email: string;
+  hwid: string;
+  now?: Date;
+  salt?: string;
+}): ToolLicense {
+  const product = findProductBySlug(store, input.productSlug);
+  const plan = findPlanByCode(store, product.id, input.planCode);
+  const now = input.now ?? new Date();
+  const expiresAt = resolveLicenseExpiry(now, plan.durationDays);
+  const key = generateLicenseKey({
+    hwid: input.hwid,
+    expiresAt,
+    salt: input.salt ?? process.env.LICENSE_SECRET_SALT ?? 'vjstudio_secret_salt_2026_xyz'
+  });
+
+  const license: ToolLicense = {
+    id: createId('license'),
+    productId: product.id,
+    planId: plan.id,
+    email: normalizeEmail(input.email),
+    hwid: normalizeHwid(input.hwid),
+    key,
+    status: 'generated',
+    generatedAt: now.toISOString(),
+    expiresAt: formatExpiryDate(expiresAt)
+  };
+
+  store.data.licenses.push(license);
+  store.save();
+  return license;
+}
+
+export function isHwidBanned(store: Store, productId: string, hwid: string): boolean {
+  const normalized = normalizeHwid(hwid);
+  return store.data.bannedHwids.some((item) => item.productId === productId && item.hwid === normalized);
+}
+
+export function activateLicense(store: Store, input: {
+  productSlug: string;
+  token: string;
+  hwid: string;
+  now?: Date;
+}): { status: 'success'; message: string } {
+  const product = findProductBySlug(store, input.productSlug);
+  const normalizedHwid = normalizeHwid(input.hwid);
+
+  if (isHwidBanned(store, product.id, normalizedHwid)) {
+    throw new Error('HWID is banned');
+  }
+
+  const license = store.data.licenses.find((item) => (
+    item.productId === product.id &&
+    item.key === input.token.trim() &&
+    item.hwid === normalizedHwid
+  ));
+
+  if (!license) {
+    throw new Error('Invalid license');
+  }
+
+  license.status = 'active';
+  license.activatedAt = (input.now ?? new Date()).toISOString();
+  store.save();
+
+  return { status: 'success', message: 'Activated' };
+}
+
+export function verifyLicense(store: Store, input: {
+  productSlug: string;
+  token: string;
+  hwid: string;
+}): { valid: boolean; status?: LicenseStatus; message?: string } {
+  const product = findProductBySlug(store, input.productSlug);
+  const normalizedHwid = normalizeHwid(input.hwid);
+
+  if (isHwidBanned(store, product.id, normalizedHwid)) {
+    return { valid: false, message: 'HWID is banned' };
+  }
+
+  const license = store.data.licenses.find((item) => (
+    item.productId === product.id &&
+    item.key === input.token.trim() &&
+    item.hwid === normalizedHwid
+  ));
+
+  if (!license) {
+    return { valid: false, message: 'Invalid license' };
+  }
+
+  return {
+    valid: license.status === 'active' || license.status === 'generated',
+    status: license.status
+  };
+}
+
+export function banHwid(store: Store, input: {
+  productSlug: string;
+  hwid: string;
+  reason: string;
+}): BannedHwid {
+  const product = findProductBySlug(store, input.productSlug);
+  const normalizedHwid = normalizeHwid(input.hwid);
+  const existing = store.data.bannedHwids.find((item) => (
+    item.productId === product.id && item.hwid === normalizedHwid
+  ));
+
+  if (existing) {
+    return existing;
+  }
+
+  const banned: BannedHwid = {
+    id: createId('ban'),
+    productId: product.id,
+    hwid: normalizedHwid,
+    reason: input.reason,
+    createdAt: new Date().toISOString()
+  };
+
+  store.data.bannedHwids.push(banned);
+  store.data.licenses
+    .filter((license) => license.productId === product.id && license.hwid === normalizedHwid)
+    .forEach((license) => {
+      license.status = 'banned';
+    });
+  store.save();
+  return banned;
+}
+
+export function unbanHwid(store: Store, input: {
+  productSlug: string;
+  hwid: string;
+}): { removed: boolean } {
+  const product = findProductBySlug(store, input.productSlug);
+  const normalizedHwid = normalizeHwid(input.hwid);
+  const previousLength = store.data.bannedHwids.length;
+
+  store.data.bannedHwids = store.data.bannedHwids.filter((item) => (
+    item.productId !== product.id || item.hwid !== normalizedHwid
+  ));
+  store.save();
+
+  return { removed: store.data.bannedHwids.length < previousLength };
+}
+
+export function resetLicenseDevice(store: Store, input: {
+  licenseId: string;
+  newHwid: string;
+  salt?: string;
+}): ToolLicense {
+  const license = store.data.licenses.find((item) => item.id === input.licenseId);
+
+  if (!license) {
+    throw new Error('license not found');
+  }
+
+  license.hwid = normalizeHwid(input.newHwid);
+  store.save();
+  return license;
+}
+
+export function verifyVoucher(store: Store, input: {
+  productSlug: string;
+  code: string;
+}): { valid: boolean; message?: string; voucher?: Voucher } {
+  const product = findProductBySlug(store, input.productSlug);
+  const code = input.code.trim().toUpperCase();
+  const now = new Date();
+  const voucher = store.data.vouchers.find((item) => (
+    item.code === code &&
+    item.active &&
+    (item.productId === null || item.productId === product.id)
+  ));
+
+  if (!voucher) {
+    return { valid: false, message: 'Voucher tidak valid / kedaluwarsa.' };
+  }
+
+  if (voucher.expiresAt && new Date(voucher.expiresAt) < now) {
+    return { valid: false, message: 'Voucher tidak valid / kedaluwarsa.' };
+  }
+
+  if (voucher.maxUse !== null && voucher.usedCount >= voucher.maxUse) {
+    return { valid: false, message: 'Voucher tidak valid / kedaluwarsa.' };
+  }
+
+  return { valid: true, voucher };
 }
 
 export function markOrderPaid(store: Store, orderId: string, paidAt = new Date()): {
