@@ -10,7 +10,8 @@
     "build": "tsc --noEmit && vite build",
     "test": "vitest run",
     "test:watch": "vitest",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit",
+    "reset:local-admin": "tsx src/server/scripts/reset-local-admin.ts"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",

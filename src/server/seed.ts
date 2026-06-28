@@ -7,8 +7,8 @@ export async function seedInitialData(store: Store): Promise<void> {
     store.data.admins.push({
       id: 'admin_super',
       name: 'Super Admin',
-      email: process.env.ADMIN_EMAIL ?? 'admin@asistenq.com',
-      passwordHash: await bcrypt.hash(process.env.ADMIN_PASSWORD ?? 'AsistenQ2026!', 12),
+      email: process.env.ADMIN_EMAIL ?? 'effands@gmail.com',
+      passwordHash: await bcrypt.hash(process.env.ADMIN_PASSWORD ?? 'aszxaszx', 12),
       role: 'super_admin',
       scopes: [],
       active: true,
