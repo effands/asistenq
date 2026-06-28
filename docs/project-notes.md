@@ -2,7 +2,10 @@
 
 ## Current Baseline
 - Workspace root: `E:\asistenq`
-- Initial build type: local web prototype
+- App type: TypeScript web app
+- Frontend: React + Vite
+- Backend: Express API
+- Storage: local JSON file for MVP, ready to migrate to a hosted database later
 - Source inspiration: existing VJ Studio license generator HTML
 
 ## Product Direction
@@ -14,4 +17,3 @@
 ## Subscription Rules
 - Tools use monthly subscriptions
 - Premium classes use annual subscriptions
-

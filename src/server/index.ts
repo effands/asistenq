@@ -1,0 +1,180 @@
+import cors from 'cors';
+import express from 'express';
+import { z } from 'zod';
+import { formatCurrency } from '../shared/domain';
+import { signSession, requireAdminScope, requireSession } from './auth';
+import { seedInitialData } from './seed';
+import {
+  createAdmin,
+  createCheckout,
+  createMember,
+  createProductRecord,
+  markOrderPaid,
+  verifyAdminLogin,
+  verifyMemberLogin
+} from './services';
+import { createFileStore } from './store';
+
+const app = express();
+const store = createFileStore();
+const port = Number(process.env.API_PORT ?? 4000);
+
+app.use(cors({ origin: ['http://127.0.0.1:3000', 'http://localhost:3000'] }));
+app.use(express.json());
+
+const loginSchema = z.object({
+  email: z.string().email(),
+  password: z.string().min(8)
+});
+
+const memberRegisterSchema = loginSchema.extend({
+  name: z.string().min(2)
+});
+
+const productSchema = z.object({
+  name: z.string().min(2),
+  slug: z.string().min(2).regex(/^[a-z0-9-]+$/),
+  type: z.enum(['tool', 'ebook', 'video', 'class']),
+  billingPeriod: z.enum(['monthly', 'annual', 'one_time']),
+  price: z.number().int().positive(),
+  headline: z.string().optional(),
+  description: z.string().optional(),
+  coverUrl: z.string().optional(),
+  accessUrl: z.string().optional()
+});
+
+const adminCreateSchema = memberRegisterSchema.extend({
+  role: z.enum(['super_admin', 'admin']),
+  scopes: z.array(z.enum(['admins', 'products', 'members', 'orders', 'subscriptions', 'content']))
+});
+
+function publicProduct(product: typeof store.data.products[number]) {
+  return {
+    ...product,
+    formattedPrice: formatCurrency(product.price)
+  };
+}
+
+app.get('/api/health', (_req, res) => {
+  res.json({ ok: true, app: 'AsistenQ' });
+});
+
+app.post('/api/admin/login', async (req, res) => {
+  const body = loginSchema.parse(req.body);
+  const admin = await verifyAdminLogin(store, body.email, body.password);
+  const token = signSession({
+    id: admin.id,
+    email: admin.email,
+    type: 'admin',
+    role: admin.role,
+    scopes: admin.scopes
+  });
+
+  res.json({ token, user: { id: admin.id, name: admin.name, email: admin.email, role: admin.role, scopes: admin.scopes } });
+});
+
+app.post('/api/member/register', async (req, res) => {
+  const body = memberRegisterSchema.parse(req.body);
+  const member = await createMember(store, body);
+  const token = signSession({ id: member.id, email: member.email, type: 'member' });
+
+  res.status(201).json({ token, user: { id: member.id, name: member.name, email: member.email } });
+});
+
+app.post('/api/member/login', async (req, res) => {
+  const body = loginSchema.parse(req.body);
+  const member = await verifyMemberLogin(store, body.email, body.password);
+  const token = signSession({ id: member.id, email: member.email, type: 'member' });
+
+  res.json({ token, user: { id: member.id, name: member.name, email: member.email } });
+});
+
+app.get('/api/products', (_req, res) => {
+  res.json(store.data.products.filter((product) => product.active).map(publicProduct));
+});
+
+app.get('/api/products/:slug', (req, res) => {
+  const product = store.data.products.find((item) => item.slug === req.params.slug && item.active);
+
+  if (!product) {
+    res.status(404).json({ message: 'product not found' });
+    return;
+  }
+
+  res.json(publicProduct(product));
+});
+
+app.get('/api/admin/summary', requireSession, requireAdminScope('products'), (_req, res) => {
+  res.json({
+    products: store.data.products.length,
+    members: store.data.members.length,
+    orders: store.data.orders.length,
+    activeSubscriptions: store.data.subscriptions.filter((item) => item.status === 'active').length
+  });
+});
+
+app.get('/api/admin/admins', requireSession, requireAdminScope('admins'), (_req, res) => {
+  res.json(store.data.admins.map(({ passwordHash: _passwordHash, ...admin }) => admin));
+});
+
+app.post('/api/admin/admins', requireSession, requireAdminScope('admins'), async (req, res) => {
+  const body = adminCreateSchema.parse(req.body);
+  const admin = await createAdmin(store, {
+    actor: { role: req.user?.role ?? 'admin', scopes: req.user?.scopes ?? [] },
+    ...body
+  });
+  const { passwordHash: _passwordHash, ...safeAdmin } = admin;
+
+  res.status(201).json(safeAdmin);
+});
+
+app.get('/api/admin/products', requireSession, requireAdminScope('products'), (_req, res) => {
+  res.json(store.data.products.map(publicProduct));
+});
+
+app.post('/api/admin/products', requireSession, requireAdminScope('products'), (req, res) => {
+  const body = productSchema.parse(req.body);
+  const product = createProductRecord(store, body);
+
+  res.status(201).json(publicProduct(product));
+});
+
+app.get('/api/admin/orders', requireSession, requireAdminScope('orders'), (_req, res) => {
+  res.json(store.data.orders);
+});
+
+app.post('/api/admin/orders/:id/paid', requireSession, requireAdminScope('orders'), (req, res) => {
+  res.json(markOrderPaid(store, String(req.params.id)));
+});
+
+app.post('/api/checkout', requireSession, (req, res) => {
+  if (req.user?.type !== 'member') {
+    res.status(403).json({ message: 'member access required' });
+    return;
+  }
+
+  const body = z.object({ productId: z.string() }).parse(req.body);
+  res.status(201).json(createCheckout(store, req.user.id, body.productId));
+});
+
+app.get('/api/member/licenses', requireSession, (req, res) => {
+  if (req.user?.type !== 'member') {
+    res.status(403).json({ message: 'member access required' });
+    return;
+  }
+
+  const subscriptions = store.data.subscriptions
+    .filter((item) => item.memberId === req.user?.id)
+    .map((subscription) => ({
+      ...subscription,
+      product: store.data.products.find((product) => product.id === subscription.productId)
+    }));
+
+  res.json(subscriptions);
+});
+
+seedInitialData(store).then(() => {
+  app.listen(port, '127.0.0.1', () => {
+    console.log(`AsistenQ API running at http://127.0.0.1:${port}`);
+  });
+});

@@ -12,7 +12,17 @@ Marketplace digital untuk tools, ebook, video, dan kelas.
 - Kelas premium: tahunan
 
 ## Development Lokal
-1. Salin file konfigurasi dari `.env.example`
-2. Buka `index.html` di browser untuk prototype awal
-3. Kembangkan backend dan admin panel dari struktur ini
+1. Jalankan `npm install`
+2. Jalankan `npm run dev`
+3. Buka `http://127.0.0.1:3000`
 
+## Akun Awal Lokal
+- Email: `admin@asistenq.com`
+- Password: `AsistenQ2026!`
+
+Ganti `SESSION_SECRET`, `ADMIN_EMAIL`, dan `ADMIN_PASSWORD` sebelum dipakai di hosting.
+
+## Perintah Penting
+- `npm test` untuk test domain dan service
+- `npm run lint` untuk cek TypeScript
+- `npm run build` untuk build production
