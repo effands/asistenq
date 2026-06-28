@@ -1,5 +1,7 @@
 import cors from 'cors';
 import express from 'express';
+import fs from 'node:fs';
+import path from 'node:path';
 import { z } from 'zod';
 import { formatCurrency } from '../shared/domain';
 import { signSession, requireAdminScope, requireSession } from './auth';
@@ -18,8 +20,15 @@ import { createFileStore } from './store';
 const app = express();
 const store = createFileStore();
 const port = Number(process.env.API_PORT ?? 4000);
+const isProduction = process.env.NODE_ENV === 'production';
+const publicDir = path.resolve(process.cwd(), 'dist');
+const hasBuiltFrontend = fs.existsSync(path.join(publicDir, 'index.html'));
+const shouldServeFrontend = isProduction || hasBuiltFrontend;
 
-app.use(cors({ origin: ['http://127.0.0.1:3000', 'http://localhost:3000'] }));
+if (!isProduction) {
+  app.use(cors({ origin: ['http://127.0.0.1:3000', 'http://localhost:3000'] }));
+}
+
 app.use(express.json());
 
 const loginSchema = z.object({
@@ -173,8 +182,15 @@ app.get('/api/member/licenses', requireSession, (req, res) => {
   res.json(subscriptions);
 });
 
+if (shouldServeFrontend) {
+  app.use(express.static(publicDir));
+  app.get('*', (_req, res) => {
+    res.sendFile(path.join(publicDir, 'index.html'));
+  });
+}
+
 seedInitialData(store).then(() => {
-  app.listen(port, '127.0.0.1', () => {
-    console.log(`AsistenQ API running at http://127.0.0.1:${port}`);
+  app.listen(port, () => {
+    console.log(`AsistenQ running on port ${port}`);
   });
 });

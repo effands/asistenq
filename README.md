@@ -26,3 +26,7 @@ Ganti `SESSION_SECRET`, `ADMIN_EMAIL`, dan `ADMIN_PASSWORD` sebelum dipakai di h
 - `npm test` untuk test domain dan service
 - `npm run lint` untuk cek TypeScript
 - `npm run build` untuk build production
+- `npm start` untuk menjalankan hasil build production
+
+## Deploy
+Catatan deploy JagoanHosting ada di `docs/deploy-jagoanhosting.md`.
