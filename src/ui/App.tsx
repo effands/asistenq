@@ -21,7 +21,7 @@ import {
   WandSparkles
 } from 'lucide-react';
 import { useEffect, useState, type ReactNode } from 'react';
-import type { BillingPeriod, ProductType } from '../shared/types';
+import type { BillingPeriod, ProductAccessMode, ProductType, ProductVisibility } from '../shared/types';
 import {
   apiRequest,
   type AdminLicenseDashboard,
@@ -42,6 +42,8 @@ type AdminSection = 'dashboard' | 'landing' | 'products' | 'licenses' | 'members
 type AdminTheme = 'light' | 'dark';
 
 const productTypes: ProductType[] = ['tool', 'course', 'ebook', 'video', 'bundle', 'free', 'class'];
+const productVisibilities: ProductVisibility[] = ['public', 'private', 'draft'];
+const productAccessModes: ProductAccessMode[] = ['public', 'free_member', 'trial', 'paid', 'admin'];
 const billingPeriods: BillingPeriod[] = ['trial', 'monthly', 'annual', 'lifetime', 'one_time'];
 const emptyCatalog: PublicCatalog = { featured: [], paid: [], free: [] };
 
@@ -290,6 +292,7 @@ export function App() {
         activeRoute="member"
         memberSession={memberSession}
         onMemberLogout={() => {
+          apiRequest('/auth/logout', { method: 'POST' }).catch(() => undefined);
           setMemberSession(null);
           setMemberDashboard(null);
           setMemberOrders([]);
@@ -302,6 +305,7 @@ export function App() {
           dashboard={memberDashboard}
           orders={memberOrders}
           onLogout={() => {
+            apiRequest('/auth/logout', { method: 'POST' }).catch(() => undefined);
             setMemberSession(null);
             setMemberDashboard(null);
             setMemberOrders([]);
@@ -567,6 +571,8 @@ function AdminPanel({
     name: string;
     slug: string;
     type: ProductType;
+    visibility?: ProductVisibility;
+    accessMode?: ProductAccessMode;
     billingPeriod: BillingPeriod;
     price: number;
     compareAtPrice?: number;
@@ -1068,6 +1074,8 @@ function ProductForm({ onCreateProduct }: {
     name: string;
     slug: string;
     type: ProductType;
+    visibility?: ProductVisibility;
+    accessMode?: ProductAccessMode;
     billingPeriod: BillingPeriod;
     price: number;
     compareAtPrice?: number;
@@ -1085,6 +1093,8 @@ function ProductForm({ onCreateProduct }: {
   const [name, setName] = useState('AsistenQ Video Helper');
   const [slug, setSlug] = useState('video-helper');
   const [type, setType] = useState<ProductType>('tool');
+  const [visibility, setVisibility] = useState<ProductVisibility>('public');
+  const [accessMode, setAccessMode] = useState<ProductAccessMode>('free_member');
   const [billingPeriod, setBillingPeriod] = useState<BillingPeriod>('monthly');
   const [price, setPrice] = useState(149000);
   const [compareAtPrice, setCompareAtPrice] = useState(0);
@@ -1105,6 +1115,8 @@ function ProductForm({ onCreateProduct }: {
         name,
         slug,
         type,
+        visibility,
+        accessMode,
         billingPeriod,
         price,
         compareAtPrice: compareAtPrice || undefined,
@@ -1131,6 +1143,12 @@ function ProductForm({ onCreateProduct }: {
         <input value={slug} onChange={(event) => setSlug(event.target.value)} placeholder="slug-produk" />
         <select value={type} onChange={(event) => setType(event.target.value as ProductType)}>
           {productTypes.map((item) => <option key={item}>{item}</option>)}
+        </select>
+        <select value={visibility} onChange={(event) => setVisibility(event.target.value as ProductVisibility)}>
+          {productVisibilities.map((item) => <option key={item} value={item}>{item === 'public' ? 'Public marketplace' : item === 'private' ? 'Private link' : 'Draft/admin only'}</option>)}
+        </select>
+        <select value={accessMode} onChange={(event) => setAccessMode(event.target.value as ProductAccessMode)}>
+          {productAccessModes.map((item) => <option key={item} value={item}>{item === 'public' ? 'Public page' : item === 'free_member' ? 'Free member' : item === 'trial' ? 'Trial/subscription' : item === 'paid' ? 'Paid only' : 'Admin only'}</option>)}
         </select>
         <select value={billingPeriod} onChange={(event) => setBillingPeriod(event.target.value as BillingPeriod)}>
           {billingPeriods.map((item) => <option key={item}>{item}</option>)}
@@ -1176,6 +1194,8 @@ function ProductTable({ products, onUpdateProduct, onImportLandingZip }: {
     setDraft({
       name: product.name,
       slug: product.slug,
+      visibility: product.visibility,
+      accessMode: product.accessMode,
       price: product.price,
       compareAtPrice: product.compareAtPrice,
       discountLabel: product.discountLabel,
@@ -1207,7 +1227,7 @@ function ProductTable({ products, onUpdateProduct, onImportLandingZip }: {
               <div className="product-icon">{product.logoUrl ? <img src={product.logoUrl} alt="" /> : productIcon(product)}</div>
               <div>
                 <strong>{product.name}</strong>
-                <span>{product.landingPath ?? `/produk/${product.slug}`} · {product.price === 0 ? 'Gratis' : product.formattedPrice}</span>
+                <span>{product.landingPath ?? `/produk/${product.slug}`} · {product.visibility ?? 'public'} · {product.accessMode ?? 'public'} · {product.price === 0 ? 'Gratis' : product.formattedPrice}</span>
               </div>
               <button className="ghost-button" type="button" onClick={() => startEdit(product)}>Edit</button>
             </div>
@@ -1216,6 +1236,12 @@ function ProductTable({ products, onUpdateProduct, onImportLandingZip }: {
                 <div className="form-grid">
                   <input value={draft.name ?? ''} onChange={(event) => setDraft({ ...draft, name: event.target.value })} placeholder="Nama" />
                   <input value={draft.slug ?? ''} onChange={(event) => setDraft({ ...draft, slug: event.target.value })} placeholder="slug" />
+                  <select value={draft.visibility ?? 'public'} onChange={(event) => setDraft({ ...draft, visibility: event.target.value as ProductVisibility })}>
+                    {productVisibilities.map((item) => <option key={item} value={item}>{item === 'public' ? 'Public marketplace' : item === 'private' ? 'Private link' : 'Draft/admin only'}</option>)}
+                  </select>
+                  <select value={draft.accessMode ?? 'public'} onChange={(event) => setDraft({ ...draft, accessMode: event.target.value as ProductAccessMode })}>
+                    {productAccessModes.map((item) => <option key={item} value={item}>{item === 'public' ? 'Public page' : item === 'free_member' ? 'Free member' : item === 'trial' ? 'Trial/subscription' : item === 'paid' ? 'Paid only' : 'Admin only'}</option>)}
+                  </select>
                   <input value={draft.price ?? 0} onChange={(event) => setDraft({ ...draft, price: Number(event.target.value) })} type="number" placeholder="Harga" />
                   <input value={draft.compareAtPrice ?? 0} onChange={(event) => setDraft({ ...draft, compareAtPrice: Number(event.target.value) || undefined })} type="number" placeholder="Harga coret" />
                   <input value={draft.discountLabel ?? ''} onChange={(event) => setDraft({ ...draft, discountLabel: event.target.value })} placeholder="Badge promo" />
@@ -1312,9 +1338,9 @@ function Marketplace({ catalog, onJoin, onProductOpen }: {
         <div className="hero-orb hero-orb-a" />
         <div className="hero-orb hero-orb-b" />
         <div className="hero-content">
-          <div className="hero-badge"><Sparkles size={16} /> Tools AI Studio, lisensi, course, dan freebies</div>
+          <div className="hero-badge"><Sparkles size={16} /> Tools creator, lisensi, course, dan freebies</div>
           <h1>Rumah tools creator: gratis, premium, dan member-only.</h1>
-          <p>Kumpulan aplikasi AsistenQ dan eksperimen AI Studio. Banyak tools gratis, cukup daftar member untuk ambil akses dan update.</p>
+          <p>Kumpulan aplikasi AsistenQ untuk workflow creator. Banyak tools gratis, cukup daftar member untuk ambil akses dan update.</p>
           <div className="hero-actions">
             <button className="primary public-hero-button" onClick={onJoin}>Daftar member gratis <ArrowRight size={18} /></button>
             <a className="text-link" href="#produk">Lihat produk</a>
@@ -1350,7 +1376,7 @@ function Marketplace({ catalog, onJoin, onProductOpen }: {
       </section>
 
       <section className="brand-strip">
-        <span>AI Studio apps</span>
+        <span>Creator tools</span>
         <span>Free tools</span>
         <span>Audio tools</span>
         <span>YouTube workflow</span>

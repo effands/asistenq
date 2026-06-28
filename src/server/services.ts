@@ -18,6 +18,7 @@ import type {
   MemberAccount,
   Order,
   Product,
+  ProductAccessMode,
   ProductPlan,
   ProductType,
   ProductVisibility,
@@ -304,6 +305,7 @@ export function createProductRecord(store: Store, input: {
   type: ProductType;
   category?: string;
   visibility?: ProductVisibility;
+  accessMode?: ProductAccessMode;
   billingPeriod: BillingPeriod;
   price: number;
   compareAtPrice?: number;
@@ -337,6 +339,7 @@ export function updateProductRecord(store: Store, productId: string, input: Part
   type: ProductType;
   category: string;
   visibility: ProductVisibility;
+  accessMode: ProductAccessMode;
   billingPeriod: BillingPeriod;
   price: number;
   compareAtPrice: number;

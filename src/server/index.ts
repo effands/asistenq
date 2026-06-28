@@ -6,8 +6,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import { z } from 'zod';
+import { GoogleGenAI, Type } from '@google/genai';
 import { createId, formatCurrency } from '../shared/domain';
-import { signSession, requireAdminScope, requireSession } from './auth';
+import { clearSessionCookie, readSession, sessionCookie, signSession, requireAdminScope, requireSession } from './auth';
 import { seedInitialData } from './seed';
 import {
   adminLicenseDashboard,
@@ -52,6 +53,7 @@ app.use(express.json());
 
 const landingImportDir = path.resolve('data/landing-imports');
 const bundledLandingDir = path.resolve('landings');
+const bundledToolDir = path.resolve('tools-dist');
 const ignoredLandingZipPaths = [
   /^node_modules\//,
   /^src\//,
@@ -100,6 +102,7 @@ const productSchema = z.object({
   name: z.string().min(2),
   slug: z.string().min(2).regex(/^[a-z0-9-]+$/),
   type: z.enum(['tool', 'course', 'ebook', 'video', 'bundle', 'free', 'class']),
+  accessMode: z.enum(['public', 'free_member', 'trial', 'paid', 'admin']).optional(),
   billingPeriod: z.enum(['trial', 'monthly', 'annual', 'lifetime', 'one_time']),
   price: z.number().int().nonnegative(),
   compareAtPrice: z.number().int().nonnegative().optional(),
@@ -183,6 +186,70 @@ function publicOrder(order: typeof store.data.orders[number]) {
     formattedAmount: formatCurrency(order.amount),
     formattedTotalAmount: formatCurrency(order.totalAmount ?? order.amount)
   };
+}
+
+function hasActiveProductAccess(memberId: string, productId: string): boolean {
+  const now = new Date();
+  return store.data.subscriptions.some((subscription) => (
+    subscription.memberId === memberId &&
+    subscription.productId === productId &&
+    subscription.status === 'active' &&
+    new Date(subscription.endsAt) > now
+  )) || store.data.orders.some((order) => (
+    order.memberId === memberId &&
+    order.productId === productId &&
+    order.status === 'paid'
+  ));
+}
+
+function canOpenProduct(req: express.Request, product: typeof store.data.products[number]): boolean {
+  const mode = product.accessMode ?? 'public';
+  if (mode === 'public') return true;
+
+  const user = readSession(req);
+  if (!user) return false;
+
+  if (user.type === 'admin') return true;
+  if (mode === 'admin') return false;
+  if (mode === 'free_member') return user.type === 'member';
+
+  if (user.type !== 'member') return false;
+  return hasActiveProductAccess(user.id, product.id);
+}
+
+function sendProductAccessDenied(req: express.Request, res: express.Response, product: typeof store.data.products[number]) {
+  const user = readSession(req);
+  const target = encodeURIComponent(product.landingPath ?? `/${product.slug}`);
+  const action = user
+    ? `<a href="/member#produk">Ambil akses di member area</a>`
+    : `<a href="/member?next=${target}">Login member dulu</a>`;
+
+  res.status(user ? 403 : 401).send(`<!doctype html>
+<html lang="id">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Akses Member Dibutuhkan</title>
+    <style>
+      body{margin:0;min-height:100vh;display:grid;place-items:center;background:linear-gradient(135deg,#e9fbf5,#f7fff9);font-family:system-ui,sans-serif;color:#082f2a}
+      main{max-width:520px;margin:24px;padding:34px;border:1px solid rgba(4,64,56,.16);border-radius:28px;background:rgba(255,255,255,.84);box-shadow:0 24px 70px rgba(4,64,56,.16)}
+      h1{margin:0 0 12px;font-size:32px;line-height:1.08}p{color:#55716b;line-height:1.6}a{display:inline-flex;margin-top:14px;padding:14px 18px;border-radius:999px;background:#053b34;color:white;text-decoration:none;font-weight:800}
+    </style>
+  </head>
+  <body><main><h1>Akses tools belum terbuka.</h1><p>${product.accessRequirement ?? 'Silakan login member dan ambil akses produk dulu.'}</p>${action}</main></body>
+</html>`);
+}
+
+let genAiClient: GoogleGenAI | null = null;
+function getGenAiClient() {
+  if (!genAiClient) {
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+      throw new Error('Konfigurasi AI belum aktif di server.');
+    }
+    genAiClient = new GoogleGenAI({ apiKey, httpOptions: { headers: { 'User-Agent': 'asistenq-tools' } } });
+  }
+  return genAiClient;
 }
 
 app.get('/api/health', (_req, res) => {
@@ -275,33 +342,53 @@ app.get('/api/verify_voucher', (req, res) => {
 });
 
 app.post('/api/admin/login', async (req, res) => {
-  const body = loginSchema.parse(req.body);
-  const admin = await verifyAdminLogin(store, body.email, body.password);
-  const token = signSession({
-    id: admin.id,
-    email: admin.email,
-    type: 'admin',
-    role: admin.role,
-    scopes: admin.scopes
-  });
+  try {
+    const body = loginSchema.parse(req.body);
+    const admin = await verifyAdminLogin(store, body.email, body.password);
+    const token = signSession({
+      id: admin.id,
+      email: admin.email,
+      type: 'admin',
+      role: admin.role,
+      scopes: admin.scopes
+    });
 
-  res.json({ token, user: { id: admin.id, name: admin.name, email: admin.email, role: admin.role, scopes: admin.scopes } });
+    res.setHeader('Set-Cookie', sessionCookie(token, isProduction));
+    res.json({ token, user: { id: admin.id, name: admin.name, email: admin.email, role: admin.role, scopes: admin.scopes } });
+  } catch (error) {
+    res.status(401).json({ message: error instanceof Error ? error.message : 'login failed' });
+  }
 });
 
 app.post('/api/member/register', async (req, res) => {
-  const body = memberRegisterSchema.parse(req.body);
-  const member = await createMember(store, body);
-  const token = signSession({ id: member.id, email: member.email, type: 'member' });
+  try {
+    const body = memberRegisterSchema.parse(req.body);
+    const member = await createMember(store, body);
+    const token = signSession({ id: member.id, email: member.email, type: 'member' });
 
-  res.status(201).json({ token, user: { id: member.id, name: member.name, email: member.email } });
+    res.setHeader('Set-Cookie', sessionCookie(token, isProduction));
+    res.status(201).json({ token, user: { id: member.id, name: member.name, email: member.email } });
+  } catch (error) {
+    res.status(400).json({ message: error instanceof Error ? error.message : 'register failed' });
+  }
 });
 
 app.post('/api/member/login', async (req, res) => {
-  const body = loginSchema.parse(req.body);
-  const member = await verifyMemberLogin(store, body.email, body.password);
-  const token = signSession({ id: member.id, email: member.email, type: 'member' });
+  try {
+    const body = loginSchema.parse(req.body);
+    const member = await verifyMemberLogin(store, body.email, body.password);
+    const token = signSession({ id: member.id, email: member.email, type: 'member' });
 
-  res.json({ token, user: { id: member.id, name: member.name, email: member.email } });
+    res.setHeader('Set-Cookie', sessionCookie(token, isProduction));
+    res.json({ token, user: { id: member.id, name: member.name, email: member.email } });
+  } catch (error) {
+    res.status(401).json({ message: error instanceof Error ? error.message : 'login failed' });
+  }
+});
+
+app.post('/api/auth/logout', (_req, res) => {
+  res.setHeader('Set-Cookie', clearSessionCookie());
+  res.json({ ok: true });
 });
 
 app.post('/api/auth/forgot-password', async (req, res) => {
@@ -323,7 +410,7 @@ app.post('/api/auth/reset-password', async (req, res) => {
 });
 
 app.get('/api/products', (_req, res) => {
-  res.json(store.data.products.filter((product) => product.active).map(publicProduct));
+  res.json(store.data.products.filter((product) => product.active && product.visibility === 'public').map(publicProduct));
 });
 
 app.get('/api/catalog', (_req, res) => {
@@ -331,7 +418,7 @@ app.get('/api/catalog', (_req, res) => {
 });
 
 app.get('/api/products/:slug', (req, res) => {
-  const product = store.data.products.find((item) => item.slug === req.params.slug && item.active);
+  const product = store.data.products.find((item) => item.slug === req.params.slug && item.active && item.visibility === 'public');
 
   if (!product) {
     res.status(404).json({ message: 'product not found' });
@@ -679,6 +766,153 @@ app.post('/api/admin/deploy/update', requireSession, requireAdminScope('products
   }
 });
 
+app.post('/tools/jadwalinaja/api/youtube/upload-thumbnail', express.raw({ type: '*/*', limit: '15mb' }), async (req, res) => {
+  try {
+    const videoId = String(req.query.videoId ?? '');
+    const authHeader = req.header('authorization');
+    const contentType = req.header('content-type') || 'image/jpeg';
+
+    if (!videoId) {
+      res.status(400).json({ error: 'videoId wajib diisi.' });
+      return;
+    }
+
+    if (!authHeader) {
+      res.status(401).json({ error: 'Login Google YouTube dibutuhkan.' });
+      return;
+    }
+
+    if (!Buffer.isBuffer(req.body) || req.body.length === 0) {
+      res.status(400).json({ error: 'Gambar thumbnail kosong.' });
+      return;
+    }
+
+    const response = await fetch(`https://www.googleapis.com/upload/youtube/v3/thumbnails/set?videoId=${encodeURIComponent(videoId)}`, {
+      method: 'POST',
+      headers: {
+        Authorization: authHeader,
+        'Content-Type': contentType
+      },
+      body: new Uint8Array(req.body)
+    });
+
+    const responseText = await response.text();
+    if (!response.ok) {
+      res.status(response.status).json({ error: `YouTube menolak upload thumbnail: ${response.status}`, detail: responseText });
+      return;
+    }
+
+    res.json({ success: true, data: responseText });
+  } catch (error) {
+    res.status(500).json({ error: error instanceof Error ? error.message : 'Gagal upload thumbnail.' });
+  }
+});
+
+app.post('/tools/jadwalinaja/api/gemini/generate', async (req, res) => {
+  try {
+    const body = z.object({
+      topic: z.string().min(1),
+      tone: z.string().optional(),
+      count: z.number().optional(),
+      language: z.string().optional(),
+      startNum: z.number().optional(),
+      includeEmojis: z.boolean().optional(),
+      customTags: z.string().optional(),
+      model: z.string().optional(),
+      descriptionInstruction: z.string().optional()
+    }).parse(req.body);
+
+    const videoCount = Math.min(Math.max(Number(body.count) || 1, 1), 50);
+    const startNumber = Number(body.startNum) || 1;
+    const targetLang = body.language || 'Indonesian';
+    const selectedTone = body.tone || 'Casual & Engaging';
+    const emojisPref = body.includeEmojis === undefined ? true : Boolean(body.includeEmojis);
+    const modelToUse = body.model || 'gemini-2.5-flash';
+    const tagInstruction = body.customTags?.trim()
+      ? `Prioritaskan keyword berikut: "${body.customTags.trim()}".`
+      : '';
+    const descPromoInstruction = body.descriptionInstruction?.trim()
+      ? `Tambahkan atau adaptasi instruksi deskripsi berikut: "${body.descriptionInstruction.trim()}".`
+      : '';
+
+    const response = await getGenAiClient().models.generateContent({
+      model: modelToUse,
+      contents: `Buat ${videoCount} draft metadata video YouTube mulai nomor ${startNumber}.
+Topik: "${body.topic}"
+Tone: "${selectedTone}"
+Bahasa: "${targetLang}"
+Emoji: ${emojisPref ? 'boleh 1-2 emoji relevan' : 'tanpa emoji'}
+${tagInstruction}
+${descPromoInstruction}
+
+Untuk setiap item berikan title 85-99 karakter, description 2-5 paragraf, tags 6-10 item, dan isAiGenerated boolean. Output JSON array saja.`,
+      config: {
+        responseMimeType: 'application/json',
+        responseSchema: {
+          type: Type.ARRAY,
+          items: {
+            type: Type.OBJECT,
+            properties: {
+              title: { type: Type.STRING },
+              description: { type: Type.STRING },
+              tags: { type: Type.ARRAY, items: { type: Type.STRING } },
+              isAiGenerated: { type: Type.BOOLEAN }
+            },
+            required: ['title', 'description', 'tags', 'isAiGenerated']
+          }
+        }
+      }
+    });
+
+    res.json({ videos: JSON.parse((response.text || '[]').trim().replace(/^```json\s*/i, '').replace(/```$/i, '').trim() || '[]') });
+  } catch (error) {
+    res.status(500).json({ error: error instanceof Error ? error.message : 'Gagal generate metadata.' });
+  }
+});
+
+app.post('/tools/jadwalinaja/api/gemini/optimize-single', async (req, res) => {
+  try {
+    const body = z.object({
+      title: z.string().optional(),
+      description: z.string().optional(),
+      tags: z.array(z.string()).optional(),
+      isAiGenerated: z.boolean().optional(),
+      instruction: z.string().optional(),
+      language: z.string().optional(),
+      model: z.string().optional()
+    }).parse(req.body);
+    const targetLang = body.language || 'Indonesian';
+
+    const response = await getGenAiClient().models.generateContent({
+      model: body.model || 'gemini-2.5-flash',
+      contents: `Optimasi metadata video YouTube berikut dalam bahasa ${targetLang}.
+Judul: "${body.title || ''}"
+Deskripsi: "${body.description || ''}"
+Tags: ${JSON.stringify(body.tags || [])}
+Flag konten AI: ${body.isAiGenerated ? 'ya' : 'tidak'}
+Instruksi: "${body.instruction || 'Buat judul menarik, deskripsi SEO lengkap, dan tag relevan.'}"
+Output JSON object dengan title, description, tags, isAiGenerated.`,
+      config: {
+        responseMimeType: 'application/json',
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            title: { type: Type.STRING },
+            description: { type: Type.STRING },
+            tags: { type: Type.ARRAY, items: { type: Type.STRING } },
+            isAiGenerated: { type: Type.BOOLEAN }
+          },
+          required: ['title', 'description', 'tags', 'isAiGenerated']
+        }
+      }
+    });
+
+    res.json({ video: JSON.parse((response.text || '{}').trim().replace(/^```json\s*/i, '').replace(/```$/i, '').trim() || '{}') });
+  } catch (error) {
+    res.status(500).json({ error: error instanceof Error ? error.message : 'Gagal optimasi metadata.' });
+  }
+});
+
 app.get('/api/admin/orders', requireSession, requireAdminScope('orders'), (_req, res) => {
   res.json(store.data.orders);
 });
@@ -721,11 +955,32 @@ app.get('/api/member/licenses', requireSession, (req, res) => {
 if (shouldServeFrontend) {
   app.use('/landing-imports', express.static(landingImportDir));
   app.use('/landing-imports', express.static(bundledLandingDir));
+  app.use('/tools/:slug', (req, res, next) => {
+    const product = store.data.products.find((item) => item.slug === req.params.slug);
+    if (product && !canOpenProduct(req, product)) {
+      sendProductAccessDenied(req, res, product);
+      return;
+    }
+    express.static(path.join(bundledToolDir, req.params.slug))(req, res, next);
+  });
   app.get(/^\/[a-z0-9-]+$/, (req, res, next) => {
     const product = store.data.products.find((item) => item.landingPath === req.path || `/${item.slug}` === req.path);
     if (!product) {
       next();
       return;
+    }
+
+    if (product.landingTemplate === 'tool-app') {
+      if (!canOpenProduct(req, product)) {
+        sendProductAccessDenied(req, res, product);
+        return;
+      }
+
+      const toolIndexPath = path.join(bundledToolDir, product.slug, 'index.html');
+      if (fs.existsSync(toolIndexPath)) {
+        res.sendFile(toolIndexPath);
+        return;
+      }
     }
 
     const importedIndexPath = path.join(landingImportDir, product.slug, 'index.html');

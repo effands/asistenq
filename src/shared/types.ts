@@ -1,5 +1,6 @@
 export type ProductType = 'tool' | 'course' | 'ebook' | 'video' | 'bundle' | 'free' | 'class';
 export type ProductVisibility = 'public' | 'private' | 'draft';
+export type ProductAccessMode = 'public' | 'free_member' | 'trial' | 'paid' | 'admin';
 export type BillingPeriod = 'trial' | 'monthly' | 'annual' | 'lifetime' | 'one_time';
 export type LicenseStatus = 'generated' | 'active' | 'expired' | 'suspended' | 'banned';
 export type DiscountType = 'amount' | 'percent';
@@ -37,6 +38,7 @@ export interface Product {
   type: ProductType;
   category?: string;
   visibility?: ProductVisibility;
+  accessMode?: ProductAccessMode;
   billingPeriod: BillingPeriod;
   price: number;
   compareAtPrice?: number;

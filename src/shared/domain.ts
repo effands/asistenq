@@ -3,6 +3,7 @@ import type {
   AdminScope,
   BillingPeriod,
   Product,
+  ProductAccessMode,
   ProductType,
   ProductVisibility,
   Subscription
@@ -14,6 +15,7 @@ type ProductInput = {
   type: ProductType;
   category?: string;
   visibility?: ProductVisibility;
+  accessMode?: ProductAccessMode;
   billingPeriod: BillingPeriod;
   price: number;
   compareAtPrice?: number;
@@ -46,6 +48,7 @@ export function createProduct(input: ProductInput): Product {
     type: input.type,
     category: input.category,
     visibility: input.visibility ?? 'public',
+    accessMode: input.accessMode ?? 'public',
     billingPeriod: input.billingPeriod,
     price: input.price,
     compareAtPrice: input.compareAtPrice,

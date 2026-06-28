@@ -1,7 +1,7 @@
 import { createPlanRecord, createProductRecord } from './services';
 import type { Store } from './store';
 import bcrypt from 'bcryptjs';
-import type { BillingPeriod, Product, ProductType, ProductVisibility } from '../shared/types';
+import type { BillingPeriod, Product, ProductAccessMode, ProductType, ProductVisibility } from '../shared/types';
 
 type SeedProduct = {
   name: string;
@@ -9,6 +9,7 @@ type SeedProduct = {
   type: ProductType;
   category: string;
   visibility: ProductVisibility;
+  accessMode?: ProductAccessMode;
   billingPeriod: BillingPeriod;
   price: number;
   compareAtPrice?: number;
@@ -116,6 +117,29 @@ export async function seedInitialData(store: Store): Promise<void> {
     description: 'MIXIN9 membantu creator merapikan loudness, balance, dan proses mixing audio secara batch tanpa membuka file satu per satu.',
     coverUrl: '',
     accessUrl: '/landing-imports/mixin9/index.html'
+  });
+
+  ensureProduct(store, {
+    name: 'JadwalinAja',
+    slug: 'jadwalinaja',
+    type: 'tool',
+    category: 'YouTube Tools',
+    visibility: 'private',
+    accessMode: 'free_member',
+    billingPeriod: 'one_time',
+    price: 0,
+    discountLabel: 'Member Tool',
+    promoText: 'Tools privat untuk bantu jadwal dan metadata video YouTube.',
+    logoUrl: '',
+    landingPath: '/jadwalinaja',
+    landingTemplate: 'tool-app',
+    ctaLabel: 'Buka JadwalinAja',
+    accessRequirement: 'Login sebagai member untuk membuka JadwalinAja.',
+    featured: false,
+    headline: 'Atur jadwal dan metadata video YouTube lebih rapi.',
+    description: 'Tools member untuk membantu penjadwalan, optimasi metadata, thumbnail, dan workflow upload YouTube.',
+    coverUrl: '',
+    accessUrl: '/jadwalinaja'
   });
 
   ensureProduct(store, {

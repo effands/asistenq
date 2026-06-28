@@ -23,21 +23,53 @@ export function signSession(user: SessionUser): string {
   return jwt.sign(user, sessionSecret, { expiresIn: '7d' });
 }
 
-export function requireSession(req: Request, res: Response, next: NextFunction): void {
-  const header = req.header('authorization');
-  const token = header?.startsWith('Bearer ') ? header.slice(7) : undefined;
+function tokenFromCookie(cookieHeader?: string): string | undefined {
+  if (!cookieHeader) return undefined;
 
-  if (!token) {
+  const cookies = cookieHeader.split(';').map((item) => item.trim());
+  const sessionCookie = cookies.find((item) => item.startsWith('asistenq_session='));
+  return sessionCookie ? decodeURIComponent(sessionCookie.split('=').slice(1).join('=')) : undefined;
+}
+
+export function sessionCookie(token: string, secure = false): string {
+  return [
+    `asistenq_session=${encodeURIComponent(token)}`,
+    'Path=/',
+    'Max-Age=604800',
+    'HttpOnly',
+    'SameSite=Lax',
+    secure ? 'Secure' : ''
+  ].filter(Boolean).join('; ');
+}
+
+export function clearSessionCookie(): string {
+  return 'asistenq_session=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax';
+}
+
+export function readSession(req: Request): SessionUser | undefined {
+  const header = req.header('authorization');
+  const bearerToken = header?.startsWith('Bearer ') ? header.slice(7) : undefined;
+  const token = bearerToken ?? tokenFromCookie(req.header('cookie'));
+
+  if (!token) return undefined;
+
+  try {
+    return jwt.verify(token, sessionSecret) as SessionUser;
+  } catch {
+    return undefined;
+  }
+}
+
+export function requireSession(req: Request, res: Response, next: NextFunction): void {
+  const user = readSession(req);
+
+  if (!user) {
     res.status(401).json({ message: 'login required' });
     return;
   }
 
-  try {
-    req.user = jwt.verify(token, sessionSecret) as SessionUser;
-    next();
-  } catch {
-    res.status(401).json({ message: 'invalid session' });
-  }
+  req.user = user;
+  next();
 }
 
 export function requireAdminScope(scope: AdminScope) {

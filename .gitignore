@@ -4,6 +4,7 @@ server-dist/
 .env
 data/*.json
 data/landing-imports/
+tools/
 coverage/
 *.log
 __pycache__/
