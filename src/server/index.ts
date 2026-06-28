@@ -127,6 +127,12 @@ const toolEventSchema = z.object({
   metadata: z.record(z.unknown()).optional()
 });
 
+const deploymentSettingsSchema = z.object({
+  githubToken: z.string().optional(),
+  githubRepo: z.string().min(3).default('effands/asistenq'),
+  githubBranch: z.string().min(1).default('master')
+});
+
 function publicProduct(product: typeof store.data.products[number]) {
   return {
     ...product,
@@ -437,8 +443,61 @@ app.post('/api/admin/products', requireSession, requireAdminScope('products'), (
   res.status(201).json(publicProduct(product));
 });
 
+function maskedSecret(value?: string): string {
+  if (!value) return '';
+  if (value.length <= 10) return '********';
+  return `${value.slice(0, 4)}...${value.slice(-4)}`;
+}
+
+function hideSecret(text: string, secret: string): string {
+  return secret ? text.replaceAll(secret, '***') : text;
+}
+
+app.get('/api/admin/deploy/settings', requireSession, requireAdminScope('products'), (_req, res) => {
+  const settings = store.data.deploymentSettings ?? {};
+  const token = settings.githubToken ?? process.env.GITHUB_TOKEN ?? '';
+  res.json({
+    githubRepo: settings.githubRepo ?? 'effands/asistenq',
+    githubBranch: settings.githubBranch ?? 'master',
+    hasGithubToken: Boolean(token),
+    maskedGithubToken: maskedSecret(token),
+    updatedAt: settings.updatedAt
+  });
+});
+
+app.post('/api/admin/deploy/settings', requireSession, requireAdminScope('products'), (req, res) => {
+  const body = deploymentSettingsSchema.parse(req.body);
+  const current = store.data.deploymentSettings ?? {};
+  const nextToken = body.githubToken?.trim() || current.githubToken || process.env.GITHUB_TOKEN || '';
+
+  store.data.deploymentSettings = {
+    githubRepo: body.githubRepo.trim(),
+    githubBranch: body.githubBranch.trim(),
+    githubToken: nextToken,
+    updatedAt: new Date().toISOString()
+  };
+  store.save();
+
+  res.json({
+    ok: true,
+    message: 'GitHub deployment settings tersimpan.',
+    githubRepo: store.data.deploymentSettings.githubRepo,
+    githubBranch: store.data.deploymentSettings.githubBranch,
+    hasGithubToken: Boolean(nextToken),
+    maskedGithubToken: maskedSecret(nextToken),
+    updatedAt: store.data.deploymentSettings.updatedAt
+  });
+});
+
 app.post('/api/admin/deploy/update', requireSession, requireAdminScope('products'), async (_req, res) => {
-  const command = 'git pull origin master && npm install --include=dev && npm run build';
+  const settings = store.data.deploymentSettings ?? {};
+  const githubToken = settings.githubToken ?? process.env.GITHUB_TOKEN ?? '';
+  const githubRepo = settings.githubRepo ?? 'effands/asistenq';
+  const githubBranch = settings.githubBranch ?? 'master';
+  const remote = githubToken
+    ? `https://${encodeURIComponent(githubToken)}@github.com/${githubRepo}.git`
+    : 'origin';
+  const command = `git pull ${remote} ${githubBranch} && npm install --include=dev && npm run build`;
 
   try {
     const { stdout, stderr } = await execAsync(command, {
@@ -450,11 +509,11 @@ app.post('/api/admin/deploy/update', requireSession, requireAdminScope('products
     res.json({
       ok: true,
       message: 'Update selesai. Restart aplikasi Node.js dari panel hosting agar proses memakai build terbaru.',
-      stdout,
-      stderr
+      stdout: hideSecret(stdout, githubToken),
+      stderr: hideSecret(stderr, githubToken)
     });
   } catch (error) {
-    const detail = error instanceof Error ? error.message : 'deploy failed';
+    const detail = hideSecret(error instanceof Error ? error.message : 'deploy failed', githubToken);
     res.status(500).json({
       ok: false,
       message: 'Update gagal. Cek log untuk detail.',

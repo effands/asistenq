@@ -20,7 +20,11 @@ const emptyData = (): DatabaseShape => ({
   bannedHwids: [],
   orders: [],
   subscriptions: [],
-  auditLogs: []
+  auditLogs: [],
+  deploymentSettings: {
+    githubRepo: 'effands/asistenq',
+    githubBranch: 'master'
+  }
 });
 
 function normalizeData(data: Partial<DatabaseShape>): DatabaseShape {
@@ -38,7 +42,12 @@ function normalizeData(data: Partial<DatabaseShape>): DatabaseShape {
     bannedHwids: data.bannedHwids ?? [],
     orders: data.orders ?? [],
     subscriptions: data.subscriptions ?? [],
-    auditLogs: data.auditLogs ?? []
+    auditLogs: data.auditLogs ?? [],
+    deploymentSettings: {
+      githubRepo: 'effands/asistenq',
+      githubBranch: 'master',
+      ...(data.deploymentSettings ?? {})
+    }
   };
 }
 

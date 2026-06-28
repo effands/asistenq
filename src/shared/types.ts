@@ -145,6 +145,13 @@ export interface PasswordResetToken {
   createdAt: string;
 }
 
+export interface DeploymentSettings {
+  githubToken?: string;
+  githubRepo?: string;
+  githubBranch?: string;
+  updatedAt?: string;
+}
+
 export interface DatabaseShape {
   admins: AdminAccount[];
   members: MemberAccount[];
@@ -158,4 +165,5 @@ export interface DatabaseShape {
   orders: Order[];
   subscriptions: Subscription[];
   auditLogs: AuditLog[];
+  deploymentSettings?: DeploymentSettings;
 }

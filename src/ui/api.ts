@@ -35,6 +35,15 @@ export type PublicCatalog = {
 export type LoginResult = { token: string; user: { id: string; name: string; email: string; role?: string; scopes?: string[] } };
 export type Summary = { products: number; members: number; orders: number; activeSubscriptions: number };
 export type ForgotPasswordResult = { ok: true; message: string; resetUrl?: string; expiresAt?: string };
+export type DeploymentSettingsResult = {
+  ok?: true;
+  message?: string;
+  githubRepo: string;
+  githubBranch: string;
+  hasGithubToken: boolean;
+  maskedGithubToken: string;
+  updatedAt?: string;
+};
 export type AdminMemberRow = Omit<MemberAccount, 'passwordHash'> & {
   licenseCount: number;
   orderCount: number;

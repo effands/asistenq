@@ -26,6 +26,7 @@ import {
   apiRequest,
   type AdminLicenseDashboard,
   type AdminMemberRow,
+  type DeploymentSettingsResult,
   type ForgotPasswordResult,
   type LicenseDashboardRow,
   type LoginResult,
@@ -64,6 +65,7 @@ export function App() {
   const [memberDashboard, setMemberDashboard] = useState<MemberLicenseDashboard | null>(null);
   const [adminLicenses, setAdminLicenses] = useState<AdminLicenseDashboard | null>(null);
   const [adminMembers, setAdminMembers] = useState<AdminMemberRow[]>([]);
+  const [deploymentSettings, setDeploymentSettings] = useState<DeploymentSettingsResult | null>(null);
   const [message, setMessage] = useState('Sistem AsistenQ siap.');
   const [adminSection, setAdminSection] = useState<AdminSection>('dashboard');
   const [adminTheme, setAdminTheme] = useState<AdminTheme>(() => (
@@ -111,6 +113,11 @@ export function App() {
     setAdminMembers(await apiRequest<AdminMemberRow[]>('/admin/members', { token }));
   }
 
+  async function loadDeploymentSettings(token = adminSession?.token) {
+    if (!token) return;
+    setDeploymentSettings(await apiRequest<DeploymentSettingsResult>('/admin/deploy/settings', { token }));
+  }
+
   async function loadLicenses(token = memberSession?.token) {
     if (!token) return;
     setMemberDashboard(await apiRequest<MemberLicenseDashboard>('/member/licenses', { token }));
@@ -154,6 +161,7 @@ export function App() {
             await loadAdminSummary(result.token);
             await loadAdminLicenses(result.token);
             await loadAdminMembers(result.token);
+            await loadDeploymentSettings(result.token);
           }}
           onCreateProduct={async (input) => {
             if (!adminSession) return;
@@ -221,6 +229,17 @@ export function App() {
               token: adminSession.token,
               method: 'POST'
             });
+          }}
+          deploymentSettings={deploymentSettings}
+          onSaveDeploymentSettings={async (input) => {
+            if (!adminSession) throw new Error('Login admin dulu.');
+            const result = await apiRequest<DeploymentSettingsResult>('/admin/deploy/settings', {
+              token: adminSession.token,
+              method: 'POST',
+              body: input
+            });
+            setDeploymentSettings(result);
+            setMessage(result.message ?? 'GitHub deployment settings tersimpan.');
           }}
         />
       </AdminShell>
@@ -487,7 +506,9 @@ function AdminPanel({
   onResetLicense,
   onBanLicense,
   onUnbanLicense,
-  onDeployUpdate
+  onDeployUpdate,
+  deploymentSettings,
+  onSaveDeploymentSettings
 }: {
   activeSection: AdminSection;
   session: LoginResult | null;
@@ -513,6 +534,8 @@ function AdminPanel({
   onBanLicense: (license: LicenseDashboardRow) => Promise<void>;
   onUnbanLicense: (license: LicenseDashboardRow) => Promise<void>;
   onDeployUpdate: () => Promise<{ ok: boolean; message: string; stdout?: string; stderr?: string; detail?: string }>;
+  deploymentSettings: DeploymentSettingsResult | null;
+  onSaveDeploymentSettings: (input: { githubRepo: string; githubBranch: string; githubToken?: string }) => Promise<void>;
 }) {
   if (!session) {
     return (
@@ -559,7 +582,7 @@ function AdminPanel({
   }
 
   if (activeSection === 'deploy') {
-    return <DeployPanel onDeployUpdate={onDeployUpdate} />;
+    return <DeployPanel settings={deploymentSettings} onDeployUpdate={onDeployUpdate} onSaveSettings={onSaveDeploymentSettings} />;
   }
 
   return (
@@ -861,11 +884,24 @@ function LandingManager({ products }: { products: PublicProduct[] }) {
   );
 }
 
-function DeployPanel({ onDeployUpdate }: {
+function DeployPanel({ settings, onDeployUpdate, onSaveSettings }: {
+  settings: DeploymentSettingsResult | null;
   onDeployUpdate: () => Promise<{ ok: boolean; message: string; stdout?: string; stderr?: string; detail?: string }>;
+  onSaveSettings: (input: { githubRepo: string; githubBranch: string; githubToken?: string }) => Promise<void>;
 }) {
   const [busy, setBusy] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [log, setLog] = useState('Belum ada update dijalankan.');
+  const [githubRepo, setGithubRepo] = useState(settings?.githubRepo ?? 'effands/asistenq');
+  const [githubBranch, setGithubBranch] = useState(settings?.githubBranch ?? 'master');
+  const [githubToken, setGithubToken] = useState('');
+
+  useEffect(() => {
+    if (settings) {
+      setGithubRepo(settings.githubRepo);
+      setGithubBranch(settings.githubBranch);
+    }
+  }, [settings]);
 
   return (
     <section className="admin-content-grid compact-admin-grid">
@@ -898,6 +934,36 @@ function DeployPanel({ onDeployUpdate }: {
         </button>
         <pre className="deploy-log">{log}</pre>
       </div>
+      <form className="panel stack" onSubmit={async (event) => {
+        event.preventDefault();
+        setSaving(true);
+        try {
+          await onSaveSettings({ githubRepo, githubBranch, githubToken });
+          setGithubToken('');
+        } finally {
+          setSaving(false);
+        }
+      }}>
+        <div className="panel-heading">
+          <div>
+            <p className="section-kicker">Private GitHub</p>
+            <h2>Token Repository</h2>
+          </div>
+          <span className="soft-badge">{settings?.hasGithubToken ? 'Token aktif' : 'Belum ada token'}</span>
+        </div>
+        <p className="muted">Masukkan token GitHub awalan `ghp_` untuk repo private. Token tersimpan di data server yang tidak ikut GitHub dan hanya ditampilkan dalam bentuk masked.</p>
+        <label>Repository
+          <input value={githubRepo} onChange={(event) => setGithubRepo(event.target.value)} placeholder="effands/asistenq" />
+        </label>
+        <label>Branch
+          <input value={githubBranch} onChange={(event) => setGithubBranch(event.target.value)} placeholder="master" />
+        </label>
+        <label>GitHub Token
+          <input value={githubToken} onChange={(event) => setGithubToken(event.target.value)} placeholder={settings?.maskedGithubToken || 'ghp_...'} type="password" />
+        </label>
+        {settings?.maskedGithubToken && <p className="form-notice">Token tersimpan: {settings.maskedGithubToken}</p>}
+        <button className="primary" disabled={saving}>{saving ? 'Menyimpan...' : 'Simpan Token GitHub'}</button>
+      </form>
     </section>
   );
 }
