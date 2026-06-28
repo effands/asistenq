@@ -1459,21 +1459,21 @@ textarea {
 
 .member-dashboard-hero {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(150px, 210px);
+  grid-template-columns: minmax(0, 1fr) minmax(128px, 164px);
   gap: 12px;
-  align-items: stretch;
+  align-items: center;
   margin-bottom: 14px;
 }
 
 .member-dashboard-hero > div:first-child,
 .member-stat-card {
   border: 1px solid var(--line);
-  border-radius: 28px;
+  border-radius: 24px;
   background:
     radial-gradient(circle at 86% 16%, rgba(93, 224, 203, .18), transparent 28%),
     rgba(255, 255, 255, .68);
   box-shadow: var(--soft-shadow);
-  padding: clamp(16px, 2.6vw, 22px);
+  padding: clamp(14px, 2.4vw, 20px);
 }
 
 .member-dashboard-hero h1 {
@@ -1484,27 +1484,25 @@ textarea {
   letter-spacing: -.055em;
 }
 
-.member-logout-inline {
-  width: fit-content;
-  margin-top: 10px;
-}
-
 .member-stat-card {
   display: grid;
   align-content: center;
-  gap: 6px;
+  min-height: 140px;
+  gap: 5px;
   background: var(--deep);
   color: #fff;
+  padding: 18px;
 }
 
 .member-stat-card span,
 .member-stat-card small {
   color: rgba(255, 255, 255, .68);
+  font-size: 12px;
   font-weight: 850;
 }
 
 .member-stat-card strong {
-  font-size: 38px;
+  font-size: 32px;
   line-height: .9;
   letter-spacing: -.08em;
 }

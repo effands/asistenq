@@ -1251,7 +1251,6 @@ function MemberPanel({ session, products, dashboard, onRegister, onLogin, onChec
         <div>
           <span className="chip">Member Workspace</span>
           <h1>Halo, {session.user.name}. Ini pusat aksesmu.</h1>
-          <button className="ghost-button member-logout-inline" type="button" onClick={onLogout}><LogOut size={16} /> Logout</button>
         </div>
         <div className="member-stat-card">
           <span>Total lisensi</span>
