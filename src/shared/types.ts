@@ -132,9 +132,21 @@ export interface AuditLog {
   createdAt: string;
 }
 
+export interface PasswordResetToken {
+  id: string;
+  accountType: 'admin' | 'member';
+  accountId: string;
+  email: string;
+  tokenHash: string;
+  expiresAt: string;
+  usedAt?: string;
+  createdAt: string;
+}
+
 export interface DatabaseShape {
   admins: AdminAccount[];
   members: MemberAccount[];
+  passwordResets: PasswordResetToken[];
   products: Product[];
   plans: ProductPlan[];
   licenses: ToolLicense[];

@@ -17,6 +17,8 @@ import {
   markOrderPaid,
   publicCatalog,
   publicPlansForProduct,
+  requestPasswordReset,
+  resetPassword,
   resetLicenseDevice,
   unbanHwid,
   verifyLicense,
@@ -47,6 +49,17 @@ const loginSchema = z.object({
 
 const memberRegisterSchema = loginSchema.extend({
   name: z.string().min(2)
+});
+
+const forgotPasswordSchema = z.object({
+  email: z.string().email(),
+  accountType: z.enum(['admin', 'member']).default('member')
+});
+
+const resetPasswordSchema = z.object({
+  token: z.string().min(20),
+  accountType: z.enum(['admin', 'member']).default('member'),
+  password: z.string().min(8)
 });
 
 const productSchema = z.object({
@@ -137,6 +150,24 @@ app.post('/api/member/login', async (req, res) => {
   const token = signSession({ id: member.id, email: member.email, type: 'member' });
 
   res.json({ token, user: { id: member.id, name: member.name, email: member.email } });
+});
+
+app.post('/api/auth/forgot-password', async (req, res) => {
+  const body = forgotPasswordSchema.parse(req.body);
+  const result = await requestPasswordReset(store, body);
+  const showResetLink = !isProduction || process.env.SHOW_RESET_LINKS === 'true';
+
+  res.json({
+    ok: true,
+    message: 'Jika email terdaftar, instruksi reset password sudah disiapkan.',
+    ...(showResetLink && result.resetUrl ? { resetUrl: result.resetUrl, expiresAt: result.expiresAt } : {})
+  });
+});
+
+app.post('/api/auth/reset-password', async (req, res) => {
+  const body = resetPasswordSchema.parse(req.body);
+  await resetPassword(store, body);
+  res.json({ ok: true, message: 'Password berhasil diganti. Silakan login kembali.' });
 });
 
 app.get('/api/products', (_req, res) => {

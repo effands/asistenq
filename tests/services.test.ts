@@ -5,7 +5,10 @@ import {
   createCheckout,
   createMember,
   createProductRecord,
-  markOrderPaid
+  markOrderPaid,
+  requestPasswordReset,
+  resetPassword,
+  verifyMemberLogin
 } from '../src/server/services';
 
 describe('server services', () => {
@@ -66,5 +69,28 @@ describe('server services', () => {
 
     expect(result.order.status).toBe('paid');
     expect(result.subscription.endsAt).toBe('2026-07-28T00:00:00.000Z');
+  });
+
+  it('resets member password with a valid reset token', async () => {
+    await createMember(store, { name: 'Member', email: 'member@asistenq.com', password: 'secret123' });
+    const request = await requestPasswordReset(store, {
+      email: 'member@asistenq.com',
+      accountType: 'member',
+      now: new Date('2026-06-28T00:00:00.000Z')
+    });
+    const token = new URL(request.resetUrl ?? '').searchParams.get('reset');
+
+    expect(token).toBeTruthy();
+    await resetPassword(store, {
+      token: token ?? '',
+      accountType: 'member',
+      password: 'newsecret123',
+      now: new Date('2026-06-28T00:10:00.000Z')
+    });
+
+    await expect(verifyMemberLogin(store, 'member@asistenq.com', 'secret123')).rejects.toThrow('invalid credentials');
+    await expect(verifyMemberLogin(store, 'member@asistenq.com', 'newsecret123')).resolves.toMatchObject({
+      email: 'member@asistenq.com'
+    });
   });
 });

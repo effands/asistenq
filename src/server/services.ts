@@ -1,4 +1,5 @@
 import bcrypt from 'bcryptjs';
+import crypto from 'node:crypto';
 import {
   createId,
   createProduct,
@@ -32,6 +33,14 @@ type Actor = {
 
 function normalizeEmail(email: string): string {
   return email.trim().toLowerCase();
+}
+
+function hashResetToken(token: string): string {
+  return crypto.createHash('sha256').update(token).digest('hex');
+}
+
+function createResetToken(): string {
+  return crypto.randomBytes(24).toString('hex');
 }
 
 function assertSuperAdmin(actor: Actor): void {
@@ -149,6 +158,83 @@ export async function verifyMemberLogin(store: Store, emailInput: string, passwo
   }
 
   return member;
+}
+
+export async function requestPasswordReset(store: Store, input: {
+  email: string;
+  accountType: 'admin' | 'member';
+  now?: Date;
+}): Promise<{ ok: true; resetUrl?: string; expiresAt?: string }> {
+  const email = normalizeEmail(input.email);
+  const account = input.accountType === 'admin'
+    ? store.data.admins.find((item) => item.email === email && item.active)
+    : store.data.members.find((item) => item.email === email && item.active);
+
+  if (!account) {
+    return { ok: true };
+  }
+
+  const now = input.now ?? new Date();
+  const token = createResetToken();
+  const expiresAt = new Date(now.getTime() + 30 * 60 * 1000).toISOString();
+
+  store.data.passwordResets
+    .filter((item) => item.accountType === input.accountType && item.accountId === account.id && !item.usedAt)
+    .forEach((item) => {
+      item.usedAt = now.toISOString();
+    });
+
+  store.data.passwordResets.push({
+    id: createId('reset'),
+    accountType: input.accountType,
+    accountId: account.id,
+    email,
+    tokenHash: hashResetToken(token),
+    expiresAt,
+    createdAt: now.toISOString()
+  });
+  store.save();
+
+  const baseUrl = process.env.APP_URL ?? 'http://127.0.0.1:4000';
+  const path = input.accountType === 'admin' ? '/adminasistenq' : '/member';
+  return {
+    ok: true,
+    expiresAt,
+    resetUrl: `${baseUrl}${path}?reset=${token}&type=${input.accountType}`
+  };
+}
+
+export async function resetPassword(store: Store, input: {
+  token: string;
+  accountType: 'admin' | 'member';
+  password: string;
+  now?: Date;
+}): Promise<{ ok: true }> {
+  const now = input.now ?? new Date();
+  const tokenHash = hashResetToken(input.token);
+  const reset = store.data.passwordResets.find((item) => (
+    item.accountType === input.accountType &&
+    item.tokenHash === tokenHash &&
+    !item.usedAt
+  ));
+
+  if (!reset || new Date(reset.expiresAt) < now) {
+    throw new Error('reset link tidak valid atau sudah kedaluwarsa');
+  }
+
+  const account = input.accountType === 'admin'
+    ? store.data.admins.find((item) => item.id === reset.accountId && item.active)
+    : store.data.members.find((item) => item.id === reset.accountId && item.active);
+
+  if (!account) {
+    throw new Error('akun tidak ditemukan');
+  }
+
+  account.passwordHash = await bcrypt.hash(input.password, 12);
+  reset.usedAt = now.toISOString();
+  store.save();
+
+  return { ok: true };
 }
 
 export function createProductRecord(store: Store, input: {

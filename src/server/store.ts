@@ -11,6 +11,7 @@ export interface Store {
 const emptyData = (): DatabaseShape => ({
   admins: [],
   members: [],
+  passwordResets: [],
   products: [],
   plans: [],
   licenses: [],
@@ -28,6 +29,7 @@ function normalizeData(data: Partial<DatabaseShape>): DatabaseShape {
     ...data,
     admins: data.admins ?? [],
     members: data.members ?? [],
+    passwordResets: data.passwordResets ?? [],
     products: data.products ?? [],
     plans: data.plans ?? [],
     licenses: data.licenses ?? [],

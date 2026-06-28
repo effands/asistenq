@@ -18,7 +18,7 @@ import {
 } from 'lucide-react';
 import { useEffect, useState, type ReactNode } from 'react';
 import type { BillingPeriod, ProductType } from '../shared/types';
-import { apiRequest, type LoginResult, type MemberLicense, type PublicCatalog, type PublicProduct, type Summary } from './api';
+import { apiRequest, type ForgotPasswordResult, type LoginResult, type MemberLicense, type PublicCatalog, type PublicProduct, type Summary } from './api';
 
 type Route = 'home' | 'admin' | 'member';
 
@@ -211,34 +211,75 @@ function AdminShell({ children, message, navigate }: {
   );
 }
 
-function LoginBox({ title, onSubmit, showName = false }: {
+function LoginBox({ title, accountType = 'member', onSubmit, showName = false }: {
   title: string;
+  accountType?: 'admin' | 'member';
   showName?: boolean;
   onSubmit: (name: string, email: string, password: string) => Promise<void>;
 }) {
   const [name, setName] = useState('Member AsistenQ');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [resetToken, setResetToken] = useState(() => new URLSearchParams(window.location.search).get('reset') ?? '');
+  const [mode, setMode] = useState<'login' | 'forgot' | 'reset'>(() => resetToken ? 'reset' : 'login');
+  const [notice, setNotice] = useState('');
   const [busy, setBusy] = useState(false);
 
   return (
     <form className="auth-form stack" onSubmit={async (event) => {
       event.preventDefault();
       setBusy(true);
+      setNotice('');
       try {
+        if (mode === 'forgot') {
+          const result = await apiRequest<ForgotPasswordResult>('/auth/forgot-password', {
+            method: 'POST',
+            body: { email, accountType }
+          });
+          setNotice(result.resetUrl ? `${result.message} Link sementara: ${result.resetUrl}` : result.message);
+          return;
+        }
+
+        if (mode === 'reset') {
+          const result = await apiRequest<{ ok: true; message: string }>('/auth/reset-password', {
+            method: 'POST',
+            body: { token: resetToken, accountType, password }
+          });
+          setNotice(result.message);
+          setPassword('');
+          setResetToken('');
+          setMode('login');
+          window.history.replaceState({}, '', accountType === 'admin' ? '/adminasistenq' : '/member');
+          return;
+        }
+
         await onSubmit(name, email, password);
       } finally {
         setBusy(false);
       }
     }}>
       <div>
-        <p className="section-kicker">Secure access</p>
-        <h2>{title}</h2>
+        <p className="section-kicker">{mode === 'forgot' ? 'Reset access' : mode === 'reset' ? 'Password baru' : 'Secure access'}</p>
+        <h2>{mode === 'forgot' ? 'Lupa Password' : mode === 'reset' ? 'Buat Password Baru' : title}</h2>
       </div>
-      {showName && <label>Nama<input value={name} onChange={(event) => setName(event.target.value)} placeholder="Nama lengkap" /></label>}
-      <label>Email<input value={email} onChange={(event) => setEmail(event.target.value)} placeholder="effands@gmail.com" type="email" /></label>
-      <label>Password<input value={password} onChange={(event) => setPassword(event.target.value)} placeholder="Minimal 8 karakter" type="password" /></label>
-      <button className="primary" disabled={busy}><LogIn size={18} /> Masuk</button>
+      {showName && mode === 'login' && <label>Nama<input value={name} onChange={(event) => setName(event.target.value)} placeholder="Nama lengkap" /></label>}
+      {mode !== 'reset' && <label>Email<input value={email} onChange={(event) => setEmail(event.target.value)} placeholder="effands@gmail.com" type="email" /></label>}
+      {mode !== 'forgot' && <label>Password<input value={password} onChange={(event) => setPassword(event.target.value)} placeholder="Minimal 8 karakter" type="password" /></label>}
+      {mode === 'reset' && <label>Token Reset<input value={resetToken} onChange={(event) => setResetToken(event.target.value)} placeholder="Token reset password" /></label>}
+      {notice && <p className="form-notice">{notice}</p>}
+      <button className="primary" disabled={busy}>
+        <LogIn size={18} /> {mode === 'forgot' ? 'Kirim instruksi reset' : mode === 'reset' ? 'Simpan password baru' : 'Masuk'}
+      </button>
+      <button
+        className="link-button"
+        type="button"
+        onClick={() => {
+          setNotice('');
+          setMode(mode === 'login' ? 'forgot' : 'login');
+        }}
+      >
+        {mode === 'login' ? 'Lupa password?' : 'Kembali ke login'}
+      </button>
     </form>
   );
 }
@@ -266,7 +307,7 @@ function AdminPanel({ session, summary, products, onLogin, onCreateProduct }: {
           <h2>Kelola produk, lisensi, order QRIS, dan kelas premium dari satu panel.</h2>
           <p>Panel ini untuk operasional internal. Website publik sudah dipisah agar pengunjung melihat marketplace yang bersih.</p>
         </div>
-        <LoginBox title="Login Super Admin" onSubmit={(_, email, password) => onLogin(email, password)} />
+        <LoginBox title="Login Super Admin" accountType="admin" onSubmit={(_, email, password) => onLogin(email, password)} />
       </section>
     );
   }
