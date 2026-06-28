@@ -450,6 +450,19 @@ export function publicPlansForProduct(store: Store, productSlug: string) {
     }));
 }
 
+export function publicCatalog(store: Store) {
+  const publicProducts = store.data.products.filter((product) => (
+    product.visibility === 'public' &&
+    product.active
+  ));
+
+  return {
+    featured: publicProducts.filter((product) => product.featured),
+    paid: publicProducts.filter((product) => product.price > 0),
+    free: publicProducts.filter((product) => product.price === 0 || product.type === 'free')
+  };
+}
+
 export function markOrderPaid(store: Store, orderId: string, paidAt = new Date()): {
   order: Order;
   subscription: Subscription;

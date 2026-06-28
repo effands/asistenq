@@ -15,6 +15,7 @@ import {
   createProductRecord,
   generateToolLicense,
   markOrderPaid,
+  publicCatalog,
   publicPlansForProduct,
   resetLicenseDevice,
   unbanHwid,
@@ -51,9 +52,9 @@ const memberRegisterSchema = loginSchema.extend({
 const productSchema = z.object({
   name: z.string().min(2),
   slug: z.string().min(2).regex(/^[a-z0-9-]+$/),
-  type: z.enum(['tool', 'ebook', 'video', 'class']),
-  billingPeriod: z.enum(['monthly', 'annual', 'one_time']),
-  price: z.number().int().positive(),
+  type: z.enum(['tool', 'course', 'ebook', 'video', 'bundle', 'free', 'class']),
+  billingPeriod: z.enum(['trial', 'monthly', 'annual', 'lifetime', 'one_time']),
+  price: z.number().int().nonnegative(),
   headline: z.string().optional(),
   description: z.string().optional(),
   coverUrl: z.string().optional(),
@@ -140,6 +141,10 @@ app.post('/api/member/login', async (req, res) => {
 
 app.get('/api/products', (_req, res) => {
   res.json(store.data.products.filter((product) => product.active).map(publicProduct));
+});
+
+app.get('/api/catalog', (_req, res) => {
+  res.json(publicCatalog(store));
 });
 
 app.get('/api/products/:slug', (req, res) => {

@@ -27,6 +27,11 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
 }
 
 export type PublicProduct = Product & { formattedPrice: string };
+export type PublicCatalog = {
+  featured: PublicProduct[];
+  paid: PublicProduct[];
+  free: PublicProduct[];
+};
 export type LoginResult = { token: string; user: { id: string; name: string; email: string; role?: string; scopes?: string[] } };
 export type Summary = { products: number; members: number; orders: number; activeSubscriptions: number };
 export type MemberLicense = Subscription & { product?: Product };

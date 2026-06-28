@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { seedInitialData } from '../src/server/seed';
+import { publicCatalog } from '../src/server/services';
 import { createMemoryStore } from '../src/server/store';
 import type { DatabaseShape } from '../src/shared/types';
 
@@ -93,6 +94,18 @@ describe('multi-product database shape', () => {
     expect(store.data.orders).toEqual(legacyData.orders);
     expect(store.data.subscriptions).toEqual(legacyData.subscriptions);
     expect(store.data.auditLogs).toEqual(legacyData.auditLogs);
+  });
+
+  it('returns public products grouped by paid and free', async () => {
+    const store = createMemoryStore();
+
+    await seedInitialData(store);
+
+    const catalog = publicCatalog(store);
+
+    expect(catalog.featured.some((item) => item.slug === 'vjstudio')).toBe(true);
+    expect(catalog.paid.some((item) => item.slug === 'kelas-youtube-online')).toBe(true);
+    expect(catalog.free.some((item) => item.slug === 'youtube-starter-kit')).toBe(true);
   });
 });
 

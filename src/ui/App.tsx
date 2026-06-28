@@ -14,16 +14,18 @@ import {
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import type { BillingPeriod, ProductType } from '../shared/types';
-import { apiRequest, type LoginResult, type MemberLicense, type PublicProduct, type Summary } from './api';
+import { apiRequest, type LoginResult, type MemberLicense, type PublicCatalog, type PublicProduct, type Summary } from './api';
 
 type View = 'marketplace' | 'member' | 'admin';
 
-const productTypes: ProductType[] = ['tool', 'ebook', 'video', 'class'];
-const billingPeriods: BillingPeriod[] = ['monthly', 'annual', 'one_time'];
+const productTypes: ProductType[] = ['tool', 'course', 'ebook', 'video', 'bundle', 'free', 'class'];
+const billingPeriods: BillingPeriod[] = ['trial', 'monthly', 'annual', 'lifetime', 'one_time'];
+const emptyCatalog: PublicCatalog = { featured: [], paid: [], free: [] };
 
 export function App() {
-  const [view, setView] = useState<View>('admin');
+  const [view, setView] = useState<View>('marketplace');
   const [products, setProducts] = useState<PublicProduct[]>([]);
+  const [catalog, setCatalog] = useState<PublicCatalog>(emptyCatalog);
   const [adminSession, setAdminSession] = useState<LoginResult | null>(null);
   const [memberSession, setMemberSession] = useState<LoginResult | null>(null);
   const [summary, setSummary] = useState<Summary | null>(null);
@@ -32,6 +34,10 @@ export function App() {
 
   async function loadProducts() {
     setProducts(await apiRequest<PublicProduct[]>('/products'));
+  }
+
+  async function loadCatalog() {
+    setCatalog(await apiRequest<PublicCatalog>('/catalog'));
   }
 
   async function loadAdminSummary(token = adminSession?.token) {
@@ -46,6 +52,7 @@ export function App() {
 
   useEffect(() => {
     loadProducts().catch((error) => setMessage(error.message));
+    loadCatalog().catch((error) => setMessage(error.message));
   }, []);
 
   return (
@@ -95,6 +102,7 @@ export function App() {
               if (!adminSession) return;
               await apiRequest('/admin/products', { token: adminSession.token, method: 'POST', body: input });
               await loadProducts();
+              await loadCatalog();
               await loadAdminSummary();
               setMessage('Produk baru tersimpan.');
             }}
@@ -102,7 +110,7 @@ export function App() {
         )}
 
         {view === 'marketplace' && (
-          <Marketplace products={products} />
+          <Marketplace catalog={catalog} onJoin={() => setView('member')} />
         )}
 
         {view === 'member' && (
@@ -300,25 +308,98 @@ function ProductTable({ products }: { products: PublicProduct[] }) {
   );
 }
 
-function Marketplace({ products }: { products: PublicProduct[] }) {
+function productIcon(product: PublicProduct) {
+  if (product.type === 'course' || product.type === 'class') {
+    return <BookOpen />;
+  }
+
+  if (product.type === 'video') {
+    return <Film />;
+  }
+
+  if (product.type === 'free') {
+    return <Sparkles />;
+  }
+
+  return <Boxes />;
+}
+
+function ProductCard({ product, label }: { product: PublicProduct; label?: string }) {
+  return (
+    <article className="product-card">
+      <div className="product-topline">
+        <div className="product-icon">{productIcon(product)}</div>
+        <span>{label ?? product.type} · {product.billingPeriod}</span>
+      </div>
+      <h2>{product.name}</h2>
+      <p>{product.description || product.headline}</p>
+      <div className="product-card-footer">
+        <strong>{product.price === 0 ? 'Gratis' : product.formattedPrice}</strong>
+        <button className="ghost-button">Detail</button>
+      </div>
+    </article>
+  );
+}
+
+function Marketplace({ catalog, onJoin }: { catalog: PublicCatalog; onJoin: () => void }) {
+  const primaryProduct = catalog.featured[0] ?? catalog.paid[0];
+
   return (
     <section className="storefront">
-      <div className="storefront-lead">
-        <p className="section-kicker">Digital workspace</p>
-        <h2>Produk AsistenQ untuk mempercepat workflow creator.</h2>
-        <p>Mulai dari tools editing video, utilitas YouTube, ebook, sampai kelas premium tahunan.</p>
+      <div className="home-hero">
+        <div className="hero-copy">
+          <p className="section-kicker">AsistenQ Marketplace</p>
+          <h2>Tools dan kelas digital untuk mempercepat pekerjaan creator.</h2>
+          <p>Mulai dari VJ Studio untuk workflow video, kelas YouTube online/offline, sampai resource gratis yang membantu pekerjaan harian lebih rapi.</p>
+          <div className="hero-actions">
+            <button className="primary" onClick={onJoin}><LogIn size={18} /> Buat Akun Member</button>
+            <span>QRIS ready · lisensi per tools · course tahunan</span>
+          </div>
+        </div>
+        <div className="hero-spotlight">
+          <p className="section-kicker">Produk pertama</p>
+          <h3>{primaryProduct?.name ?? 'VJ Studio Pro'}</h3>
+          <p>{primaryProduct?.headline ?? 'Lisensi resmi untuk workflow video YouTube yang lebih cepat.'}</p>
+          <div className="spotlight-price">{primaryProduct?.formattedPrice ?? 'Mulai Rp49.900'}</div>
+        </div>
+      </div>
+
+      <div className="section-title-row">
+        <div>
+          <p className="section-kicker">Featured</p>
+          <h2>Layanan utama AsistenQ</h2>
+        </div>
+        <span className="soft-badge">{catalog.featured.length} unggulan</span>
+      </div>
+      <div className="catalog featured-catalog">
+        {catalog.featured.map((product) => (
+          <ProductCard key={product.id} product={product} label="unggulan" />
+        ))}
+      </div>
+
+      <div className="section-title-row">
+        <div>
+          <p className="section-kicker">Berbayar</p>
+          <h2>Tools dan kelas premium</h2>
+        </div>
+        <span className="muted">Langganan bulanan, tahunan, atau lifetime.</span>
       </div>
       <div className="catalog">
-        {products.map((product) => (
-          <article className="product-card" key={product.id}>
-            <div className="product-topline">
-              <div className="product-icon">{product.type === 'class' ? <BookOpen /> : product.type === 'video' ? <Film /> : <Boxes />}</div>
-              <span>{product.type} · {product.billingPeriod}</span>
-            </div>
-            <h2>{product.name}</h2>
-            <p>{product.description}</p>
-            <strong>{product.formattedPrice}</strong>
-          </article>
+        {catalog.paid.map((product) => (
+          <ProductCard key={product.id} product={product} />
+        ))}
+      </div>
+
+      <div className="section-title-row">
+        <div>
+          <p className="section-kicker">Free Resource</p>
+          <h2>Mulai dari yang gratis dulu</h2>
+        </div>
+        <span className="muted">Cocok untuk onboarding member baru.</span>
+      </div>
+      <div className="catalog compact-catalog">
+        {catalog.free.map((product) => (
+          <ProductCard key={product.id} product={product} label="gratis" />
         ))}
       </div>
     </section>
