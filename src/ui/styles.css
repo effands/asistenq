@@ -190,6 +190,7 @@ p {
   display: flex;
   gap: 10px;
   justify-content: end;
+  align-items: center;
 }
 
 .primary {
@@ -282,6 +283,23 @@ p {
 
 .public-cta-logged {
   min-width: 220px;
+}
+
+.logout-icon-button {
+  display: grid;
+  width: 44px;
+  height: 44px;
+  place-items: center;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, .72);
+  color: var(--deep);
+  box-shadow: var(--soft-shadow);
+}
+
+.logout-icon-button:hover {
+  background: #fff0ec;
+  color: #b83124;
 }
 
 .landing {
@@ -849,8 +867,12 @@ p {
 
 .admin-dark {
   --ink: #eafff8;
-  --muted: #9db9b0;
-  --line: rgba(214, 235, 227, .14);
+  --muted: #b8cbc5;
+  --line: rgba(214, 235, 227, .18);
+  --panel-bg: rgba(12, 42, 37, .86);
+  --panel-strong: rgba(18, 62, 55, .92);
+  --field-bg: rgba(234, 255, 248, .08);
+  --field-border: rgba(234, 255, 248, .18);
   background:
     radial-gradient(circle at 78% 8%, rgba(0, 140, 134, .22), transparent 30rem),
     linear-gradient(135deg, #061714 0%, #092b27 100%);
@@ -950,7 +972,12 @@ p {
 }
 
 .admin-dark .theme-toggle {
-  background: rgba(255, 255, 255, .06);
+  background: rgba(234, 255, 248, .08);
+}
+
+.admin-dark .theme-toggle button.active {
+  background: #eafff8;
+  color: #062c28;
 }
 
 .status-pill {
@@ -966,7 +993,7 @@ p {
 .admin-dark .panel,
 .admin-dark .metric,
 .admin-dark .auth-form {
-  background: rgba(255, 255, 255, .07);
+  background: var(--panel-bg);
   color: var(--ink);
 }
 
@@ -1092,14 +1119,19 @@ textarea {
 .admin-dark input,
 .admin-dark select,
 .admin-dark textarea {
-  border-color: rgba(255, 255, 255, .16);
-  background: rgba(255, 255, 255, .08);
+  border-color: var(--field-border);
+  background: var(--field-bg);
   color: var(--ink);
+}
+
+.admin-dark select option {
+  background: #12352f;
+  color: #eafff8;
 }
 
 .admin-dark input::placeholder,
 .admin-dark textarea::placeholder {
-  color: rgba(234, 255, 248, .52);
+  color: rgba(234, 255, 248, .58);
 }
 
 input:focus,
@@ -1272,8 +1304,8 @@ textarea {
 .admin-dark .member-license-card,
 .admin-dark .member-product-card {
   background:
-    radial-gradient(circle at 92% 12%, rgba(93, 224, 203, .12), transparent 30%),
-    rgba(255, 255, 255, .06);
+    linear-gradient(135deg, rgba(234, 255, 248, .09), rgba(93, 224, 203, .06)),
+    var(--panel-strong);
 }
 
 .license-row-main {
@@ -1315,6 +1347,12 @@ textarea {
   font-weight: 900;
 }
 
+.admin-dark .license-row-meta span {
+  border-color: rgba(234, 255, 248, .18);
+  background: rgba(234, 255, 248, .08);
+  color: #d8eee8;
+}
+
 .license-token {
   display: block;
   overflow-wrap: anywhere;
@@ -1348,6 +1386,10 @@ textarea {
   color: #b83124;
 }
 
+.admin-dark .danger-lite {
+  color: #ffd6ce;
+}
+
 .status-dot {
   display: inline-flex;
   width: fit-content;
@@ -1361,10 +1403,22 @@ textarea {
   text-transform: uppercase;
 }
 
+.admin-dark .status-dot {
+  border-color: rgba(234, 255, 248, .18);
+  background: rgba(234, 255, 248, .12);
+  color: #eafff8;
+}
+
 .status-active {
   border-color: rgba(0, 140, 134, .22);
   background: #dff8ed;
   color: #05735e;
+}
+
+.admin-dark .status-active {
+  border-color: rgba(93, 224, 203, .36);
+  background: rgba(93, 224, 203, .18);
+  color: #bffdf2;
 }
 
 .status-generated {
@@ -1373,11 +1427,24 @@ textarea {
   color: #0f6678;
 }
 
+.admin-dark .status-generated {
+  border-color: rgba(142, 232, 255, .34);
+  background: rgba(142, 232, 255, .15);
+  color: #d5f8ff;
+}
+
 .status-banned,
 .status-expired {
   border-color: rgba(255, 128, 102, .32);
   background: #fff0ec;
   color: #b83124;
+}
+
+.admin-dark .status-banned,
+.admin-dark .status-expired {
+  border-color: rgba(255, 128, 102, .38);
+  background: rgba(255, 128, 102, .15);
+  color: #ffd6ce;
 }
 
 .empty-state {
@@ -1417,10 +1484,9 @@ textarea {
   letter-spacing: -.055em;
 }
 
-.member-dashboard-hero p {
-  max-width: 620px;
-  margin-bottom: 0;
-  line-height: 1.55;
+.member-logout-inline {
+  width: fit-content;
+  margin-top: 10px;
 }
 
 .member-stat-card {
@@ -1486,12 +1552,34 @@ textarea {
   margin-bottom: 14px;
 }
 
+.member-products-panel {
+  display: grid;
+  gap: 16px;
+}
+
+.member-products-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: end;
+}
+
+.member-products-head h2 {
+  margin: 0;
+  font-size: 30px;
+  line-height: 1.05;
+}
+
+.member-product-list {
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+}
+
 .member-product-card {
   display: grid;
-  gap: 7px;
+  gap: 12px;
   width: 100%;
+  min-height: 240px;
   text-align: left;
-  min-height: auto;
 }
 
 .member-product-card span {
@@ -1506,18 +1594,132 @@ textarea {
 }
 
 .member-product-card strong {
-  font-size: 20px;
-  letter-spacing: -.035em;
+  min-height: 58px;
+  font-size: 23px;
+  line-height: 1.12;
+  letter-spacing: 0;
 }
 
 .member-product-card small {
   color: var(--muted);
-  line-height: 1.5;
+  font-size: 14px;
+  line-height: 1.45;
 }
 
 .member-product-card b {
   color: var(--teal);
+  font-size: 24px;
+}
+
+.member-product-top,
+.member-product-footer {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+}
+
+.member-product-top svg {
+  width: 28px;
+  height: 28px;
+  color: var(--teal);
+}
+
+.member-product-footer {
+  margin-top: auto;
+}
+
+.member-product-footer .primary {
+  min-height: 40px;
+  padding: 9px 14px;
+}
+
+.member-admin-list {
+  display: grid;
+  gap: 12px;
+}
+
+.member-admin-card {
+  display: grid;
+  grid-template-columns: auto minmax(180px, 1fr) minmax(240px, auto);
+  gap: 14px;
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 22px;
+  background: rgba(255, 255, 255, .68);
+  padding: 16px;
+}
+
+.admin-dark .member-admin-card {
+  background: var(--panel-strong);
+}
+
+.member-admin-avatar {
+  display: grid;
+  width: 50px;
+  height: 50px;
+  place-items: center;
+  border-radius: 16px;
+  background: var(--deep);
+  color: #fff;
+  font-weight: 950;
+}
+
+.admin-dark .member-admin-avatar {
+  background: #eafff8;
+  color: #062c28;
+}
+
+.member-admin-main h3,
+.member-admin-main p {
+  margin: 0;
+}
+
+.member-admin-main h3 {
   font-size: 20px;
+}
+
+.member-admin-main p {
+  color: var(--muted);
+}
+
+.member-admin-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(64px, 1fr));
+  gap: 8px;
+}
+
+.member-admin-stats span {
+  display: grid;
+  gap: 2px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, .52);
+  padding: 10px;
+  font-size: 22px;
+  font-weight: 950;
+  text-align: center;
+}
+
+.admin-dark .member-admin-stats span {
+  background: rgba(234, 255, 248, .08);
+}
+
+.member-admin-stats small {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.member-admin-meta {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 900;
 }
 
 .member-license-panel {
@@ -1645,8 +1847,13 @@ textarea {
   .metrics,
   .form-grid,
   .admin-content-grid.two,
-  .table-row {
+  .table-row,
+  .member-admin-card {
     grid-template-columns: 1fr;
+  }
+
+  .member-admin-stats {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
 

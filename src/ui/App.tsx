@@ -9,6 +9,7 @@ import {
   KeyRound,
   LayoutDashboard,
   LogIn,
+  LogOut,
   Monitor,
   PackagePlus,
   PlayCircle,
@@ -24,6 +25,7 @@ import type { BillingPeriod, ProductType } from '../shared/types';
 import {
   apiRequest,
   type AdminLicenseDashboard,
+  type AdminMemberRow,
   type ForgotPasswordResult,
   type LicenseDashboardRow,
   type LoginResult,
@@ -34,7 +36,7 @@ import {
 } from './api';
 
 type Route = 'home' | 'admin' | 'member' | 'product';
-type AdminSection = 'dashboard' | 'landing' | 'licenses' | 'deploy';
+type AdminSection = 'dashboard' | 'landing' | 'licenses' | 'members' | 'deploy';
 type AdminTheme = 'light' | 'dark';
 
 const productTypes: ProductType[] = ['tool', 'course', 'ebook', 'video', 'bundle', 'free', 'class'];
@@ -61,6 +63,7 @@ export function App() {
   const [summary, setSummary] = useState<Summary | null>(null);
   const [memberDashboard, setMemberDashboard] = useState<MemberLicenseDashboard | null>(null);
   const [adminLicenses, setAdminLicenses] = useState<AdminLicenseDashboard | null>(null);
+  const [adminMembers, setAdminMembers] = useState<AdminMemberRow[]>([]);
   const [message, setMessage] = useState('Sistem AsistenQ siap.');
   const [adminSection, setAdminSection] = useState<AdminSection>('dashboard');
   const [adminTheme, setAdminTheme] = useState<AdminTheme>(() => (
@@ -103,6 +106,11 @@ export function App() {
     setAdminLicenses(await apiRequest<AdminLicenseDashboard>('/admin/licenses', { token }));
   }
 
+  async function loadAdminMembers(token = adminSession?.token) {
+    if (!token) return;
+    setAdminMembers(await apiRequest<AdminMemberRow[]>('/admin/members', { token }));
+  }
+
   async function loadLicenses(token = memberSession?.token) {
     if (!token) return;
     setMemberDashboard(await apiRequest<MemberLicenseDashboard>('/member/licenses', { token }));
@@ -138,12 +146,14 @@ export function App() {
           summary={summary}
           products={products}
           licenses={adminLicenses}
+          members={adminMembers}
           onLogin={async (email, password) => {
             const result = await apiRequest<LoginResult>('/admin/login', { method: 'POST', body: { email, password } });
             setAdminSession(result);
             setMessage(`Login admin: ${result.user.name}`);
             await loadAdminSummary(result.token);
             await loadAdminLicenses(result.token);
+            await loadAdminMembers(result.token);
           }}
           onCreateProduct={async (input) => {
             if (!adminSession) return;
@@ -157,10 +167,15 @@ export function App() {
             await loadAdminLicenses();
             setMessage('Data lisensi diperbarui.');
           }}
+          onRefreshMembers={async () => {
+            await loadAdminMembers();
+            setMessage('Data member diperbarui.');
+          }}
           onGenerateLicense={async (input) => {
             if (!adminSession) throw new Error('Login admin dulu.');
             await apiRequest('/license/generate', { token: adminSession.token, method: 'POST', body: input });
             await loadAdminLicenses(adminSession.token);
+            await loadAdminMembers(adminSession.token);
             setMessage(`Lisensi ${input.productSlug} dibuat untuk ${input.email}.`);
           }}
           onResetLicense={async (licenseId, newHwid) => {
@@ -203,11 +218,25 @@ export function App() {
 
   if (route === 'member') {
     return (
-      <PublicShell navigate={navigate} activeRoute="member" memberSession={memberSession}>
+      <PublicShell
+        navigate={navigate}
+        activeRoute="member"
+        memberSession={memberSession}
+        onMemberLogout={() => {
+          setMemberSession(null);
+          setMemberDashboard(null);
+          setMessage('Member logout.');
+        }}
+      >
         <MemberPanel
           session={memberSession}
           products={products}
           dashboard={memberDashboard}
+          onLogout={() => {
+            setMemberSession(null);
+            setMemberDashboard(null);
+            setMessage('Member logout.');
+          }}
           onRegister={async (name, email, password) => {
             const result = await apiRequest<LoginResult>('/member/register', { method: 'POST', body: { name, email, password } });
             setMemberSession(result);
@@ -256,11 +285,12 @@ function Brand({ compact = false }: { compact?: boolean }) {
   );
 }
 
-function PublicShell({ children, navigate, activeRoute, memberSession }: {
+function PublicShell({ children, navigate, activeRoute, memberSession, onMemberLogout }: {
   children: ReactNode;
   navigate: (route: Route) => void;
   activeRoute: Route;
   memberSession?: LoginResult | null;
+  onMemberLogout?: () => void;
 }) {
   const ctaLabel = activeRoute === 'member'
     ? 'Area Member'
@@ -281,10 +311,17 @@ function PublicShell({ children, navigate, activeRoute, memberSession }: {
         </nav>
         <div className="nav-actions">
           {memberSession ? (
-            <button className="primary public-cta public-cta-logged" onClick={() => navigate('member')}>
-              <span>{ctaLabel}</span>
-              <small>{memberSession.user.name} • {memberSession.user.email}</small>
-            </button>
+            <>
+              <button className="primary public-cta public-cta-logged" onClick={() => navigate('member')}>
+                <span>{ctaLabel}</span>
+                <small>{memberSession.user.name} • {memberSession.user.email}</small>
+              </button>
+              {onMemberLogout && (
+                <button className="logout-icon-button" type="button" onClick={onMemberLogout} title="Logout member" aria-label="Logout member">
+                  <LogOut size={18} />
+                </button>
+              )}
+            </>
           ) : (
             <button className="primary public-cta" onClick={() => navigate('member')}>
               <span>{ctaLabel}</span>
@@ -316,7 +353,7 @@ function AdminShell({ activeSection, children, message, navigate, onSectionChang
           <button className={activeSection === 'landing' ? 'active' : ''} onClick={() => onSectionChange('landing')}><Sparkles size={18} /> Landing</button>
           <button><Boxes size={18} /> Produk</button>
           <button className={activeSection === 'licenses' ? 'active' : ''} onClick={() => onSectionChange('licenses')}><KeyRound size={18} /> Lisensi</button>
-          <button><Users size={18} /> Member</button>
+          <button className={activeSection === 'members' ? 'active' : ''} onClick={() => onSectionChange('members')}><Users size={18} /> Member</button>
           <button className={activeSection === 'deploy' ? 'active' : ''} onClick={() => onSectionChange('deploy')}><UploadCloud size={18} /> Update</button>
         </nav>
         <button className="admin-public-link" onClick={() => navigate('home')}><ArrowRight size={16} /> Lihat website</button>
@@ -425,9 +462,11 @@ function AdminPanel({
   summary,
   products,
   licenses,
+  members,
   onLogin,
   onCreateProduct,
   onRefreshLicenses,
+  onRefreshMembers,
   onGenerateLicense,
   onResetLicense,
   onBanLicense,
@@ -439,6 +478,7 @@ function AdminPanel({
   summary: Summary | null;
   products: PublicProduct[];
   licenses: AdminLicenseDashboard | null;
+  members: AdminMemberRow[];
   onLogin: (email: string, password: string) => Promise<void>;
   onCreateProduct: (input: {
     name: string;
@@ -450,6 +490,7 @@ function AdminPanel({
     description: string;
   }) => Promise<void>;
   onRefreshLicenses: () => Promise<void>;
+  onRefreshMembers: () => Promise<void>;
   onGenerateLicense: (input: { productSlug: string; planCode: string; email: string; hwid: string }) => Promise<void>;
   onResetLicense: (licenseId: string, newHwid: string) => Promise<void>;
   onBanLicense: (license: LicenseDashboardRow) => Promise<void>;
@@ -485,6 +526,10 @@ function AdminPanel({
         onUnbanLicense={onUnbanLicense}
       />
     );
+  }
+
+  if (activeSection === 'members') {
+    return <AdminMemberPanel members={members} onRefresh={onRefreshMembers} />;
   }
 
   if (activeSection === 'deploy') {
@@ -658,6 +703,68 @@ function AdminLicensePanel({ dashboard, products, onGenerateLicense, onRefresh, 
                 >
                   Reset Device
                 </button>
+              </div>
+            </article>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function AdminMemberPanel({ members, onRefresh }: {
+  members: AdminMemberRow[];
+  onRefresh: () => Promise<void>;
+}) {
+  const [search, setSearch] = useState('');
+  const [busy, setBusy] = useState(false);
+  const filteredMembers = members.filter((member) => {
+    const haystack = `${member.name} ${member.email}`.toLowerCase();
+    return haystack.includes(search.toLowerCase());
+  });
+
+  return (
+    <section className="admin-content-grid compact-admin-grid">
+      <div className="panel stack wide member-admin-panel">
+        <div className="panel-heading">
+          <div>
+            <p className="section-kicker">Member Database</p>
+            <h2>Daftar Member</h2>
+          </div>
+          <button
+            className="ghost-button"
+            disabled={busy}
+            onClick={async () => {
+              setBusy(true);
+              try {
+                await onRefresh();
+              } finally {
+                setBusy(false);
+              }
+            }}
+          >
+            <RefreshCw size={16} /> Refresh
+          </button>
+        </div>
+        <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Cari nama atau email member..." />
+        <div className="member-admin-list">
+          {filteredMembers.length === 0 && <div className="empty-state">Belum ada member yang cocok.</div>}
+          {filteredMembers.map((member) => (
+            <article className="member-admin-card" key={member.id}>
+              <div className="member-admin-avatar">{member.name.slice(0, 2).toUpperCase()}</div>
+              <div className="member-admin-main">
+                <h3>{member.name}</h3>
+                <p>{member.email}</p>
+              </div>
+              <div className="member-admin-stats">
+                <span>{member.licenseCount}<small>Lisensi</small></span>
+                <span>{member.orderCount}<small>Order</small></span>
+                <span>{member.subscriptionCount}<small>Akses</small></span>
+              </div>
+              <div className="member-admin-meta">
+                <span className={`status-dot ${member.active ? 'status-active' : 'status-expired'}`}>{member.active ? 'Aktif' : 'Nonaktif'}</span>
+                <span>Daftar: {formatDate(member.createdAt)}</span>
+                <span>Order terakhir: {member.latestOrder ? formatDate(member.latestOrder.createdAt) : '-'}</span>
               </div>
             </article>
           ))}
@@ -1054,13 +1161,14 @@ function ProductLanding({ isLoading, product, onJoin }: { isLoading: boolean; pr
   );
 }
 
-function MemberPanel({ session, products, dashboard, onRegister, onLogin, onCheckout }: {
+function MemberPanel({ session, products, dashboard, onRegister, onLogin, onCheckout, onLogout }: {
   session: LoginResult | null;
   products: PublicProduct[];
   dashboard: MemberLicenseDashboard | null;
   onRegister: (name: string, email: string, password: string) => Promise<void>;
   onLogin: (email: string, password: string) => Promise<void>;
   onCheckout: (productId: string) => Promise<void>;
+  onLogout: () => void;
 }) {
   const [checkoutNotice, setCheckoutNotice] = useState('');
   const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
@@ -1107,7 +1215,7 @@ function MemberPanel({ session, products, dashboard, onRegister, onLogin, onChec
         <div>
           <span className="chip">Member Workspace</span>
           <h1>Halo, {session.user.name}. Ini pusat aksesmu.</h1>
-          <p>Cek token lisensi, status device, produk, dan course dari satu halaman yang lebih ringkas. Ringkasan di kanan sengaja dibuat kecil supaya fokus tetap ke data utama.</p>
+          <button className="ghost-button member-logout-inline" type="button" onClick={onLogout}><LogOut size={16} /> Logout</button>
         </div>
         <div className="member-stat-card">
           <span>Total lisensi</span>
@@ -1163,30 +1271,37 @@ function MemberPanel({ session, products, dashboard, onRegister, onLogin, onChec
         )}
 
         {activeMemberTab === 'products' && (
-          <div className="panel stack member-products-panel">
-          <div className="panel-heading">
-            <div>
-              <p className="section-kicker">Marketplace Member</p>
-              <h2>Pilih Produk</h2>
+          <div className="member-products-panel">
+            <div className="member-products-head">
+              <div>
+                <p className="section-kicker">Marketplace Member</p>
+                <h2>Beli Produk</h2>
+              </div>
+              <span className="soft-badge">QRIS</span>
             </div>
-            <span className="soft-badge">QRIS</span>
-          </div>
-          <p className="muted">Pilih produk untuk membuat order QRIS. Setelah pembayaran dikonfirmasi admin, lisensi atau akses kelas akan muncul di dashboard ini.</p>
-          <div className="member-product-list">
-            {paidProducts.map((product) => (
-              <button className="member-product-card" key={product.id} onClick={async () => {
-                setCheckoutNotice('');
-                await onCheckout(product.id);
-                setCheckoutNotice(`Order QRIS dibuat untuk ${product.name}. Cek instruksi pembayaran dari admin.`);
-              }}>
-                <span>{product.type}</span>
-                <strong>{product.name}</strong>
-                <small>{product.headline}</small>
-                <b>{product.price === 0 ? 'Gratis' : product.formattedPrice}</b>
-              </button>
-            ))}
-          </div>
-          {checkoutNotice && <p className="form-notice">{checkoutNotice}</p>}
+            <div className="member-product-list">
+              {paidProducts.map((product) => (
+                <article className="member-product-card" key={product.id}>
+                  <div className="member-product-top">
+                    <span>{product.type}</span>
+                    {productIcon(product)}
+                  </div>
+                  <strong>{product.name}</strong>
+                  <small>{product.headline}</small>
+                  <div className="member-product-footer">
+                    <b>{product.price === 0 ? 'Gratis' : product.formattedPrice}</b>
+                    <button className="primary" onClick={async () => {
+                      setCheckoutNotice('');
+                      await onCheckout(product.id);
+                      setCheckoutNotice(`Order QRIS dibuat untuk ${product.name}. Cek instruksi pembayaran dari admin.`);
+                    }}>
+                      {product.price === 0 ? 'Ambil' : 'Beli'}
+                    </button>
+                  </div>
+                </article>
+              ))}
+            </div>
+            {checkoutNotice && <p className="form-notice">{checkoutNotice}</p>}
           </div>
         )}
 

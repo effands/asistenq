@@ -334,6 +334,19 @@ app.get('/api/admin/products', requireSession, requireAdminScope('products'), (_
   res.json(store.data.products.map(publicProduct));
 });
 
+app.get('/api/admin/members', requireSession, requireAdminScope('products'), (_req, res) => {
+  res.json(store.data.members.map(({ passwordHash: _passwordHash, ...member }) => {
+    const memberOrders = store.data.orders.filter((order) => order.memberId === member.id);
+    return {
+      ...member,
+      licenseCount: store.data.licenses.filter((license) => license.email === member.email).length,
+      orderCount: memberOrders.length,
+      subscriptionCount: store.data.subscriptions.filter((subscription) => subscription.memberId === member.id).length,
+      latestOrder: memberOrders.sort((left, right) => right.createdAt.localeCompare(left.createdAt))[0]
+    };
+  }));
+});
+
 app.get('/api/admin/licenses', requireSession, requireAdminScope('products'), (_req, res) => {
   res.json(adminLicenseDashboard(store));
 });
