@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { seedInitialData } from '../src/server/seed';
 import { createMemoryStore } from '../src/server/store';
 import type { DatabaseShape } from '../src/shared/types';
 
@@ -92,5 +93,50 @@ describe('multi-product database shape', () => {
     expect(store.data.orders).toEqual(legacyData.orders);
     expect(store.data.subscriptions).toEqual(legacyData.subscriptions);
     expect(store.data.auditLogs).toEqual(legacyData.auditLogs);
+  });
+});
+
+describe('initial catalog seed', () => {
+  it('seeds VJ Studio with license plans plus course and free products', async () => {
+    const store = createMemoryStore();
+
+    await seedInitialData(store);
+
+    const productSlugs = store.data.products.map((product) => product.slug);
+    expect(productSlugs).toEqual(expect.arrayContaining([
+      'vjstudio',
+      'kelas-youtube-online',
+      'youtube-starter-kit'
+    ]));
+
+    const vjStudio = store.data.products.find((product) => product.slug === 'vjstudio');
+    expect(vjStudio).toMatchObject({
+      name: 'VJ Studio Pro',
+      type: 'tool',
+      category: 'Video Editing',
+      billingPeriod: 'monthly',
+      visibility: 'public',
+      featured: true
+    });
+
+    const vjPlans = store.data.plans
+      .filter((plan) => plan.productId === vjStudio?.id)
+      .map((plan) => ({
+        code: plan.code,
+        price: plan.price,
+        billingPeriod: plan.billingPeriod,
+        durationDays: plan.durationDays,
+        isFree: plan.isFree
+      }));
+
+    expect(vjPlans).toEqual([
+      { code: 'TRIAL', price: 0, billingPeriod: 'trial', durationDays: 1, isFree: true },
+      { code: '1M', price: 49900, billingPeriod: 'monthly', durationDays: 30, isFree: false },
+      { code: '2M', price: 85900, billingPeriod: 'monthly', durationDays: 60, isFree: false },
+      { code: '3M', price: 129900, billingPeriod: 'monthly', durationDays: 90, isFree: false },
+      { code: '6M', price: 225900, billingPeriod: 'monthly', durationDays: 180, isFree: false },
+      { code: '1Y', price: 399000, billingPeriod: 'annual', durationDays: 365, isFree: false },
+      { code: 'LIFETIME', price: 799000, billingPeriod: 'lifetime', durationDays: null, isFree: false }
+    ]);
   });
 });

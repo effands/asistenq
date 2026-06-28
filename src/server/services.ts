@@ -7,7 +7,9 @@ import type {
   MemberAccount,
   Order,
   Product,
+  ProductPlan,
   ProductType,
+  ProductVisibility,
   Subscription
 } from '../shared/types';
 import type { Store } from './store';
@@ -109,8 +111,12 @@ export function createProductRecord(store: Store, input: {
   name: string;
   slug: string;
   type: ProductType;
+  category?: string;
+  visibility?: ProductVisibility;
   billingPeriod: BillingPeriod;
   price: number;
+  active?: boolean;
+  featured?: boolean;
   headline?: string;
   description?: string;
   coverUrl?: string;
@@ -124,6 +130,46 @@ export function createProductRecord(store: Store, input: {
   store.data.products.push(product);
   store.save();
   return product;
+}
+
+export function createPlanRecord(store: Store, input: {
+  productId: string;
+  code: string;
+  name: string;
+  price: number;
+  billingPeriod: BillingPeriod;
+  durationDays: number | null;
+  isFree?: boolean;
+  isActive?: boolean;
+}): ProductPlan {
+  if (!store.data.products.some((product) => product.id === input.productId)) {
+    throw new Error('product not found');
+  }
+
+  const code = input.code.trim().toUpperCase();
+  const existingPlan = store.data.plans.find((plan) => (
+    plan.productId === input.productId && plan.code === code
+  ));
+
+  if (existingPlan) {
+    return existingPlan;
+  }
+
+  const plan: ProductPlan = {
+    id: createId('plan'),
+    productId: input.productId,
+    code,
+    name: input.name,
+    price: input.price,
+    billingPeriod: input.billingPeriod,
+    durationDays: input.durationDays,
+    isFree: input.isFree ?? input.price === 0,
+    isActive: input.isActive ?? true
+  };
+
+  store.data.plans.push(plan);
+  store.save();
+  return plan;
 }
 
 export function createCheckout(store: Store, memberId: string, productId: string): Order {

@@ -1,6 +1,32 @@
-import { createProductRecord } from './services';
+import { createPlanRecord, createProductRecord } from './services';
 import type { Store } from './store';
 import bcrypt from 'bcryptjs';
+import type { BillingPeriod, Product, ProductType, ProductVisibility } from '../shared/types';
+
+type SeedProduct = {
+  name: string;
+  slug: string;
+  type: ProductType;
+  category: string;
+  visibility: ProductVisibility;
+  billingPeriod: BillingPeriod;
+  price: number;
+  featured: boolean;
+  headline: string;
+  description: string;
+  coverUrl: string;
+  accessUrl: string;
+};
+
+function ensureProduct(store: Store, input: SeedProduct): Product {
+  const existingProduct = store.data.products.find((product) => product.slug === input.slug);
+
+  if (existingProduct) {
+    return existingProduct;
+  }
+
+  return createProductRecord(store, input);
+}
 
 export async function seedInitialData(store: Store): Promise<void> {
   if (!store.data.admins.some((admin) => admin.role === 'super_admin')) {
@@ -16,25 +42,93 @@ export async function seedInitialData(store: Store): Promise<void> {
     });
   }
 
-  if (store.data.products.length === 0) {
-    createProductRecord(store, {
+  const vjStudio = ensureProduct(store, {
+    name: 'VJ Studio Pro',
+    slug: 'vjstudio',
+    type: 'tool',
+    category: 'Video Editing',
+    visibility: 'public',
+    billingPeriod: 'monthly',
+    price: 49900,
+    featured: true,
+    headline: 'Lisensi resmi untuk workflow video YouTube yang lebih cepat.',
+    description: 'VJ Studio Pro membantu creator mengelola workflow produksi dan editing video dengan aktivasi lisensi per perangkat.',
+    coverUrl: '',
+    accessUrl: '/member/licenses'
+  });
+
+  [
+    { code: 'TRIAL', name: 'Trial 1 Hari', price: 0, billingPeriod: 'trial' as const, durationDays: 1, isFree: true },
+    { code: '1M', name: 'Lisensi 1 Bulan', price: 49900, billingPeriod: 'monthly' as const, durationDays: 30, isFree: false },
+    { code: '2M', name: 'Lisensi 2 Bulan', price: 85900, billingPeriod: 'monthly' as const, durationDays: 60, isFree: false },
+    { code: '3M', name: 'Lisensi 3 Bulan', price: 129900, billingPeriod: 'monthly' as const, durationDays: 90, isFree: false },
+    { code: '6M', name: 'Lisensi 6 Bulan', price: 225900, billingPeriod: 'monthly' as const, durationDays: 180, isFree: false },
+    { code: '1Y', name: 'Lisensi 1 Tahun', price: 399000, billingPeriod: 'annual' as const, durationDays: 365, isFree: false },
+    { code: 'LIFETIME', name: 'Lisensi Lifetime', price: 799000, billingPeriod: 'lifetime' as const, durationDays: null, isFree: false }
+  ].forEach((plan) => {
+    createPlanRecord(store, {
+      productId: vjStudio.id,
+      ...plan
+    });
+  });
+
+  ensureProduct(store, {
+    name: 'Kelas YouTube Online',
+    slug: 'kelas-youtube-online',
+    type: 'course',
+    category: 'E-Learning',
+    visibility: 'public',
+    billingPeriod: 'annual',
+    price: 799000,
+    featured: true,
+    headline: 'Kelas tahunan untuk membangun channel YouTube dengan workflow yang rapi.',
+    description: 'Akses video tutorial, materi pendukung, dan update kelas untuk produksi konten YouTube.',
+    coverUrl: '',
+    accessUrl: '/member/courses'
+  });
+
+  ensureProduct(store, {
+    name: 'YouTube Starter Kit',
+    slug: 'youtube-starter-kit',
+    type: 'free',
+    category: 'Resource',
+    visibility: 'public',
+    billingPeriod: 'one_time',
+    price: 0,
+    featured: false,
+    headline: 'Resource gratis untuk memulai workflow konten YouTube.',
+    description: 'Template dan checklist dasar yang bisa dipakai sebelum membeli tools atau kelas premium.',
+    coverUrl: '',
+    accessUrl: '/member/resources'
+  });
+
+  if (!store.data.products.some((product) => product.slug === 'youtube-cutter')) {
+    ensureProduct(store, {
       name: 'AsistenQ YouTube Cutter',
       slug: 'youtube-cutter',
       type: 'tool',
+      category: 'Video Editing',
+      visibility: 'private',
       billingPeriod: 'monthly',
       price: 99000,
+      featured: false,
       headline: 'Rapikan workflow editing YouTube lebih cepat.',
       description: 'Tools awal untuk membantu creator memangkas proses kerja video harian.',
       coverUrl: '',
       accessUrl: '/member/licenses'
     });
+  }
 
-    createProductRecord(store, {
+  if (!store.data.products.some((product) => product.slug === 'kelas-creator')) {
+    ensureProduct(store, {
       name: 'Kelas AsistenQ Creator',
       slug: 'kelas-creator',
       type: 'class',
+      category: 'E-Learning',
+      visibility: 'private',
       billingPeriod: 'annual',
       price: 799000,
+      featured: false,
       headline: 'Akses tahunan ke kelas video dan materi creator.',
       description: 'Materi premium untuk editing, produksi konten, dan workflow YouTube.',
       coverUrl: '',

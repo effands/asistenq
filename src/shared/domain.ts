@@ -3,6 +3,7 @@ import type {
   BillingPeriod,
   Product,
   ProductType,
+  ProductVisibility,
   Subscription
 } from './types';
 
@@ -10,9 +11,12 @@ type ProductInput = {
   name: string;
   slug: string;
   type: ProductType;
+  category?: string;
+  visibility?: ProductVisibility;
   billingPeriod: BillingPeriod;
   price: number;
   active?: boolean;
+  featured?: boolean;
   headline?: string;
   description?: string;
   coverUrl?: string;
@@ -31,9 +35,12 @@ export function createProduct(input: ProductInput): Product {
     name: input.name,
     slug: input.slug,
     type: input.type,
+    category: input.category,
+    visibility: input.visibility ?? 'public',
     billingPeriod: input.billingPeriod,
     price: input.price,
     active: input.active ?? true,
+    featured: input.featured ?? false,
     headline: input.headline ?? input.name,
     description: input.description ?? '',
     coverUrl: input.coverUrl ?? '',
