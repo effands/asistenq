@@ -356,8 +356,8 @@ app.post('/api/admin/login', async (req, res) => {
 
     res.setHeader('Set-Cookie', sessionCookie(token, isProduction));
     res.json({ token, user: { id: admin.id, name: admin.name, email: admin.email, role: admin.role, scopes: admin.scopes } });
-  } catch (error) {
-    res.status(401).json({ message: error instanceof Error ? error.message : 'login failed' });
+  } catch {
+    res.status(401).json({ message: 'Email atau password admin salah.' });
   }
 });
 

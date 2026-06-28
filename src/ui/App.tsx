@@ -514,6 +514,8 @@ function LoginBox({ title, accountType = 'member', footer, onSubmit, showName = 
         }
 
         await onSubmit(name, email, password, whatsapp, telegramId);
+      } catch (error) {
+        setNotice(error instanceof Error ? error.message : 'Login gagal. Periksa kembali data akun.');
       } finally {
         setBusy(false);
       }
@@ -525,12 +527,12 @@ function LoginBox({ title, accountType = 'member', footer, onSubmit, showName = 
       {showName && mode === 'login' && <label>Nama<input value={name} onChange={(event) => setName(event.target.value)} placeholder="Nama lengkap" /></label>}
       {showName && mode === 'login' && <label>Nomor WhatsApp Aktif<input value={whatsapp} onChange={(event) => setWhatsapp(event.target.value)} placeholder="62812..." inputMode="tel" /></label>}
       {showName && mode === 'login' && <label>ID Telegram<input value={telegramId} onChange={(event) => setTelegramId(event.target.value)} placeholder="@username atau user id" /></label>}
-      {mode !== 'reset' && <label>Email<input value={email} onChange={(event) => setEmail(event.target.value)} placeholder="effands@gmail.com" type="email" /></label>}
-      {mode !== 'forgot' && <label>Password<input value={password} onChange={(event) => setPassword(event.target.value)} placeholder="Minimal 8 karakter" type="password" /></label>}
+      {mode !== 'reset' && <label>Email<input autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="nama@email.com" type="email" /></label>}
+      {mode !== 'forgot' && <label>Password<input autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="Minimal 8 karakter" type="password" /></label>}
       {mode === 'reset' && <label>Token Reset<input value={resetToken} onChange={(event) => setResetToken(event.target.value)} placeholder="Token reset password" /></label>}
       {notice && <p className="form-notice">{notice}</p>}
       <button className="primary" disabled={busy}>
-        <LogIn size={18} /> {mode === 'forgot' ? 'Kirim instruksi reset' : mode === 'reset' ? 'Simpan password baru' : submitLabel ?? 'Masuk'}
+        {busy ? <RefreshCw className="spin-icon" size={18} /> : <LogIn size={18} />} {busy ? 'Memeriksa...' : mode === 'forgot' ? 'Kirim instruksi reset' : mode === 'reset' ? 'Simpan password baru' : submitLabel ?? 'Masuk'}
       </button>
       <div className="auth-links">
         <button
@@ -618,9 +620,14 @@ function AdminPanel({
     return (
       <section className="admin-login-screen">
         <div className="admin-login-copy">
-          <span className="chip">Command center</span>
-          <h2>Kelola produk, lisensi, order QRIS, dan kelas premium dari satu panel.</h2>
-          <p>Panel ini untuk operasional internal. Website publik sudah dipisah agar pengunjung melihat marketplace yang bersih.</p>
+          <span className="chip">AsistenQ Control Room</span>
+          <h2>Satu meja kerja untuk seluruh operasional.</h2>
+          <p>Kelola produk, member, transaksi, dan lisensi dengan alur yang ringkas.</p>
+          <div className="admin-login-points">
+            <span><PackagePlus size={17} /> Produk & tools</span>
+            <span><Users size={17} /> Data member</span>
+            <span><KeyRound size={17} /> Kontrol lisensi</span>
+          </div>
         </div>
         <LoginBox title="Login Super Admin" accountType="admin" onSubmit={(_, email, password) => onLogin(email, password)} />
       </section>
