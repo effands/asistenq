@@ -203,7 +203,7 @@ export function App() {
 
   if (route === 'member') {
     return (
-      <PublicShell navigate={navigate} activeRoute="member">
+      <PublicShell navigate={navigate} activeRoute="member" memberSession={memberSession}>
         <MemberPanel
           session={memberSession}
           products={products}
@@ -256,11 +256,18 @@ function Brand({ compact = false }: { compact?: boolean }) {
   );
 }
 
-function PublicShell({ children, navigate, activeRoute }: {
+function PublicShell({ children, navigate, activeRoute, memberSession }: {
   children: ReactNode;
   navigate: (route: Route) => void;
   activeRoute: Route;
+  memberSession?: LoginResult | null;
 }) {
+  const ctaLabel = activeRoute === 'member'
+    ? 'Area Member'
+    : 'Masuk Member';
+  const ctaSubLabel = activeRoute === 'member'
+    ? 'Buka dashboard member'
+    : 'Login untuk akses lisensi';
   return (
     <div className="public-page">
       <div className="noise-layer" />
@@ -273,7 +280,17 @@ function PublicShell({ children, navigate, activeRoute }: {
           <button className={activeRoute === 'member' ? 'active' : ''} onClick={() => navigate('member')}>Member</button>
         </nav>
         <div className="nav-actions">
-          <button className="primary public-cta" onClick={() => navigate('member')}>Masuk Member</button>
+          {memberSession ? (
+            <button className="primary public-cta public-cta-logged" onClick={() => navigate('member')}>
+              <span>{ctaLabel}</span>
+              <small>{memberSession.user.name} • {memberSession.user.email}</small>
+            </button>
+          ) : (
+            <button className="primary public-cta" onClick={() => navigate('member')}>
+              <span>{ctaLabel}</span>
+              <small>{ctaSubLabel}</small>
+            </button>
+          )}
         </div>
       </header>
       {children}
@@ -1090,7 +1107,7 @@ function MemberPanel({ session, products, dashboard, onRegister, onLogin, onChec
         <div>
           <span className="chip">Member Workspace</span>
           <h1>Halo, {session.user.name}. Ini pusat aksesmu.</h1>
-          <p>Cek token lisensi, status device, produk, dan course dari satu halaman yang lebih ringkas.</p>
+          <p>Cek token lisensi, status device, produk, dan course dari satu halaman yang lebih ringkas. Ringkasan di kanan sengaja dibuat kecil supaya fokus tetap ke data utama.</p>
         </div>
         <div className="member-stat-card">
           <span>Total lisensi</span>
