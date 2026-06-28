@@ -22,7 +22,7 @@ const emptyData = (): DatabaseShape => ({
   auditLogs: []
 });
 
-export function normalizeData(data: Partial<DatabaseShape>): DatabaseShape {
+function normalizeData(data: Partial<DatabaseShape>): DatabaseShape {
   return {
     ...emptyData(),
     ...data,

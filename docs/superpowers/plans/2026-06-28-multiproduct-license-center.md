@@ -228,6 +228,8 @@ git commit -m "feat: add multiproduct data model"
 - Modify: `E:\asistenq\src\server\services.ts`
 - Test: `E:\asistenq\tests\storefront.test.ts`
 
+**Task 2 follow-up note:** Align product creation and seed paths with the expanded `ProductType` and `BillingPeriod` unions introduced in Task 1; do not widen API/UI behavior beyond the seeded product and plan flows until the later API/UI tasks.
+
 - [ ] **Step 1: Add failing seed tests**
 
 Append to `tests/storefront.test.ts`:
