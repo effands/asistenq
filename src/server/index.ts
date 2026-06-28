@@ -32,6 +32,7 @@ import {
   verifyLicense,
   verifyAdminLogin,
   verifyMemberLogin,
+  updateMemberAccount,
   verifyVoucher
 } from './services';
 import { createFileStore } from './store';
@@ -584,6 +585,18 @@ app.post('/api/admin/admins', requireSession, requireAdminScope('admins'), async
 
 app.get('/api/admin/products', requireSession, requireAdminScope('products'), (_req, res) => {
   res.json(store.data.products.map(publicProduct));
+});
+
+
+app.put('/api/admin/members/:id', requireSession, requireAdminScope('members'), async (req, res) => {
+  const schema = z.object({
+    name: z.string().optional(),
+    active: z.boolean().optional(),
+    password: z.string().min(6).optional()
+  });
+  const body = schema.parse(req.body);
+  const member = await updateMemberAccount(store, req.params.id as string, body);
+  res.json({ success: true, member });
 });
 
 app.get('/api/admin/members', requireSession, requireAdminScope('products'), (_req, res) => {

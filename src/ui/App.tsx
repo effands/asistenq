@@ -159,6 +159,19 @@ export function App() {
     loadCatalog().catch((error) => setMessage(error.message));
   }, []);
 
+  const onUpdateMember = async (memberId: string, input: any) => {
+    if (!adminSession) return;
+    await apiRequest(`/admin/members/${memberId}`, {
+      method: 'PUT',
+      token: adminSession.token,
+      body: input
+    });
+    const loaded = await apiRequest<AdminMemberRow[]>('/admin/members', {
+      token: adminSession.token
+    });
+    setAdminMembers(loaded);
+  };
+
   if (route === 'admin') {
     return (
       <AdminShell
@@ -170,6 +183,7 @@ export function App() {
         theme={adminTheme}
       >
         <AdminPanel
+          onUpdateMember={onUpdateMember}
           activeSection={adminSection}
           onSectionChange={setAdminSection}
           session={adminSession}
@@ -589,6 +603,7 @@ function AdminPanel({
   onImportLandingZip,
   onRefreshLicenses,
   onRefreshMembers,
+  onUpdateMember,
   onResetOperationalData,
   onGenerateLicense,
   onResetLicense,
@@ -633,6 +648,7 @@ function AdminPanel({
   onImportLandingZip: (productId: string, file: File) => Promise<void>;
   onRefreshLicenses: () => Promise<void>;
   onRefreshMembers: () => Promise<void>;
+  onUpdateMember: (id: string, input: any) => Promise<void>;
   onResetOperationalData: () => Promise<void>;
   onGenerateLicense: (input: { productSlug: string; planCode: string; email: string; hwid: string }) => Promise<void>;
   onResetLicense: (licenseId: string, newHwid: string) => Promise<void>;
@@ -695,7 +711,7 @@ function AdminPanel({
   }
 
   if (activeSection === 'members') {
-    return <AdminMemberPanel members={members} onRefresh={onRefreshMembers} />;
+    return <AdminMemberPanel members={members} onRefresh={onRefreshMembers} onUpdateMember={onUpdateMember} />;
   }
 
   if (activeSection === 'deploy') {
@@ -966,72 +982,6 @@ function AdminLicensePanel({ dashboard, products, onGenerateLicense, onRefresh, 
   );
 }
 
-function AdminMemberPanel({ members, onRefresh }: {
-  members: AdminMemberRow[];
-  onRefresh: () => Promise<void>;
-}) {
-  const [search, setSearch] = useState('');
-  const [busy, setBusy] = useState(false);
-  const filteredMembers = members.filter((member) => {
-    const haystack = `${member.name} ${member.email} ${member.whatsapp ?? ''} ${member.telegramId ?? ''}`.toLowerCase();
-    return haystack.includes(search.toLowerCase());
-  });
-
-  return (
-    <section className="admin-content-grid compact-admin-grid">
-      <div className="panel stack wide member-admin-panel">
-        <div className="panel-heading">
-          <div>
-            <p className="section-kicker">Member Database</p>
-            <h2>Daftar Member</h2>
-          </div>
-          <button
-            className="ghost-button"
-            disabled={busy}
-            onClick={async () => {
-              setBusy(true);
-              try {
-                await onRefresh();
-              } finally {
-                setBusy(false);
-              }
-            }}
-          >
-            <RefreshCw size={16} /> Refresh
-          </button>
-        </div>
-        <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Cari nama, email, WhatsApp, atau Telegram..." />
-        <div className="member-table-wrap">
-          <div className="member-table member-table-head" aria-hidden="true">
-            <span>Member</span><span>Kontak</span><span>Status</span><span>Aktivitas</span><span>Daftar</span>
-          </div>
-          <div className="member-admin-list">
-          {filteredMembers.length === 0 && <div className="empty-state">Belum ada member yang cocok.</div>}
-          {filteredMembers.map((member) => (
-            <article className="member-admin-card" key={member.id}>
-              <div className="member-admin-main">
-                <h3>{member.name}</h3>
-                <p>{member.email}</p>
-              </div>
-              <div className="member-admin-contact"><span>WA: {member.whatsapp || '-'}</span><span>TG: {member.telegramId || '-'}</span></div>
-              <span className={`status-dot ${member.active ? 'status-active' : 'status-expired'}`}>{member.active ? 'Aktif' : 'Nonaktif'}</span>
-              <div className="member-admin-stats">
-                <span>{member.licenseCount} lisensi</span>
-                <span>{member.orderCount} order</span>
-                <span>{member.subscriptionCount} akses</span>
-              </div>
-              <div className="member-admin-meta">
-                <span>{formatDate(member.createdAt)}</span>
-                <small>Order: {member.latestOrder ? formatDate(member.latestOrder.createdAt) : '-'}</small>
-              </div>
-            </article>
-          ))}
-          </div>
-        </div>
-      </div>
-    </section>
-  );
-}
 
 function LandingManager({ products, onUpdateProduct }: { products: PublicProduct[]; onUpdateProduct?: (id: string, input: Partial<PublicProduct>) => Promise<void> }) {
   const [selectedSlug, setSelectedSlug] = useState(products[0]?.slug ?? '');
@@ -1078,7 +1028,7 @@ function LandingManager({ products, onUpdateProduct }: { products: PublicProduct
 
   return (
     <section className="admin-content-grid compact-admin-grid">
-      <div className="panel stack">
+      <div className="panel stack wide">
         <div className="panel-heading">
           <div>
             <p className="section-kicker">Landing Builder</p>
@@ -1108,17 +1058,17 @@ function LandingManager({ products, onUpdateProduct }: { products: PublicProduct
         <div className="builder-section">
           <h3>Fitur & Benefit</h3>
           {(config.benefits || []).map((b, i) => (
-            <div key={i} className="builder-item-card">
+            <div key={i} className="builder-item-card" style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
               <input value={b.title} onChange={(e) => {
                 const newB = [...(config.benefits || [])];
                 newB[i].title = e.target.value;
                 updateConfig('benefits', newB);
-              }} placeholder="Judul Benefit" />
+              }} placeholder="Judul Benefit" style={{ flex: 1 }} />
               <input value={b.description} onChange={(e) => {
                 const newB = [...(config.benefits || [])];
                 newB[i].description = e.target.value;
                 updateConfig('benefits', newB);
-              }} placeholder="Deskripsi Singkat" />
+              }} placeholder="Deskripsi Singkat" style={{ flex: 2 }} />
               <button className="ghost-button danger-lite" onClick={() => {
                 const newB = [...(config.benefits || [])];
                 newB.splice(i, 1);
@@ -1127,37 +1077,6 @@ function LandingManager({ products, onUpdateProduct }: { products: PublicProduct
             </div>
           ))}
           <button className="ghost-button" onClick={() => updateConfig('benefits', [...(config.benefits || []), { title: '', description: '' }])}>+ Tambah Benefit</button>
-        </div>
-
-        <div className="builder-section">
-          <h3>Testimoni</h3>
-          {(config.testimonials || []).map((t, i) => (
-            <div key={i} className="builder-item-card">
-              <div className="form-grid">
-                <input value={t.name} onChange={(e) => {
-                  const newT = [...(config.testimonials || [])];
-                  newT[i].name = e.target.value;
-                  updateConfig('testimonials', newT);
-                }} placeholder="Nama (Cth: Budi)" />
-                <input value={t.role} onChange={(e) => {
-                  const newT = [...(config.testimonials || [])];
-                  newT[i].role = e.target.value;
-                  updateConfig('testimonials', newT);
-                }} placeholder="Pekerjaan" />
-              </div>
-              <textarea value={t.content} onChange={(e) => {
-                const newT = [...(config.testimonials || [])];
-                newT[i].content = e.target.value;
-                updateConfig('testimonials', newT);
-              }} placeholder="Komentar testimonial" />
-              <button className="ghost-button danger-lite" onClick={() => {
-                const newT = [...(config.testimonials || [])];
-                newT.splice(i, 1);
-                updateConfig('testimonials', newT);
-              }}>Hapus</button>
-            </div>
-          ))}
-          <button className="ghost-button" onClick={() => updateConfig('testimonials', [...(config.testimonials || []), { name: '', role: '', content: '' }])}>+ Tambah Testimoni</button>
         </div>
       </div>
       
@@ -1172,7 +1091,6 @@ function LandingManager({ products, onUpdateProduct }: { products: PublicProduct
             <strong>{selected.formattedPrice}</strong>
             <div className="mini-checklist">
               {(config.benefits || []).map((b, i) => <span key={i}>{b.title || 'Benefit baru'}</span>)}
-              {(config.testimonials || []).map((t, i) => <span key={i}>Testimoni dari {t.name || '?'}</span>)}
             </div>
             <a href={`/produk/${selected.slug}`} target="_blank" rel="noreferrer" className="primary" style={{ display: 'block', textAlign: 'center', marginTop: '16px' }}>Lihat Landing Page Asli</a>
           </div>
@@ -1182,6 +1100,112 @@ function LandingManager({ products, onUpdateProduct }: { products: PublicProduct
   );
 }
 
+function AdminMemberPanel({ members, onRefresh, onUpdateMember }: {
+  members: AdminMemberRow[];
+  onRefresh: () => Promise<void>;
+  onUpdateMember: (id: string, input: { name?: string; active?: boolean; password?: string }) => Promise<void>;
+}) {
+  const [search, setSearch] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editName, setEditName] = useState('');
+  const [editPassword, setEditPassword] = useState('');
+
+  const filteredMembers = members.filter((member) => {
+    const haystack = `${member.name} ${member.email} ${member.whatsapp ?? ''} ${member.telegramId ?? ''}`.toLowerCase();
+    return haystack.includes(search.toLowerCase());
+  });
+
+  const handleAction = async (action: () => Promise<void>) => {
+    setBusy(true);
+    try {
+      await action();
+    } catch (e: any) {
+      alert('Error: ' + e.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const startEdit = (member: AdminMemberRow) => {
+    setEditingId(member.id);
+    setEditName(member.name);
+    setEditPassword('');
+  };
+
+  return (
+    <section className="admin-content-grid compact-admin-grid">
+      <div className="panel stack wide member-admin-panel">
+        <div className="panel-heading">
+          <div>
+            <p className="section-kicker">Member Database</p>
+            <h2>Daftar Member</h2>
+          </div>
+          <button className="ghost-button" disabled={busy} onClick={() => handleAction(onRefresh)}>
+            <RefreshCw size={16} /> Refresh
+          </button>
+        </div>
+        <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Cari nama, email, WhatsApp, atau Telegram..." />
+        <div className="member-table-wrap">
+          <div className="member-table member-table-head" aria-hidden="true">
+            <span>Member</span><span>Kontak</span><span>Status</span><span>Aktivitas</span><span>Daftar</span><span>Aksi</span>
+          </div>
+          <div className="member-admin-list">
+          {filteredMembers.length === 0 && <div className="empty-state">Belum ada member yang cocok.</div>}
+          {filteredMembers.map((member) => (
+            <article className="member-admin-card" key={member.id}>
+              {editingId === member.id ? (
+                <div className="member-edit-form">
+                  <h4>Edit Member</h4>
+                  <input value={editName} onChange={e => setEditName(e.target.value)} placeholder="Nama member" />
+                  <input value={editPassword} onChange={e => setEditPassword(e.target.value)} placeholder="Password baru (opsional, min 6 char)" type="password" />
+                  <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
+                    <button className="primary" onClick={() => handleAction(async () => {
+                      const payload: any = { name: editName };
+                      if (editPassword.length >= 6) payload.password = editPassword;
+                      await onUpdateMember(member.id, payload);
+                      setEditingId(null);
+                    })}>Simpan</button>
+                    <button className="ghost-button" onClick={() => setEditingId(null)}>Batal</button>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <div className="member-admin-main">
+                    <h3>{member.name}</h3>
+                    <p>{member.email}</p>
+                  </div>
+                  <div className="member-admin-contact"><span>WA: {member.whatsapp || '-'}</span><span>TG: {member.telegramId || '-'}</span></div>
+                  <span className={`status-dot ${member.active ? 'status-active' : 'status-expired'}`}>{member.active ? 'Aktif' : 'Banned'}</span>
+                  <div className="member-admin-stats">
+                    <span>{member.licenseCount} lisensi</span>
+                    <span>{member.orderCount} order</span>
+                    <span>{member.subscriptionCount} akses</span>
+                  </div>
+                  <div className="member-admin-meta">
+                    <span>{formatDate(member.createdAt)}</span>
+                    <small>Order: {member.latestOrder ? formatDate(member.latestOrder.createdAt) : '-'}</small>
+                  </div>
+                  <div className="member-admin-actions" style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    <button className="ghost-button" disabled={busy} onClick={() => startEdit(member)}>Edit</button>
+                    <button 
+                      className={`ghost-button ${member.active ? 'danger-lite' : ''}`} 
+                      disabled={busy} 
+                      onClick={() => handleAction(() => onUpdateMember(member.id, { active: !member.active }))}
+                    >
+                      {member.active ? 'Ban' : 'Unban'}
+                    </button>
+                  </div>
+                </>
+              )}
+            </article>
+          ))}
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
 function DeployPanel({ settings, onDeployUpdate, onRefreshBotStatus, onSaveSettings, onStartBot, onStopBot }: {
   settings: DeploymentSettingsResult | null;
   onDeployUpdate: () => Promise<{ ok: boolean; message: string; stdout?: string; stderr?: string; detail?: string }>;
