@@ -585,6 +585,17 @@ function AdminPanel({
     return <DeployPanel settings={deploymentSettings} onDeployUpdate={onDeployUpdate} onSaveSettings={onSaveDeploymentSettings} />;
   }
 
+  return <AdminDashboardPanel onResetOperationalData={onResetOperationalData} products={products} summary={summary} />;
+}
+
+function AdminDashboardPanel({ products, summary, onResetOperationalData }: {
+  products: PublicProduct[];
+  summary: Summary | null;
+  onResetOperationalData: () => Promise<void>;
+}) {
+  const [resetBusy, setResetBusy] = useState(false);
+  const [resetNotice, setResetNotice] = useState('');
+
   return (
     <section className="admin-content-grid">
       <div className="metrics">
@@ -602,7 +613,25 @@ function AdminPanel({
           <span className="soft-badge">Local</span>
         </div>
         <p className="muted">Members dan produk tetap disimpan. Order, subscription, lisensi, banned HWID, voucher, dan log sementara akan dikosongkan.</p>
-        <button className="ghost-button danger-lite reset-data-button" onClick={onResetOperationalData}>Reset Data</button>
+        <button
+          className="ghost-button danger-lite reset-data-button"
+          disabled={resetBusy}
+          onClick={async () => {
+            setResetBusy(true);
+            setResetNotice('Mereset data operasional...');
+            try {
+              await onResetOperationalData();
+              setResetNotice('Reset selesai. Order, subscription, lisensi, voucher, dan log sudah kosong.');
+            } catch (error) {
+              setResetNotice(error instanceof Error ? error.message : 'Reset data gagal.');
+            } finally {
+              setResetBusy(false);
+            }
+          }}
+        >
+          {resetBusy ? 'Mereset...' : 'Reset Data'}
+        </button>
+        {resetNotice && <p className="form-notice">{resetNotice}</p>}
       </div>
     </section>
   );

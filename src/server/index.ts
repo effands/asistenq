@@ -40,6 +40,7 @@ const publicDir = path.resolve(process.cwd(), 'dist');
 const hasBuiltFrontend = fs.existsSync(path.join(publicDir, 'index.html'));
 const shouldServeFrontend = isProduction || hasBuiltFrontend;
 const execAsync = promisify(exec);
+const cpanelNodeBin = path.join(process.env.HOME ?? '', 'nodevenv/repositories/asistenq/20/bin');
 
 if (!isProduction) {
   app.use(cors({ origin: ['http://127.0.0.1:3000', 'http://localhost:3000'] }));
@@ -511,18 +512,31 @@ app.post('/api/admin/deploy/update', requireSession, requireAdminScope('products
   const remote = githubToken
     ? `https://${encodeURIComponent(githubToken)}@github.com/${githubRepo}.git`
     : 'origin';
-  const command = `git pull ${remote} ${githubBranch} && npm install --include=dev && npm run build`;
+  const restartCommand = process.platform === 'win32'
+    ? 'if not exist tmp mkdir tmp && type nul > tmp\\restart.txt'
+    : 'mkdir -p tmp && touch tmp/restart.txt';
+  const command = `git pull ${remote} ${githubBranch} && npm install --include=dev && npm run build && ${restartCommand}`;
 
   try {
     const { stdout, stderr } = await execAsync(command, {
       cwd: process.cwd(),
       timeout: 180000,
-      maxBuffer: 1024 * 1024
+      maxBuffer: 1024 * 1024,
+      env: {
+        ...process.env,
+        PATH: fs.existsSync(cpanelNodeBin) ? `${cpanelNodeBin}${path.delimiter}${process.env.PATH ?? ''}` : process.env.PATH
+      }
     });
+
+    if (process.env.NODE_ENV === 'production' || process.env.PASSENGER_APP_ENV) {
+      res.on('finish', () => {
+        setTimeout(() => process.exit(0), 500);
+      });
+    }
 
     res.json({
       ok: true,
-      message: 'Update selesai. Restart aplikasi Node.js dari panel hosting agar proses memakai build terbaru.',
+      message: 'Update selesai. Aplikasi akan restart otomatis.',
       stdout: hideSecret(stdout, githubToken),
       stderr: hideSecret(stderr, githubToken)
     });
