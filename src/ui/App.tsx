@@ -1186,10 +1186,10 @@ function AdminMemberPanel({ members, onRefresh, onUpdateMember }: {
                     <span>{formatDate(member.createdAt)}</span>
                     <small>Order: {member.latestOrder ? formatDate(member.latestOrder.createdAt) : '-'}</small>
                   </div>
-                  <div className="member-admin-actions" style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                    <button className="ghost-button" disabled={busy} onClick={() => startEdit(member)}>Edit</button>
+                  <div className="member-admin-actions">
+                    <button className="ghost-button tiny-button" disabled={busy} onClick={() => startEdit(member)}>Edit</button>
                     <button 
-                      className={`ghost-button ${member.active ? 'danger-lite' : ''}`} 
+                      className={`ghost-button tiny-button ${member.active ? 'danger-lite' : ''}`} 
                       disabled={busy} 
                       onClick={() => handleAction(() => onUpdateMember(member.id, { active: !member.active }))}
                     >
