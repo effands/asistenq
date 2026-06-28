@@ -52,6 +52,27 @@ app.use(express.json());
 
 const landingImportDir = path.resolve('data/landing-imports');
 const bundledLandingDir = path.resolve('landings');
+const ignoredLandingZipPaths = [
+  /^node_modules\//,
+  /^src\//,
+  /^\.git\//,
+  /^\.env(?:\.|$)/,
+  /^package(?:-lock)?\.json$/,
+  /^pnpm-lock\.yaml$/,
+  /^yarn\.lock$/,
+  /^tsconfig(?:\..*)?\.json$/,
+  /^vite\.config\./,
+  /^README(?:\..*)?$/i,
+  /^metadata\.json$/
+];
+
+function normalizeZipEntryName(entryName: string): string {
+  return entryName.replace(/\\/g, '/').replace(/^\/+/, '');
+}
+
+function shouldIgnoreLandingEntry(entryName: string): boolean {
+  return ignoredLandingZipPaths.some((pattern) => pattern.test(entryName));
+}
 
 const loginSchema = z.object({
   email: z.string().email(),
@@ -498,25 +519,43 @@ app.post(
     fs.mkdirSync(targetDir, { recursive: true });
 
     const zip = new AdmZip(req.body);
+    const entries = zip.getEntries();
+    const hasBuiltDist = entries.some((entry) => normalizeZipEntryName(entry.entryName) === 'dist/index.html');
     let fileCount = 0;
+    let ignoredCount = 0;
 
-    for (const entry of zip.getEntries()) {
+    for (const entry of entries) {
       if (entry.isDirectory) continue;
-      fileCount += 1;
-
-      if (fileCount > 300) {
-        res.status(400).json({ message: 'ZIP terlalu besar: maksimal 300 file.' });
-        return;
-      }
 
       const normalizedName = entry.entryName.replace(/\\/g, '/').replace(/^\/+/, '');
       if (!normalizedName || normalizedName.includes('../')) continue;
+      const outputName = hasBuiltDist
+        ? normalizedName.replace(/^dist\//, '')
+        : normalizedName;
 
-      const outputPath = path.resolve(targetDir, normalizedName);
+      if ((hasBuiltDist && normalizedName === outputName) || shouldIgnoreLandingEntry(outputName)) {
+        ignoredCount += 1;
+        continue;
+      }
+
+      fileCount += 1;
+
+      if (fileCount > 300) {
+        res.status(400).json({ message: 'ZIP terlalu besar: maksimal 300 file landing.' });
+        return;
+      }
+
+      const outputPath = path.resolve(targetDir, outputName);
       if (!outputPath.startsWith(targetDir)) continue;
 
       fs.mkdirSync(path.dirname(outputPath), { recursive: true });
       fs.writeFileSync(outputPath, entry.getData());
+    }
+
+    if (!fs.existsSync(path.join(targetDir, 'index.html'))) {
+      fs.rmSync(targetDir, { recursive: true, force: true });
+      res.status(400).json({ message: 'ZIP belum berisi landing siap pakai. Upload folder dist hasil build, atau ZIP yang punya index.html di root.' });
+      return;
     }
 
     product.landingTemplate = 'zip-html';
@@ -528,6 +567,7 @@ app.post(
       ok: true,
       message: `Landing ZIP tersimpan untuk ${product.name}.`,
       fileCount,
+      ignoredCount,
       url: product.accessUrl
     });
   }
