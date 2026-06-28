@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import type {
   AdminScope,
   BillingPeriod,
@@ -105,4 +106,38 @@ export function formatCurrency(amount: number): string {
     currency: 'IDR',
     maximumFractionDigits: 0
   }).format(amount).replace(/\s/g, '');
+}
+
+export function normalizeHwid(hwid: string): string {
+  return hwid.trim().toUpperCase();
+}
+
+export function resolveLicenseExpiry(generatedAt: Date, durationDays: number | null): string {
+  if (durationDays === null) {
+    return 'LIFETIME';
+  }
+
+  const expiresAt = new Date(generatedAt);
+  expiresAt.setUTCDate(expiresAt.getUTCDate() + durationDays);
+
+  const year = expiresAt.getUTCFullYear();
+  const month = String(expiresAt.getUTCMonth() + 1).padStart(2, '0');
+  const day = String(expiresAt.getUTCDate()).padStart(2, '0');
+
+  return `${year}${month}${day}`;
+}
+
+export function generateLicenseKey(input: {
+  hwid: string;
+  expiresAt: string;
+  salt: string;
+}): string {
+  const normalizedHwid = normalizeHwid(input.hwid);
+  const signature = createHash('sha256')
+    .update(`${normalizedHwid}${input.expiresAt}${input.salt}`, 'utf8')
+    .digest('hex')
+    .slice(0, 16)
+    .toUpperCase();
+
+  return `${input.expiresAt}-${signature}`;
 }
