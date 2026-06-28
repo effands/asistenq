@@ -12,14 +12,37 @@ const emptyData = (): DatabaseShape => ({
   admins: [],
   members: [],
   products: [],
+  plans: [],
+  licenses: [],
+  vouchers: [],
+  announcements: [],
+  bannedHwids: [],
   orders: [],
   subscriptions: [],
   auditLogs: []
 });
 
-export function createMemoryStore(initialData: DatabaseShape = emptyData()): Store {
+export function normalizeData(data: Partial<DatabaseShape>): DatabaseShape {
   return {
-    data: structuredClone(initialData),
+    ...emptyData(),
+    ...data,
+    admins: data.admins ?? [],
+    members: data.members ?? [],
+    products: data.products ?? [],
+    plans: data.plans ?? [],
+    licenses: data.licenses ?? [],
+    vouchers: data.vouchers ?? [],
+    announcements: data.announcements ?? [],
+    bannedHwids: data.bannedHwids ?? [],
+    orders: data.orders ?? [],
+    subscriptions: data.subscriptions ?? [],
+    auditLogs: data.auditLogs ?? []
+  };
+}
+
+export function createMemoryStore(initialData: Partial<DatabaseShape> = emptyData()): Store {
+  return {
+    data: structuredClone(normalizeData(initialData)),
     save() {},
     reset() {
       this.data = emptyData();
@@ -39,7 +62,7 @@ export function createFileStore(filePath = path.resolve('data/asistenq.json')): 
   }
 
   return {
-    data: JSON.parse(fs.readFileSync(filePath, 'utf-8')) as DatabaseShape,
+    data: normalizeData(JSON.parse(fs.readFileSync(filePath, 'utf-8')) as Partial<DatabaseShape>),
     save() {
       fs.writeFileSync(filePath, JSON.stringify(this.data, null, 2));
     },
