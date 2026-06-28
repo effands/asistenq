@@ -34,7 +34,8 @@ import {
   type PublicCatalog,
   type PublicOrder,
   type PublicProduct,
-  type Summary
+  type Summary,
+  type TelegramBotStatus
 } from './api';
 
 type Route = 'home' | 'admin' | 'member' | 'product';
@@ -278,6 +279,26 @@ export function App() {
               token: adminSession.token,
               method: 'POST'
             });
+          }}
+          onRefreshBotStatus={async () => {
+            if (!adminSession) throw new Error('Login admin dulu.');
+            const botStatus = await apiRequest<TelegramBotStatus>('/admin/bot/status', { token: adminSession.token });
+            setDeploymentSettings((current) => current ? { ...current, botStatus } : current);
+            return botStatus;
+          }}
+          onStartBot={async () => {
+            if (!adminSession) throw new Error('Login admin dulu.');
+            const botStatus = await apiRequest<TelegramBotStatus>('/admin/bot/start', { token: adminSession.token, method: 'POST' });
+            setDeploymentSettings((current) => current ? { ...current, botStatus } : current);
+            setMessage(botStatus.message);
+            return botStatus;
+          }}
+          onStopBot={async () => {
+            if (!adminSession) throw new Error('Login admin dulu.');
+            const botStatus = await apiRequest<TelegramBotStatus>('/admin/bot/stop', { token: adminSession.token, method: 'POST' });
+            setDeploymentSettings((current) => current ? { ...current, botStatus } : current);
+            setMessage(botStatus.message);
+            return botStatus;
           }}
           deploymentSettings={deploymentSettings}
           onSaveDeploymentSettings={async (input) => {
@@ -572,6 +593,9 @@ function AdminPanel({
   onBanLicense,
   onUnbanLicense,
   onDeployUpdate,
+  onRefreshBotStatus,
+  onStartBot,
+  onStopBot,
   deploymentSettings,
   onSaveDeploymentSettings
 }: {
@@ -613,6 +637,9 @@ function AdminPanel({
   onBanLicense: (license: LicenseDashboardRow) => Promise<void>;
   onUnbanLicense: (license: LicenseDashboardRow) => Promise<void>;
   onDeployUpdate: () => Promise<{ ok: boolean; message: string; stdout?: string; stderr?: string; detail?: string }>;
+  onRefreshBotStatus: () => Promise<TelegramBotStatus>;
+  onStartBot: () => Promise<TelegramBotStatus>;
+  onStopBot: () => Promise<TelegramBotStatus>;
   deploymentSettings: DeploymentSettingsResult | null;
   onSaveDeploymentSettings: (input: { githubRepo: string; githubBranch: string; githubToken?: string; telegramBotToken?: string; telegramOwnerId?: string }) => Promise<void>;
 }) {
@@ -670,7 +697,16 @@ function AdminPanel({
   }
 
   if (activeSection === 'deploy') {
-    return <DeployPanel settings={deploymentSettings} onDeployUpdate={onDeployUpdate} onSaveSettings={onSaveDeploymentSettings} />;
+    return (
+      <DeployPanel
+        settings={deploymentSettings}
+        onDeployUpdate={onDeployUpdate}
+        onRefreshBotStatus={onRefreshBotStatus}
+        onSaveSettings={onSaveDeploymentSettings}
+        onStartBot={onStartBot}
+        onStopBot={onStopBot}
+      />
+    );
   }
 
   return <AdminDashboardPanel onNavigate={onSectionChange} onResetOperationalData={onResetOperationalData} products={products} summary={summary} />;
@@ -1034,13 +1070,17 @@ function LandingManager({ products }: { products: PublicProduct[] }) {
   );
 }
 
-function DeployPanel({ settings, onDeployUpdate, onSaveSettings }: {
+function DeployPanel({ settings, onDeployUpdate, onRefreshBotStatus, onSaveSettings, onStartBot, onStopBot }: {
   settings: DeploymentSettingsResult | null;
   onDeployUpdate: () => Promise<{ ok: boolean; message: string; stdout?: string; stderr?: string; detail?: string }>;
+  onRefreshBotStatus: () => Promise<TelegramBotStatus>;
   onSaveSettings: (input: { githubRepo: string; githubBranch: string; githubToken?: string; telegramBotToken?: string; telegramOwnerId?: string }) => Promise<void>;
+  onStartBot: () => Promise<TelegramBotStatus>;
+  onStopBot: () => Promise<TelegramBotStatus>;
 }) {
   const [busy, setBusy] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [botBusy, setBotBusy] = useState(false);
   const [log, setLog] = useState('Belum ada update dijalankan.');
   const [settingsNotice, setSettingsNotice] = useState('');
   const [githubRepo, setGithubRepo] = useState(settings?.githubRepo ?? 'effands/asistenq');
@@ -1049,6 +1089,7 @@ function DeployPanel({ settings, onDeployUpdate, onSaveSettings }: {
   const [telegramBotToken, setTelegramBotToken] = useState('');
   const [telegramOwnerId, setTelegramOwnerId] = useState(settings?.telegramOwnerId ?? '');
   const [telegramNotice, setTelegramNotice] = useState('');
+  const botStatus = settings?.botStatus;
 
   useEffect(() => {
     if (settings) {
@@ -1154,6 +1195,48 @@ function DeployPanel({ settings, onDeployUpdate, onSaveSettings }: {
           <label>Bot Token<input value={telegramBotToken} onChange={(event) => setTelegramBotToken(event.target.value)} placeholder={settings?.maskedTelegramBotToken || 'Token dari BotFather'} type="password" /></label>
         </div>
         <button className="primary" disabled={saving}>{saving ? 'Menyimpan...' : 'Simpan Token Telegram'}</button>
+        <div className="bot-control-strip">
+          <div>
+            <span className={`bot-dot ${botStatus?.running ? 'running' : ''}`} />
+            <b>{botStatus?.running ? 'Bot aktif' : 'Bot mati'}</b>
+            <small>{botStatus?.message ?? 'Status belum dicek.'}{botStatus?.pid ? ` PID ${botStatus.pid}` : ''}</small>
+          </div>
+          <div className="bot-control-actions">
+            <button type="button" className="ghost-button tiny-button" disabled={botBusy} onClick={async () => {
+              setBotBusy(true);
+              try {
+                const result = await onRefreshBotStatus();
+                setTelegramNotice(result.message);
+              } catch (error) {
+                setTelegramNotice(error instanceof Error ? error.message : 'Gagal cek bot.');
+              } finally {
+                setBotBusy(false);
+              }
+            }}><RefreshCw size={13} /> Cek</button>
+            <button type="button" className="ghost-button tiny-button" disabled={botBusy || botStatus?.running} onClick={async () => {
+              setBotBusy(true);
+              try {
+                const result = await onStartBot();
+                setTelegramNotice(result.message);
+              } catch (error) {
+                setTelegramNotice(error instanceof Error ? error.message : 'Bot gagal start.');
+              } finally {
+                setBotBusy(false);
+              }
+            }}><PlayCircle size={13} /> Start</button>
+            <button type="button" className="ghost-button tiny-button" disabled={botBusy || !botStatus?.running} onClick={async () => {
+              setBotBusy(true);
+              try {
+                const result = await onStopBot();
+                setTelegramNotice(result.message);
+              } catch (error) {
+                setTelegramNotice(error instanceof Error ? error.message : 'Bot gagal stop.');
+              } finally {
+                setBotBusy(false);
+              }
+            }}>Stop</button>
+          </div>
+        </div>
         {telegramNotice && <p className="form-notice">{telegramNotice}</p>}
       </form>
     </section>

@@ -1,7 +1,8 @@
 """Telegram operator bot for the AsistenQ licensing API.
 
 No secret is stored in this file. Configure TELEGRAM_BOT_TOKEN,
-TELEGRAM_OWNER_ID, ASISTENQ_ADMIN_EMAIL, and ASISTENQ_ADMIN_PASSWORD.
+TELEGRAM_OWNER_ID, and ASISTENQ_BOT_SECRET. When the bot is started from
+the AsistenQ admin panel, those values are passed automatically.
 """
 
 import json
@@ -26,8 +27,7 @@ LOCAL_SETTINGS = local_deployment_settings()
 API_BASE = os.environ.get("ASISTENQ_API_BASE", "https://asistenq.com/api").rstrip("/")
 BOT_TOKEN = (os.environ.get("TELEGRAM_BOT_TOKEN") or LOCAL_SETTINGS.get("telegramBotToken") or "").strip()
 OWNER_ID = (os.environ.get("TELEGRAM_OWNER_ID") or LOCAL_SETTINGS.get("telegramOwnerId") or "").strip()
-ADMIN_EMAIL = os.environ.get("ASISTENQ_ADMIN_EMAIL", "").strip()
-ADMIN_PASSWORD = os.environ.get("ASISTENQ_ADMIN_PASSWORD", "").strip()
+BOT_SECRET = (os.environ.get("ASISTENQ_BOT_SECRET") or LOCAL_SETTINGS.get("botApiSecret") or "").strip()
 STATE_FILE = Path(os.environ.get("ASISTENQ_BOT_STATE", "data/telegram-bot-state.json"))
 
 
@@ -55,17 +55,9 @@ def telegram(method: str, body: Optional[Dict[str, Any]] = None) -> Any:
     return request_json(f"https://api.telegram.org/bot{BOT_TOKEN}/{method}", "POST", body or {})
 
 
-def admin_token() -> str:
-    result = request_json(f"{API_BASE}/admin/login", "POST", {
-        "email": ADMIN_EMAIL,
-        "password": ADMIN_PASSWORD,
-    })
-    return str(result["token"])
-
-
 def api(path: str, method: str = "GET", body: Optional[Dict[str, Any]] = None) -> Any:
     return request_json(f"{API_BASE}{path}", method, body, {
-        "Authorization": f"Bearer {admin_token()}"
+        "x-asistenq-bot-secret": BOT_SECRET
     })
 
 
@@ -90,14 +82,14 @@ def handle(text: str) -> str:
     if command in {"/start", "/help"}:
         return command_help()
     if command == "/status":
-        summary = api("/admin/summary")
+        summary = api("/bot/admin-summary")
         return (
             f"AsistenQ aktif\nProduk: {summary['products']}\n"
             f"Member: {summary['members']}\nOrder: {summary['orders']}\n"
             f"Lisensi: {summary.get('licenses', 0)}"
         )
     if command == "/generate" and len(parts) == 5:
-        result = api("/license/generate", "POST", {
+        result = api("/bot/license-generate", "POST", {
             "productSlug": parts[1], "planCode": parts[2],
             "email": parts[3], "hwid": parts[4],
         })
@@ -114,8 +106,7 @@ def validate_config() -> None:
     missing = [name for name, value in {
         "TELEGRAM_BOT_TOKEN": BOT_TOKEN,
         "TELEGRAM_OWNER_ID": OWNER_ID,
-        "ASISTENQ_ADMIN_EMAIL": ADMIN_EMAIL,
-        "ASISTENQ_ADMIN_PASSWORD": ADMIN_PASSWORD,
+        "ASISTENQ_BOT_SECRET": BOT_SECRET,
     }.items() if not value]
     if missing:
         raise RuntimeError("Environment belum lengkap: " + ", ".join(missing))

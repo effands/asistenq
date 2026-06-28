@@ -1125,6 +1125,69 @@ p {
   font-size: 10px;
 }
 
+.bot-control-strip {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, .42);
+  padding: 8px 10px;
+}
+
+.admin-dark .bot-control-strip {
+  background: rgba(255, 255, 255, .05);
+}
+
+.bot-control-strip > div:first-child {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 1px 7px;
+  min-width: 0;
+}
+
+.bot-control-strip b {
+  font-size: 12px;
+}
+
+.bot-control-strip small {
+  grid-column: 2;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bot-dot {
+  align-self: center;
+  width: 9px;
+  height: 9px;
+  border-radius: 99px;
+  background: #9aaaa6;
+}
+
+.bot-dot.running {
+  background: #11c7a8;
+  box-shadow: 0 0 0 5px rgba(17, 199, 168, .13);
+}
+
+.bot-control-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 5px;
+}
+
+.tiny-button {
+  min-height: 28px;
+  padding: 5px 8px;
+  border-radius: 999px;
+  font-size: 10px;
+}
+
 .deploy-log {
   overflow: auto;
   max-height: 360px;

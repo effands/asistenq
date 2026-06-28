@@ -166,6 +166,7 @@ export interface DeploymentSettings {
   githubBranch?: string;
   telegramBotToken?: string;
   telegramOwnerId?: string;
+  botApiSecret?: string;
   updatedAt?: string;
 }
 

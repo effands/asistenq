@@ -9,6 +9,7 @@ import { z } from 'zod';
 import { GoogleGenAI, Type } from '@google/genai';
 import { createId, formatCurrency } from '../shared/domain';
 import { clearSessionCookie, readSession, sessionCookie, signSession, requireAdminScope, requireSession } from './auth';
+import { getTelegramBotStatus, startTelegramBot, stopTelegramBot } from './bot-control';
 import { seedInitialData } from './seed';
 import {
   adminLicenseDashboard,
@@ -681,10 +682,20 @@ function hideSecret(text: string, secret: string): string {
   return secret ? text.replaceAll(secret, '***') : text;
 }
 
+function requireBotSecret(req: express.Request, res: express.Response, next: express.NextFunction) {
+  const configuredSecret = store.data.deploymentSettings?.botApiSecret ?? process.env.ASISTENQ_BOT_SECRET ?? '';
+  if (!configuredSecret || req.header('x-asistenq-bot-secret') !== configuredSecret) {
+    res.status(403).json({ message: 'bot secret tidak valid' });
+    return;
+  }
+  next();
+}
+
 app.get('/api/admin/deploy/settings', requireSession, requireAdminScope('products'), (_req, res) => {
   const settings = store.data.deploymentSettings ?? {};
   const token = settings.githubToken ?? process.env.GITHUB_TOKEN ?? '';
   const telegramToken = settings.telegramBotToken ?? process.env.TELEGRAM_BOT_TOKEN ?? '';
+  const botStatus = getTelegramBotStatus(store);
   res.json({
     githubRepo: settings.githubRepo ?? 'effands/asistenq',
     githubBranch: settings.githubBranch ?? 'master',
@@ -693,6 +704,7 @@ app.get('/api/admin/deploy/settings', requireSession, requireAdminScope('product
     hasTelegramBotToken: Boolean(telegramToken),
     maskedTelegramBotToken: maskedSecret(telegramToken),
     telegramOwnerId: settings.telegramOwnerId ?? process.env.TELEGRAM_OWNER_ID ?? '',
+    botStatus,
     updatedAt: settings.updatedAt
   });
 });
@@ -718,9 +730,11 @@ app.post('/api/admin/deploy/settings', requireSession, requireAdminScope('produc
       githubToken: nextToken,
       telegramBotToken: nextTelegramToken,
       telegramOwnerId: nextTelegramOwnerId,
+      botApiSecret: current.botApiSecret,
       updatedAt: new Date().toISOString()
     };
     store.save();
+    const botStatus = getTelegramBotStatus(store);
 
     res.json({
       ok: true,
@@ -732,6 +746,7 @@ app.post('/api/admin/deploy/settings', requireSession, requireAdminScope('produc
       hasTelegramBotToken: Boolean(nextTelegramToken),
       maskedTelegramBotToken: maskedSecret(nextTelegramToken),
       telegramOwnerId: nextTelegramOwnerId,
+      botStatus,
       updatedAt: store.data.deploymentSettings.updatedAt
     });
   } catch (error) {
@@ -739,6 +754,40 @@ app.post('/api/admin/deploy/settings', requireSession, requireAdminScope('produc
       message: 'Token gagal disimpan ke data server.',
       detail: error instanceof Error ? error.message : 'unknown save error'
     });
+  }
+});
+
+app.get('/api/admin/bot/status', requireSession, requireAdminScope('products'), (_req, res) => {
+  res.json(getTelegramBotStatus(store));
+});
+
+app.post('/api/admin/bot/start', requireSession, requireAdminScope('products'), (_req, res) => {
+  res.json(startTelegramBot(store));
+});
+
+app.post('/api/admin/bot/stop', requireSession, requireAdminScope('products'), (_req, res) => {
+  res.json(stopTelegramBot());
+});
+
+app.get('/api/bot/admin-summary', requireBotSecret, (_req, res) => {
+  res.json({
+    products: store.data.products.length,
+    members: store.data.members.length,
+    orders: store.data.orders.length,
+    licenses: store.data.licenses.length,
+    activeSubscriptions: store.data.subscriptions.filter((item) => item.status === 'active').length
+  });
+});
+
+app.post('/api/bot/license-generate', requireBotSecret, (req, res) => {
+  try {
+    const body = generateLicenseSchema.parse(req.body);
+    res.status(201).json(generateToolLicense(store, body));
+  } catch (error) {
+    const message = error instanceof z.ZodError
+      ? error.issues.map((issue) => issue.message).join(', ')
+      : error instanceof Error ? error.message : 'Data lisensi tidak valid.';
+    res.status(400).json({ message });
   }
 });
 
