@@ -9,8 +9,10 @@ import {
   KeyRound,
   LayoutDashboard,
   LogIn,
+  Monitor,
   PackagePlus,
   PlayCircle,
+  RefreshCw,
   ShieldCheck,
   Sparkles,
   UploadCloud,
@@ -19,10 +21,20 @@ import {
 } from 'lucide-react';
 import { useEffect, useState, type ReactNode } from 'react';
 import type { BillingPeriod, ProductType } from '../shared/types';
-import { apiRequest, type ForgotPasswordResult, type LoginResult, type MemberLicense, type PublicCatalog, type PublicProduct, type Summary } from './api';
+import {
+  apiRequest,
+  type AdminLicenseDashboard,
+  type ForgotPasswordResult,
+  type LicenseDashboardRow,
+  type LoginResult,
+  type MemberLicenseDashboard,
+  type PublicCatalog,
+  type PublicProduct,
+  type Summary
+} from './api';
 
 type Route = 'home' | 'admin' | 'member' | 'product';
-type AdminSection = 'dashboard' | 'landing' | 'deploy';
+type AdminSection = 'dashboard' | 'landing' | 'licenses' | 'deploy';
 type AdminTheme = 'light' | 'dark';
 
 const productTypes: ProductType[] = ['tool', 'course', 'ebook', 'video', 'bundle', 'free', 'class'];
@@ -47,7 +59,8 @@ export function App() {
   const [adminSession, setAdminSession] = useState<LoginResult | null>(null);
   const [memberSession, setMemberSession] = useState<LoginResult | null>(null);
   const [summary, setSummary] = useState<Summary | null>(null);
-  const [licenses, setLicenses] = useState<MemberLicense[]>([]);
+  const [memberDashboard, setMemberDashboard] = useState<MemberLicenseDashboard | null>(null);
+  const [adminLicenses, setAdminLicenses] = useState<AdminLicenseDashboard | null>(null);
   const [message, setMessage] = useState('Sistem AsistenQ siap.');
   const [adminSection, setAdminSection] = useState<AdminSection>('dashboard');
   const [adminTheme, setAdminTheme] = useState<AdminTheme>(() => (
@@ -85,9 +98,14 @@ export function App() {
     setSummary(await apiRequest<Summary>('/admin/summary', { token }));
   }
 
+  async function loadAdminLicenses(token = adminSession?.token) {
+    if (!token) return;
+    setAdminLicenses(await apiRequest<AdminLicenseDashboard>('/admin/licenses', { token }));
+  }
+
   async function loadLicenses(token = memberSession?.token) {
     if (!token) return;
-    setLicenses(await apiRequest<MemberLicense[]>('/member/licenses', { token }));
+    setMemberDashboard(await apiRequest<MemberLicenseDashboard>('/member/licenses', { token }));
   }
 
   useEffect(() => {
@@ -119,11 +137,13 @@ export function App() {
           session={adminSession}
           summary={summary}
           products={products}
+          licenses={adminLicenses}
           onLogin={async (email, password) => {
             const result = await apiRequest<LoginResult>('/admin/login', { method: 'POST', body: { email, password } });
             setAdminSession(result);
             setMessage(`Login admin: ${result.user.name}`);
             await loadAdminSummary(result.token);
+            await loadAdminLicenses(result.token);
           }}
           onCreateProduct={async (input) => {
             if (!adminSession) return;
@@ -132,6 +152,42 @@ export function App() {
             await loadCatalog();
             await loadAdminSummary();
             setMessage('Produk baru tersimpan.');
+          }}
+          onRefreshLicenses={async () => {
+            await loadAdminLicenses();
+            setMessage('Data lisensi diperbarui.');
+          }}
+          onGenerateLicense={async (input) => {
+            if (!adminSession) throw new Error('Login admin dulu.');
+            await apiRequest('/license/generate', { token: adminSession.token, method: 'POST', body: input });
+            await loadAdminLicenses(adminSession.token);
+            setMessage(`Lisensi ${input.productSlug} dibuat untuk ${input.email}.`);
+          }}
+          onResetLicense={async (licenseId, newHwid) => {
+            if (!adminSession) throw new Error('Login admin dulu.');
+            await apiRequest('/license/reset-device', { token: adminSession.token, method: 'POST', body: { licenseId, newHwid } });
+            await loadAdminLicenses(adminSession.token);
+            setMessage('Lisensi dipindahkan ke device baru.');
+          }}
+          onBanLicense={async (license) => {
+            if (!adminSession || !license.product?.slug) throw new Error('Data lisensi belum lengkap.');
+            await apiRequest('/license/ban-hwid', {
+              token: adminSession.token,
+              method: 'POST',
+              body: { productSlug: license.product.slug, hwid: license.hwid, reason: 'manual admin action' }
+            });
+            await loadAdminLicenses(adminSession.token);
+            setMessage('HWID diblokir.');
+          }}
+          onUnbanLicense={async (license) => {
+            if (!adminSession || !license.product?.slug) throw new Error('Data lisensi belum lengkap.');
+            await apiRequest('/license/unban-hwid', {
+              token: adminSession.token,
+              method: 'POST',
+              body: { productSlug: license.product.slug, hwid: license.hwid }
+            });
+            await loadAdminLicenses(adminSession.token);
+            setMessage('HWID dipulihkan.');
           }}
           onDeployUpdate={async () => {
             if (!adminSession) throw new Error('Login admin dulu.');
@@ -151,7 +207,7 @@ export function App() {
         <MemberPanel
           session={memberSession}
           products={products}
-          licenses={licenses}
+          dashboard={memberDashboard}
           onRegister={async (name, email, password) => {
             const result = await apiRequest<LoginResult>('/member/register', { method: 'POST', body: { name, email, password } });
             setMemberSession(result);
@@ -172,6 +228,7 @@ export function App() {
               body: { productId }
             });
             setMessage(`QRIS dibuat: ${order.qrisPayload}`);
+            await loadLicenses(memberSession.token);
           }}
         />
       </PublicShell>
@@ -241,7 +298,7 @@ function AdminShell({ activeSection, children, message, navigate, onSectionChang
           <button className={activeSection === 'dashboard' ? 'active' : ''} onClick={() => onSectionChange('dashboard')}><LayoutDashboard size={18} /> Dashboard</button>
           <button className={activeSection === 'landing' ? 'active' : ''} onClick={() => onSectionChange('landing')}><Sparkles size={18} /> Landing</button>
           <button><Boxes size={18} /> Produk</button>
-          <button><KeyRound size={18} /> Lisensi</button>
+          <button className={activeSection === 'licenses' ? 'active' : ''} onClick={() => onSectionChange('licenses')}><KeyRound size={18} /> Lisensi</button>
           <button><Users size={18} /> Member</button>
           <button className={activeSection === 'deploy' ? 'active' : ''} onClick={() => onSectionChange('deploy')}><UploadCloud size={18} /> Update</button>
         </nav>
@@ -340,11 +397,26 @@ function LoginBox({ title, accountType = 'member', onSubmit, showName = false }:
   );
 }
 
-function AdminPanel({ activeSection, session, summary, products, onLogin, onCreateProduct, onDeployUpdate }: {
+function AdminPanel({
+  activeSection,
+  session,
+  summary,
+  products,
+  licenses,
+  onLogin,
+  onCreateProduct,
+  onRefreshLicenses,
+  onGenerateLicense,
+  onResetLicense,
+  onBanLicense,
+  onUnbanLicense,
+  onDeployUpdate
+}: {
   activeSection: AdminSection;
   session: LoginResult | null;
   summary: Summary | null;
   products: PublicProduct[];
+  licenses: AdminLicenseDashboard | null;
   onLogin: (email: string, password: string) => Promise<void>;
   onCreateProduct: (input: {
     name: string;
@@ -355,6 +427,11 @@ function AdminPanel({ activeSection, session, summary, products, onLogin, onCrea
     headline: string;
     description: string;
   }) => Promise<void>;
+  onRefreshLicenses: () => Promise<void>;
+  onGenerateLicense: (input: { productSlug: string; planCode: string; email: string; hwid: string }) => Promise<void>;
+  onResetLicense: (licenseId: string, newHwid: string) => Promise<void>;
+  onBanLicense: (license: LicenseDashboardRow) => Promise<void>;
+  onUnbanLicense: (license: LicenseDashboardRow) => Promise<void>;
   onDeployUpdate: () => Promise<{ ok: boolean; message: string; stdout?: string; stderr?: string; detail?: string }>;
 }) {
   if (!session) {
@@ -374,6 +451,20 @@ function AdminPanel({ activeSection, session, summary, products, onLogin, onCrea
     return <LandingManager products={products} />;
   }
 
+  if (activeSection === 'licenses') {
+    return (
+      <AdminLicensePanel
+        dashboard={licenses}
+        products={products}
+        onBanLicense={onBanLicense}
+        onGenerateLicense={onGenerateLicense}
+        onRefresh={onRefreshLicenses}
+        onResetLicense={onResetLicense}
+        onUnbanLicense={onUnbanLicense}
+      />
+    );
+  }
+
   if (activeSection === 'deploy') {
     return <DeployPanel onDeployUpdate={onDeployUpdate} />;
   }
@@ -388,6 +479,168 @@ function AdminPanel({ activeSection, session, summary, products, onLogin, onCrea
       </div>
       <ProductForm onCreateProduct={onCreateProduct} />
       <ProductTable products={products} />
+    </section>
+  );
+}
+
+function formatDate(value?: string | null) {
+  if (!value) return 'Lifetime';
+  return new Date(value).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' });
+}
+
+function licenseStatusLabel(license: LicenseDashboardRow) {
+  if (license.status === 'generated') return 'Belum diaktivasi';
+  if (license.status === 'active') return 'Aktif';
+  if (license.status === 'banned') return 'Banned';
+  if (license.status === 'expired') return 'Expired';
+  return license.status;
+}
+
+function AdminLicensePanel({ dashboard, products, onGenerateLicense, onRefresh, onResetLicense, onBanLicense, onUnbanLicense }: {
+  dashboard: AdminLicenseDashboard | null;
+  products: PublicProduct[];
+  onGenerateLicense: (input: { productSlug: string; planCode: string; email: string; hwid: string }) => Promise<void>;
+  onRefresh: () => Promise<void>;
+  onResetLicense: (licenseId: string, newHwid: string) => Promise<void>;
+  onBanLicense: (license: LicenseDashboardRow) => Promise<void>;
+  onUnbanLicense: (license: LicenseDashboardRow) => Promise<void>;
+}) {
+  const vjProduct = products.find((product) => product.slug === 'vjstudio') ?? products.find((product) => product.type === 'tool') ?? products[0];
+  const [productSlug, setProductSlug] = useState(vjProduct?.slug ?? 'vjstudio');
+  const productPlans = (dashboard?.plans ?? []).filter((plan) => plan.productSlug === productSlug);
+  const [planCode, setPlanCode] = useState('1M');
+  const [email, setEmail] = useState('buyer@email.com');
+  const [hwid, setHwid] = useState('');
+  const [search, setSearch] = useState('');
+  const [resetValues, setResetValues] = useState<Record<string, string>>({});
+  const [busy, setBusy] = useState(false);
+  const [notice, setNotice] = useState('');
+
+  useEffect(() => {
+    if (!productSlug && vjProduct) {
+      setProductSlug(vjProduct.slug);
+    }
+  }, [productSlug, vjProduct]);
+
+  useEffect(() => {
+    if (productPlans.length > 0 && !productPlans.some((plan) => plan.code === planCode)) {
+      setPlanCode(productPlans[0].code);
+    }
+  }, [planCode, productPlans]);
+
+  const filteredLicenses = (dashboard?.licenses ?? []).filter((license) => {
+    const haystack = `${license.email} ${license.hwid} ${license.key} ${license.product?.name ?? ''}`.toLowerCase();
+    return haystack.includes(search.toLowerCase());
+  });
+
+  async function runAction(action: () => Promise<void>, success: string) {
+    setBusy(true);
+    setNotice('');
+    try {
+      await action();
+      setNotice(success);
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : 'Aksi gagal.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <section className="license-admin-layout">
+      <div className="panel stack license-generator-panel">
+        <div className="panel-heading">
+          <div>
+            <p className="section-kicker">VJ Studio Control Hub</p>
+            <h2>Generate Lisensi</h2>
+          </div>
+          <span className="soft-badge">HWID lock</span>
+        </div>
+        <p className="muted">Buat token lisensi kompatibel dengan generator lama. Token akan tersimpan di database AsistenQ dan bisa dibaca dari member area berdasarkan email pembeli.</p>
+        <form className="license-generate-form" onSubmit={async (event) => {
+          event.preventDefault();
+          await runAction(async () => {
+            await onGenerateLicense({ productSlug, planCode, email, hwid });
+            setHwid('');
+          }, 'Token lisensi berhasil dibuat.');
+        }}>
+          <label>Produk
+            <select value={productSlug} onChange={(event) => setProductSlug(event.target.value)}>
+              {products.filter((product) => product.type === 'tool').map((product) => (
+                <option key={product.id} value={product.slug}>{product.name}</option>
+              ))}
+            </select>
+          </label>
+          <label>Paket
+            <select value={planCode} onChange={(event) => setPlanCode(event.target.value)}>
+              {productPlans.map((plan) => (
+                <option key={plan.id} value={plan.code}>{plan.name} · {plan.formattedPrice}</option>
+              ))}
+            </select>
+          </label>
+          <label>Email Pembeli
+            <input value={email} onChange={(event) => setEmail(event.target.value)} type="email" placeholder="buyer@email.com" />
+          </label>
+          <label>Device ID / HWID
+            <input value={hwid} onChange={(event) => setHwid(event.target.value.toUpperCase())} maxLength={16} placeholder="16 digit HWID pembeli" />
+          </label>
+          <button className="primary" disabled={busy}><KeyRound size={18} /> Generate Token</button>
+        </form>
+        {notice && <p className="form-notice">{notice}</p>}
+      </div>
+
+      <div className="panel stack license-ops-panel">
+        <div className="panel-heading">
+          <div>
+            <p className="section-kicker">License Database</p>
+            <h2>Daftar Lisensi</h2>
+          </div>
+          <button className="ghost-button" onClick={() => runAction(onRefresh, 'Data lisensi diperbarui.')}><RefreshCw size={16} /> Refresh</button>
+        </div>
+        <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Cari email, HWID, atau token..." />
+        <div className="license-table">
+          {filteredLicenses.length === 0 && <div className="empty-state">Belum ada lisensi. Generate token pertama untuk VJ Studio Pro.</div>}
+          {filteredLicenses.map((license) => (
+            <article className="license-row-card" key={license.id}>
+              <div className="license-row-main">
+                <span className={`status-dot status-${license.status}`}>{licenseStatusLabel(license)}</span>
+                <h3>{license.product?.name ?? license.productId}</h3>
+                <p>{license.email}</p>
+              </div>
+              <div className="license-row-meta">
+                <span><Monitor size={15} /> {license.hwid}</span>
+                <span>{license.plan?.name ?? license.planId}</span>
+                <span>Exp: {formatDate(license.expiresAt)}</span>
+              </div>
+              <code className="license-token">{license.key}</code>
+              <div className="license-actions">
+                <button className="ghost-button" onClick={() => navigator.clipboard.writeText(license.key)}>Copy Token</button>
+                {license.status === 'banned'
+                  ? <button className="ghost-button" disabled={busy} onClick={() => runAction(() => onUnbanLicense(license), 'HWID dipulihkan.')}>Unban</button>
+                  : <button className="ghost-button danger-lite" disabled={busy} onClick={() => runAction(() => onBanLicense(license), 'HWID diblokir.')}>Ban</button>}
+              </div>
+              <div className="reset-device-box">
+                <input
+                  value={resetValues[license.id] ?? ''}
+                  onChange={(event) => setResetValues((current) => ({ ...current, [license.id]: event.target.value.toUpperCase() }))}
+                  maxLength={16}
+                  placeholder="HWID baru untuk reset device"
+                />
+                <button
+                  className="primary"
+                  disabled={busy || !resetValues[license.id]}
+                  onClick={() => runAction(
+                    () => onResetLicense(license.id, resetValues[license.id]),
+                    'Device berhasil dipindahkan. HWID lama otomatis dibanned.'
+                  )}
+                >
+                  Reset Device
+                </button>
+              </div>
+            </article>
+          ))}
+        </div>
+      </div>
     </section>
   );
 }
@@ -779,14 +1032,16 @@ function ProductLanding({ isLoading, product, onJoin }: { isLoading: boolean; pr
   );
 }
 
-function MemberPanel({ session, products, licenses, onRegister, onLogin, onCheckout }: {
+function MemberPanel({ session, products, dashboard, onRegister, onLogin, onCheckout }: {
   session: LoginResult | null;
   products: PublicProduct[];
-  licenses: MemberLicense[];
+  dashboard: MemberLicenseDashboard | null;
   onRegister: (name: string, email: string, password: string) => Promise<void>;
   onLogin: (email: string, password: string) => Promise<void>;
   onCheckout: (productId: string) => Promise<void>;
 }) {
+  const [checkoutNotice, setCheckoutNotice] = useState('');
+
   if (!session) {
     return (
       <main className="member-page">
@@ -803,26 +1058,96 @@ function MemberPanel({ session, products, licenses, onRegister, onLogin, onCheck
     );
   }
 
+  const ownedLicenses = dashboard?.licenses ?? [];
+  const paidProducts = products.filter((product) => product.visibility === 'public');
+
   return (
     <main className="member-page">
-      <section className="admin-content-grid two">
-        <div className="panel stack">
-          <h2>Beli Produk</h2>
-          {products.map((product) => (
-            <button className="list-button" key={product.id} onClick={() => onCheckout(product.id)}>
-              <span>{product.name}</span>
-              <strong>{product.formattedPrice}</strong>
-            </button>
-          ))}
+      <section className="member-dashboard-hero">
+        <div>
+          <span className="chip">Member Workspace</span>
+          <h1>Halo, {session.user.name}. Kelola lisensi dan akses produk dari sini.</h1>
+          <p>Akun ini dipakai untuk menyimpan pembelian, token lisensi VJ Studio, status device, dan akses kelas/course AsistenQ.</p>
         </div>
-        <div className="panel stack">
-          <h2>Lisensi Saya</h2>
-          {licenses.length === 0 && <p className="muted">Belum ada lisensi aktif.</p>}
-          {licenses.map((license) => (
-            <div className="license" key={license.id}>
-              <strong>{license.product?.name ?? license.productId}</strong>
-              <span>{license.status} sampai {new Date(license.endsAt).toLocaleDateString('id-ID')}</span>
+        <div className="member-stat-card">
+          <span>Total lisensi</span>
+          <strong>{ownedLicenses.length}</strong>
+          <small>{session.user.email}</small>
+        </div>
+      </section>
+
+      <section className="member-dashboard-grid">
+        <div className="panel stack member-products-panel">
+          <div className="panel-heading">
+            <div>
+              <p className="section-kicker">Marketplace Member</p>
+              <h2>Pilih Produk</h2>
             </div>
+            <span className="soft-badge">QRIS</span>
+          </div>
+          <p className="muted">Pilih produk untuk membuat order QRIS. Setelah pembayaran dikonfirmasi admin, lisensi atau akses kelas akan muncul di dashboard ini.</p>
+          <div className="member-product-list">
+            {paidProducts.map((product) => (
+              <button className="member-product-card" key={product.id} onClick={async () => {
+                setCheckoutNotice('');
+                await onCheckout(product.id);
+                setCheckoutNotice(`Order QRIS dibuat untuk ${product.name}. Cek instruksi pembayaran dari admin.`);
+              }}>
+                <span>{product.type}</span>
+                <strong>{product.name}</strong>
+                <small>{product.headline}</small>
+                <b>{product.price === 0 ? 'Gratis' : product.formattedPrice}</b>
+              </button>
+            ))}
+          </div>
+          {checkoutNotice && <p className="form-notice">{checkoutNotice}</p>}
+        </div>
+
+        <div className="panel stack member-help-panel">
+          <p className="section-kicker">Cara Aktivasi VJ Studio</p>
+          <h2>Aktivasi pakai HWID dan token lisensi.</h2>
+          <div className="mini-checklist">
+            <span>1. Buka VJ Studio Pro di device pembeli.</span>
+            <span>2. Salin Device ID / HWID dari aplikasi.</span>
+            <span>3. Admin generate token lisensi berdasarkan HWID itu.</span>
+            <span>4. Member salin token dari dashboard ini lalu aktivasi di aplikasi.</span>
+          </div>
+        </div>
+      </section>
+
+      <section className="panel stack member-license-panel">
+        <div className="panel-heading">
+          <div>
+            <p className="section-kicker">License Vault</p>
+            <h2>Lisensi Saya</h2>
+          </div>
+          <span className="soft-badge">{ownedLicenses.length} lisensi</span>
+        </div>
+        {ownedLicenses.length === 0 && (
+          <div className="empty-state">
+            Belum ada lisensi aktif untuk email ini. Setelah admin membuat lisensi VJ Studio dengan email akunmu, token akan muncul otomatis di sini.
+          </div>
+        )}
+        <div className="member-license-grid">
+          {ownedLicenses.map((license) => (
+            <article className="member-license-card" key={license.id}>
+              <div className="license-card-head">
+                <span className={`status-dot status-${license.status}`}>{licenseStatusLabel(license)}</span>
+                <strong>{license.product?.name ?? license.productId}</strong>
+              </div>
+              <div className="license-detail-grid">
+                <span>Plan<b>{license.plan?.name ?? license.planId}</b></span>
+                <span>Expired<b>{formatDate(license.expiresAt)}</b></span>
+                <span>Device HWID<b>{license.hwid}</b></span>
+                <span>Aktivasi<b>{license.activatedAt ? formatDate(license.activatedAt) : 'Belum dipakai'}</b></span>
+              </div>
+              <div className="member-token-box">
+                <small>Token Lisensi</small>
+                <code>{license.key}</code>
+                <button className="primary" onClick={() => navigator.clipboard.writeText(license.key)}>Copy Token</button>
+              </div>
+              <p className="muted">Endpoint aktivasi: <code>{license.activationUrl}</code>. Token ini terkunci untuk HWID di atas.</p>
+            </article>
           ))}
         </div>
       </section>

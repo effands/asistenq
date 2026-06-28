@@ -9,6 +9,7 @@ import { formatCurrency } from '../shared/domain';
 import { signSession, requireAdminScope, requireSession } from './auth';
 import { seedInitialData } from './seed';
 import {
+  adminLicenseDashboard,
   activateLicense,
   banHwid,
   createAdmin,
@@ -17,6 +18,7 @@ import {
   createProductRecord,
   generateToolLicense,
   markOrderPaid,
+  memberLicenseDashboard,
   publicCatalog,
   publicPlansForProduct,
   requestPasswordReset,
@@ -281,6 +283,10 @@ app.get('/api/admin/products', requireSession, requireAdminScope('products'), (_
   res.json(store.data.products.map(publicProduct));
 });
 
+app.get('/api/admin/licenses', requireSession, requireAdminScope('products'), (_req, res) => {
+  res.json(adminLicenseDashboard(store));
+});
+
 app.post('/api/admin/products', requireSession, requireAdminScope('products'), (req, res) => {
   const body = productSchema.parse(req.body);
   const product = createProductRecord(store, body);
@@ -338,14 +344,7 @@ app.get('/api/member/licenses', requireSession, (req, res) => {
     return;
   }
 
-  const subscriptions = store.data.subscriptions
-    .filter((item) => item.memberId === req.user?.id)
-    .map((subscription) => ({
-      ...subscription,
-      product: store.data.products.find((product) => product.id === subscription.productId)
-    }));
-
-  res.json(subscriptions);
+  res.json(memberLicenseDashboard(store, req.user.id));
 });
 
 if (shouldServeFrontend) {

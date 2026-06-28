@@ -1,9 +1,12 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { seedInitialData } from '../src/server/seed';
 import {
+  adminLicenseDashboard,
   activateLicense,
   banHwid,
+  createMember,
   generateToolLicense,
+  memberLicenseDashboard,
   publicPlansForProduct,
   resetLicenseDevice,
   verifyVoucher
@@ -75,6 +78,7 @@ describe('license services', () => {
       now: new Date('2026-06-28T00:00:00.000Z'),
       salt: 'vjstudio_secret_salt_2026_xyz'
     });
+    const oldKey = license.key;
 
     const updated = resetLicenseDevice(store, {
       licenseId: license.id,
@@ -83,7 +87,58 @@ describe('license services', () => {
     });
 
     expect(updated.hwid).toBe('NEW-HWID');
-    expect(updated.key).toBe(license.key);
+    expect(updated.key).not.toBe(oldKey);
+    expect(store.data.bannedHwids.some((item) => item.hwid === 'OLD-HWID')).toBe(true);
+    expect(updated.status).toBe('generated');
+  });
+
+  it('returns admin license dashboard rows with product and plan details', () => {
+    const license = generateToolLicense(store, {
+      productSlug: 'vjstudio',
+      planCode: '1M',
+      email: 'buyer@example.com',
+      hwid: 'CA00E2C30BA61C8D',
+      now: new Date('2026-06-28T00:00:00.000Z'),
+      salt: 'vjstudio_secret_salt_2026_xyz'
+    });
+
+    const dashboard = adminLicenseDashboard(store);
+
+    expect(dashboard.licenses).toHaveLength(1);
+    expect(dashboard.licenses[0]).toMatchObject({
+      id: license.id,
+      email: 'buyer@example.com',
+      hwid: 'CA00E2C30BA61C8D',
+      product: { slug: 'vjstudio', name: 'VJ Studio Pro' },
+      plan: { code: '1M', name: 'Lisensi 1 Bulan' }
+    });
+    expect(dashboard.plans.some((plan) => plan.productSlug === 'vjstudio' && plan.code === '1M')).toBe(true);
+  });
+
+  it('returns member owned licenses by account email', async () => {
+    const member = await createMember(store, {
+      name: 'Buyer',
+      email: 'buyer@example.com',
+      password: 'secret123'
+    });
+    generateToolLicense(store, {
+      productSlug: 'vjstudio',
+      planCode: '1M',
+      email: 'BUYER@example.com',
+      hwid: 'CA00E2C30BA61C8D',
+      now: new Date('2026-06-28T00:00:00.000Z'),
+      salt: 'vjstudio_secret_salt_2026_xyz'
+    });
+
+    const dashboard = memberLicenseDashboard(store, member.id);
+
+    expect(dashboard.licenses).toHaveLength(1);
+    expect(dashboard.licenses[0]).toMatchObject({
+      email: 'buyer@example.com',
+      product: { name: 'VJ Studio Pro', slug: 'vjstudio' },
+      plan: { code: '1M' },
+      activationUrl: '/api/license/activate'
+    });
   });
 
   it('returns invalid for unknown vouchers', () => {

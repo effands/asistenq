@@ -5,6 +5,7 @@ import {
   createProduct,
   createSubscription,
   generateLicenseKey,
+  formatCurrency,
   normalizeHwid,
   resolveLicenseExpiry
 } from '../shared/domain';
@@ -80,6 +81,62 @@ function formatExpiryDate(expiryCode: string): string | null {
   }
 
   return `${expiryCode.slice(0, 4)}-${expiryCode.slice(4, 6)}-${expiryCode.slice(6, 8)}`;
+}
+
+function expiryCodeFromLicense(license: ToolLicense): string {
+  if (!license.expiresAt) {
+    return 'LIFETIME';
+  }
+
+  return license.expiresAt.replaceAll('-', '');
+}
+
+function productPlanRow(store: Store, plan: ProductPlan) {
+  const product = store.data.products.find((item) => item.id === plan.productId);
+
+  return {
+    ...plan,
+    productSlug: product?.slug ?? '',
+    productName: product?.name ?? plan.productId,
+    formattedPrice: formatCurrency(plan.price)
+  };
+}
+
+function licenseDashboardRow(store: Store, license: ToolLicense) {
+  const product = store.data.products.find((item) => item.id === license.productId);
+  const plan = store.data.plans.find((item) => item.id === license.planId);
+  const isBanned = store.data.bannedHwids.some((item) => (
+    item.productId === license.productId &&
+    item.hwid === license.hwid
+  ));
+
+  return {
+    ...license,
+    status: isBanned ? 'banned' as const : license.status,
+    product: product
+      ? {
+          id: product.id,
+          name: product.name,
+          slug: product.slug,
+          type: product.type,
+          category: product.category,
+          accessUrl: product.accessUrl
+        }
+      : undefined,
+    plan: plan
+      ? {
+          id: plan.id,
+          code: plan.code,
+          name: plan.name,
+          price: plan.price,
+          billingPeriod: plan.billingPeriod,
+          durationDays: plan.durationDays,
+          formattedPrice: formatCurrency(plan.price)
+        }
+      : undefined,
+    activationUrl: '/api/license/activate',
+    verifyUrl: '/api/license/verify'
+  };
 }
 
 export async function createAdmin(store: Store, input: {
@@ -487,9 +544,73 @@ export function resetLicenseDevice(store: Store, input: {
     throw new Error('license not found');
   }
 
+  const oldHwid = license.hwid;
+  if (oldHwid === normalizeHwid(input.newHwid)) {
+    throw new Error('new HWID must be different');
+  }
+
+  const existingBan = store.data.bannedHwids.find((item) => (
+    item.productId === license.productId && item.hwid === oldHwid
+  ));
+  if (!existingBan) {
+    store.data.bannedHwids.push({
+      id: createId('ban'),
+      productId: license.productId,
+      hwid: oldHwid,
+      reason: 'device reset',
+      createdAt: new Date().toISOString()
+    });
+  }
+
   license.hwid = normalizeHwid(input.newHwid);
+  license.key = generateLicenseKey({
+    hwid: license.hwid,
+    expiresAt: expiryCodeFromLicense(license),
+    salt: input.salt ?? process.env.LICENSE_SECRET_SALT ?? 'vjstudio_secret_salt_2026_xyz'
+  });
+  license.status = 'generated';
+  delete license.activatedAt;
   store.save();
   return license;
+}
+
+export function adminLicenseDashboard(store: Store) {
+  return {
+    licenses: store.data.licenses
+      .map((license) => licenseDashboardRow(store, license))
+      .sort((a, b) => b.generatedAt.localeCompare(a.generatedAt)),
+    plans: store.data.plans
+      .filter((plan) => plan.isActive)
+      .map((plan) => productPlanRow(store, plan)),
+    bannedHwids: store.data.bannedHwids
+  };
+}
+
+export function memberLicenseDashboard(store: Store, memberId: string) {
+  const member = store.data.members.find((item) => item.id === memberId);
+
+  if (!member) {
+    throw new Error('member not found');
+  }
+
+  const email = normalizeEmail(member.email);
+  return {
+    member: {
+      id: member.id,
+      name: member.name,
+      email: member.email
+    },
+    licenses: store.data.licenses
+      .filter((license) => license.email === email)
+      .map((license) => licenseDashboardRow(store, license))
+      .sort((a, b) => b.generatedAt.localeCompare(a.generatedAt)),
+    subscriptions: store.data.subscriptions
+      .filter((subscription) => subscription.memberId === member.id)
+      .map((subscription) => ({
+        ...subscription,
+        product: store.data.products.find((product) => product.id === subscription.productId)
+      }))
+  };
 }
 
 export function verifyVoucher(store: Store, input: {
