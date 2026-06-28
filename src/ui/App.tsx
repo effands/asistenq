@@ -3,6 +3,7 @@ import {
   BadgeCheck,
   BookOpen,
   Boxes,
+  CheckCircle2,
   CreditCard,
   Film,
   GraduationCap,
@@ -35,7 +36,8 @@ import {
   type PublicOrder,
   type PublicProduct,
   type Summary,
-  type TelegramBotStatus
+  type TelegramBotStatus,
+  type LandingConfig
 } from './api';
 
 type Route = 'home' | 'admin' | 'member' | 'product';
@@ -662,7 +664,7 @@ function AdminPanel({
   }
 
   if (activeSection === 'landing') {
-    return <LandingManager products={products} />;
+    return <LandingManager products={products} onUpdateProduct={onUpdateProduct} />;
   }
 
   if (activeSection === 'products') {
@@ -775,12 +777,15 @@ function AdminOrderPanel({ orders }: { orders: PublicOrder[] }) {
         <span className="soft-badge">{orders.length} order</span>
       </div>
       <div className="order-admin-table-wrap">
-        <div className="order-admin-row order-admin-head"><span>Invoice</span><span>Member ID</span><span>Produk</span><span>Total</span><span>Status</span><span>Tanggal</span></div>
+        <div className="order-admin-row order-admin-head"><span>Invoice</span><span>Member</span><span>Produk</span><span>Total</span><span>Status</span><span>Tanggal</span></div>
         {orders.length === 0 && <div className="empty-state">Belum ada order.</div>}
         {orders.map((order) => (
           <div className="order-admin-row" key={order.id}>
             <strong>{order.invoiceNumber ?? order.id}</strong>
-            <span>{order.memberId}</span>
+            <div className="order-member-col">
+              <b>{order.memberName || 'Unknown Member'}</b>
+              <span>{order.memberEmail || order.memberId}</span>
+            </div>
             <span>{order.product?.name ?? order.productName ?? order.productId}</span>
             <b>{order.formattedTotalAmount}</b>
             <span className={`status-dot status-${order.status}`}>{order.status}</span>
@@ -905,46 +910,55 @@ function AdminLicensePanel({ dashboard, products, onGenerateLicense, onRefresh, 
           <button className="ghost-button" onClick={() => runAction(onRefresh, 'Data lisensi diperbarui.')}><RefreshCw size={16} /> Refresh</button>
         </div>
         <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Cari email, HWID, atau token..." />
-        <div className="license-table">
+        <div className="order-admin-table-wrap">
+          <div className="license-compact-row license-compact-head">
+            <span>Detail Lisensi</span>
+            <span>HWID & Status</span>
+            <span>Token Aktif</span>
+            <span>Aksi Dasar</span>
+            <span>Reset Perangkat</span>
+          </div>
           {filteredLicenses.length === 0 && <div className="empty-state">Belum ada lisensi. Generate token pertama untuk VJ Studio Pro.</div>}
           {filteredLicenses.map((license) => (
-            <article className="license-row-card" key={license.id}>
-              <div className="license-row-main">
+            <div className="license-compact-row" key={license.id}>
+              <div className="license-col-main">
+                <b>{license.product?.name ?? license.productId}</b>
+                <span>{license.email}</span>
                 <span className={`status-dot status-${license.status}`}>{licenseStatusLabel(license)}</span>
-                <h3>{license.product?.name ?? license.productId}</h3>
-                <p>{license.email}</p>
               </div>
-              <div className="license-row-meta">
-                <span><Monitor size={15} /> {license.hwid}</span>
+              <div className="license-col-meta">
+                <span><Monitor size={14} /> {license.hwid}</span>
                 <span>{license.plan?.name ?? license.planId}</span>
                 <span>Exp: {formatDate(license.expiresAt)}</span>
               </div>
-              <code className="license-token">{license.key}</code>
-              <div className="license-actions">
-                <button className="ghost-button" onClick={() => navigator.clipboard.writeText(license.key)}>Copy Token</button>
+              <div className="license-col-token">
+                <code>{license.key}</code>
+              </div>
+              <div className="license-col-actions">
+                <button className="ghost-button" onClick={() => navigator.clipboard.writeText(license.key)}>Copy</button>
                 {license.status === 'banned'
                   ? <button className="ghost-button" disabled={busy} onClick={() => runAction(() => onUnbanLicense(license), 'HWID dipulihkan.')}>Unban</button>
                   : <button className="ghost-button danger-lite" disabled={busy} onClick={() => runAction(() => onBanLicense(license), 'HWID diblokir.')}>Ban</button>}
               </div>
-              <div className="reset-device-box">
+              <div className="license-col-reset">
                 <input
                   value={resetValues[license.id] ?? ''}
                   onChange={(event) => setResetValues((current) => ({ ...current, [license.id]: event.target.value.toUpperCase() }))}
                   maxLength={16}
-                  placeholder="HWID baru untuk reset device"
+                  placeholder="HWID baru..."
                 />
                 <button
-                  className="primary"
+                  className="ghost-button"
                   disabled={busy || !resetValues[license.id]}
                   onClick={() => runAction(
                     () => onResetLicense(license.id, resetValues[license.id]),
-                    'Device berhasil dipindahkan. HWID lama otomatis dibanned.'
+                    'Device dipindahkan.'
                   )}
                 >
-                  Reset Device
+                  Reset
                 </button>
               </div>
-            </article>
+            </div>
           ))}
         </div>
       </div>
@@ -1019,15 +1033,48 @@ function AdminMemberPanel({ members, onRefresh }: {
   );
 }
 
-function LandingManager({ products }: { products: PublicProduct[] }) {
+function LandingManager({ products, onUpdateProduct }: { products: PublicProduct[]; onUpdateProduct?: (id: string, input: Partial<PublicProduct>) => Promise<void> }) {
   const [selectedSlug, setSelectedSlug] = useState(products[0]?.slug ?? '');
   const selected = products.find((product) => product.slug === selectedSlug) ?? products[0];
 
+  const [config, setConfig] = useState<LandingConfig>({});
+  const [busy, setBusy] = useState(false);
+  const [notice, setNotice] = useState('');
+
   useEffect(() => {
-    if (!selectedSlug && products[0]) {
-      setSelectedSlug(products[0].slug);
-    }
+    if (!selectedSlug && products[0]) setSelectedSlug(products[0].slug);
   }, [products, selectedSlug]);
+
+  useEffect(() => {
+    if (selected) {
+      setConfig(selected.landingConfig || {
+        heroImageUrl: '',
+        heroVideoUrl: '',
+        themeColor: '',
+        benefits: [],
+        faqs: [],
+        testimonials: []
+      });
+      setNotice('');
+    }
+  }, [selected]);
+
+  const handleSave = async () => {
+    if (!onUpdateProduct || !selected) return;
+    setBusy(true);
+    setNotice('');
+    try {
+      await onUpdateProduct(selected.id, { landingConfig: config });
+      setNotice('Landing config tersimpan!');
+    } catch (err: any) {
+      setNotice('Gagal menyimpan: ' + err.message);
+    }
+    setBusy(false);
+  };
+
+  const updateConfig = (key: keyof LandingConfig, value: any) => {
+    setConfig(prev => ({ ...prev, [key]: value }));
+  };
 
   return (
     <section className="admin-content-grid compact-admin-grid">
@@ -1035,36 +1082,101 @@ function LandingManager({ products }: { products: PublicProduct[] }) {
         <div className="panel-heading">
           <div>
             <p className="section-kicker">Landing Builder</p>
-            <h2>Landing Produk</h2>
+            <h2>Builder: {selected?.name}</h2>
           </div>
-          <span className="soft-badge">Public</span>
+          <button className="primary" onClick={handleSave} disabled={busy || !onUpdateProduct}>
+            {busy ? 'Menyimpan...' : 'Simpan Perubahan'}
+          </button>
         </div>
-        <p className="muted">Menu ini disiapkan khusus untuk sales page produk. Untuk sekarang datanya mengikuti produk aktif, lalu nanti bisa ditambah editor benefit, FAQ, testimoni, dan bonus.</p>
-        <label>Produk
+        {notice && <p className="form-notice">{notice}</p>}
+        
+        <label>Pilih Produk
           <select value={selected?.slug ?? ''} onChange={(event) => setSelectedSlug(event.target.value)}>
             {products.map((product) => <option key={product.id} value={product.slug}>{product.name}</option>)}
           </select>
         </label>
+
+        <div className="form-grid">
+          <label>URL Gambar Hero (opsional)
+            <input value={config.heroImageUrl || ''} onChange={(e) => updateConfig('heroImageUrl', e.target.value)} placeholder="https://..." />
+          </label>
+          <label>Warna Tema (Hex, opsional)
+            <input value={config.themeColor || ''} onChange={(e) => updateConfig('themeColor', e.target.value)} placeholder="#14b8a6" />
+          </label>
+        </div>
+
+        <div className="builder-section">
+          <h3>Fitur & Benefit</h3>
+          {(config.benefits || []).map((b, i) => (
+            <div key={i} className="builder-item-card">
+              <input value={b.title} onChange={(e) => {
+                const newB = [...(config.benefits || [])];
+                newB[i].title = e.target.value;
+                updateConfig('benefits', newB);
+              }} placeholder="Judul Benefit" />
+              <input value={b.description} onChange={(e) => {
+                const newB = [...(config.benefits || [])];
+                newB[i].description = e.target.value;
+                updateConfig('benefits', newB);
+              }} placeholder="Deskripsi Singkat" />
+              <button className="ghost-button danger-lite" onClick={() => {
+                const newB = [...(config.benefits || [])];
+                newB.splice(i, 1);
+                updateConfig('benefits', newB);
+              }}>Hapus</button>
+            </div>
+          ))}
+          <button className="ghost-button" onClick={() => updateConfig('benefits', [...(config.benefits || []), { title: '', description: '' }])}>+ Tambah Benefit</button>
+        </div>
+
+        <div className="builder-section">
+          <h3>Testimoni</h3>
+          {(config.testimonials || []).map((t, i) => (
+            <div key={i} className="builder-item-card">
+              <div className="form-grid">
+                <input value={t.name} onChange={(e) => {
+                  const newT = [...(config.testimonials || [])];
+                  newT[i].name = e.target.value;
+                  updateConfig('testimonials', newT);
+                }} placeholder="Nama (Cth: Budi)" />
+                <input value={t.role} onChange={(e) => {
+                  const newT = [...(config.testimonials || [])];
+                  newT[i].role = e.target.value;
+                  updateConfig('testimonials', newT);
+                }} placeholder="Pekerjaan" />
+              </div>
+              <textarea value={t.content} onChange={(e) => {
+                const newT = [...(config.testimonials || [])];
+                newT[i].content = e.target.value;
+                updateConfig('testimonials', newT);
+              }} placeholder="Komentar testimonial" />
+              <button className="ghost-button danger-lite" onClick={() => {
+                const newT = [...(config.testimonials || [])];
+                newT.splice(i, 1);
+                updateConfig('testimonials', newT);
+              }}>Hapus</button>
+            </div>
+          ))}
+          <button className="ghost-button" onClick={() => updateConfig('testimonials', [...(config.testimonials || []), { name: '', role: '', content: '' }])}>+ Tambah Testimoni</button>
+        </div>
+      </div>
+      
+      <div className="panel stack" style={{ alignSelf: 'start' }}>
+        <p className="section-kicker">Live Preview Data</p>
+        <h2>Preview</h2>
         {selected && (
           <div className="landing-preview-card">
             <span>{selected.type} · {selected.billingPeriod}</span>
             <h3>{selected.name}</h3>
             <p>{selected.headline}</p>
             <strong>{selected.formattedPrice}</strong>
-            <a href={`/produk/${selected.slug}`} target="_blank" rel="noreferrer">Preview landing</a>
+            <div className="mini-checklist">
+              {(config.benefits || []).map((b, i) => <span key={i}>{b.title || 'Benefit baru'}</span>)}
+              {(config.testimonials || []).map((t, i) => <span key={i}>Testimoni dari {t.name || '?'}</span>)}
+            </div>
+            <a href={`/produk/${selected.slug}`} target="_blank" rel="noreferrer" className="primary" style={{ display: 'block', textAlign: 'center', marginTop: '16px' }}>Lihat Landing Page Asli</a>
           </div>
         )}
-      </div>
-      <div className="panel stack">
-        <p className="section-kicker">Struktur Sales Page</p>
-        <h2>Blok landing yang akan dipakai</h2>
-        <div className="mini-checklist">
-          <span>Hero manfaat utama</span>
-          <span>Masalah yang diselesaikan</span>
-          <span>Fitur dan benefit</span>
-          <span>Harga, bonus, dan CTA</span>
-          <span>FAQ dan bukti/testimoni</span>
-        </div>
       </div>
     </section>
   );
@@ -1641,7 +1753,6 @@ function ProductLanding({ isLoading, product, onJoin }: { isLoading: boolean; pr
         <section className="product-sales-hero">
           <p className="section-kicker">Memuat produk</p>
           <h1>Menyiapkan landing page...</h1>
-          <p>Data produk sedang dimuat dari katalog AsistenQ.</p>
         </section>
       </main>
     );
@@ -1653,31 +1764,37 @@ function ProductLanding({ isLoading, product, onJoin }: { isLoading: boolean; pr
         <section className="product-sales-hero">
           <p className="section-kicker">Produk tidak ditemukan</p>
           <h1>Produk belum tersedia.</h1>
-          <p>Silakan kembali ke marketplace AsistenQ untuk melihat produk aktif.</p>
           <a className="primary public-hero-button" href="/">Kembali ke marketplace</a>
         </section>
       </main>
     );
   }
 
-  const benefits = product.type === 'course' || product.type === 'class'
-    ? ['Materi bertahap dan mudah diikuti', 'Akses kelas melalui akun member', 'Update materi untuk workflow YouTube']
-    : ['Aktivasi lisensi per perangkat', 'Membantu workflow produksi video', 'Cocok untuk creator YouTube yang ingin lebih cepat'];
-
   if (product.landingTemplate === 'mixin9' || product.slug === 'mixin9') {
     return <Mixin9Landing product={product} onJoin={onJoin} />;
   }
 
+  const conf = product.landingConfig || {};
+  const hasBenefits = conf.benefits && conf.benefits.length > 0;
+  const hasTestimonials = conf.testimonials && conf.testimonials.length > 0;
+
+  // Fallback to old hardcoded benefits if none are configured
+  const defaultBenefits = product.type === 'course' || product.type === 'class'
+    ? ['Materi bertahap dan mudah diikuti', 'Akses kelas melalui akun member', 'Update materi']
+    : ['Aktivasi lisensi per perangkat', 'Membantu workflow produksi video', 'Cocok untuk creator'];
+
+  const customStyle = conf.themeColor ? { '--teal': conf.themeColor, '--primary': conf.themeColor } as any : {};
+
   return (
-    <main className="product-landing">
-      <section className="product-sales-hero">
+    <main className="product-landing" style={customStyle}>
+      <section className="product-sales-hero" style={conf.heroImageUrl ? { background: `linear-gradient(135deg, rgba(0,0,0,0.8), rgba(0,0,0,0.9)), url(${conf.heroImageUrl}) center/cover` } : {}}>
         <div>
           <span className="chip">{product.discountLabel || product.category || product.type}</span>
-          <h1>{product.headline || product.name}</h1>
-          <p>{product.promoText || product.description}</p>
+          <h1 style={conf.heroImageUrl ? { color: '#fff' } : {}}>{product.headline || product.name}</h1>
+          <p style={conf.heroImageUrl ? { color: '#eee' } : {}}>{product.promoText || product.description}</p>
           <div className="hero-actions">
             <button className="primary public-hero-button" onClick={onJoin}>{product.ctaLabel || 'Aktifkan lewat member'} <ArrowRight size={18} /></button>
-            <a className="text-link dark-link" href="#harga">Lihat harga</a>
+            <a className={conf.heroImageUrl ? 'text-link dark-link-alt' : 'text-link dark-link'} href="#harga" style={conf.heroImageUrl ? { color: '#fff' } : {}}>Lihat harga</a>
           </div>
         </div>
         <aside className="product-price-card" id="harga">
@@ -1693,10 +1810,43 @@ function ProductLanding({ isLoading, product, onJoin }: { isLoading: boolean; pr
         <div className="panel stack">
           <p className="section-kicker">Benefit</p>
           <h2>Apa yang kamu dapatkan?</h2>
-          <div className="mini-checklist">
-            {benefits.map((benefit) => <span key={benefit}>{benefit}</span>)}
-          </div>
+          {hasBenefits ? (
+            <div className="dynamic-benefits">
+              {conf.benefits!.map((b, i) => (
+                <div key={i} className="benefit-item">
+                  <div className="benefit-icon"><CheckCircle2 size={20} /></div>
+                  <div>
+                    <h4>{b.title}</h4>
+                    <p>{b.description}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="mini-checklist">
+              {defaultBenefits.map((benefit) => <span key={benefit}>{benefit}</span>)}
+            </div>
+          )}
         </div>
+        
+        {hasTestimonials && (
+          <div className="panel stack">
+            <p className="section-kicker">Testimoni</p>
+            <h2>Apa kata mereka?</h2>
+            <div className="testimonials-grid">
+              {conf.testimonials!.map((t, i) => (
+                <div key={i} className="testimonial-card">
+                  <p>"{t.content}"</p>
+                  <div className="testimonial-author">
+                    <strong>{t.name}</strong>
+                    <span>{t.role}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         <div className="panel stack">
           <p className="section-kicker">Cara mulai</p>
           <h2>Daftar, bayar QRIS, lalu akses.</h2>

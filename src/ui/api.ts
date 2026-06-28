@@ -35,11 +35,43 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
   return response.json() as Promise<T>;
 }
 
-export type PublicProduct = Product & { formattedPrice: string };
+export interface LandingFeature {
+  title: string;
+  description: string;
+  icon?: string;
+}
+
+export interface LandingFaq {
+  question: string;
+  answer: string;
+}
+
+export interface LandingTestimonial {
+  name: string;
+  role: string;
+  content: string;
+  avatarUrl?: string;
+}
+
+export interface LandingConfig {
+  heroImageUrl?: string;
+  heroVideoUrl?: string;
+  themeColor?: string;
+  benefits?: LandingFeature[];
+  faqs?: LandingFaq[];
+  testimonials?: LandingTestimonial[];
+}
+
+export type PublicProduct = Product & {
+  formattedPrice: string;
+  landingConfig?: LandingConfig;
+};
 export type PublicOrder = Order & {
   product?: PublicProduct;
   formattedAmount: string;
   formattedTotalAmount: string;
+  memberName?: string;
+  memberEmail?: string;
 };
 export type PublicCatalog = {
   featured: PublicProduct[];

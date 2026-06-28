@@ -31,6 +31,33 @@ export interface MemberAccount {
   createdAt: string;
 }
 
+export interface LandingFeature {
+  title: string;
+  description: string;
+  icon?: string;
+}
+
+export interface LandingFaq {
+  question: string;
+  answer: string;
+}
+
+export interface LandingTestimonial {
+  name: string;
+  role: string;
+  content: string;
+  avatarUrl?: string;
+}
+
+export interface LandingConfig {
+  heroImageUrl?: string;
+  heroVideoUrl?: string;
+  themeColor?: string;
+  benefits?: LandingFeature[];
+  faqs?: LandingFaq[];
+  testimonials?: LandingTestimonial[];
+}
+
 export interface Product {
   id: string;
   name: string;
@@ -47,6 +74,7 @@ export interface Product {
   logoUrl?: string;
   landingPath?: string;
   landingTemplate?: string;
+  landingConfig?: LandingConfig;
   ctaLabel?: string;
   accessRequirement?: string;
   active: boolean;

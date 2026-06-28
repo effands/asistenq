@@ -118,7 +118,27 @@ const productSchema = z.object({
   headline: z.string().optional(),
   description: z.string().optional(),
   coverUrl: z.string().optional(),
-  accessUrl: z.string().optional()
+  accessUrl: z.string().optional(),
+  landingConfig: z.object({
+    heroImageUrl: z.string().optional(),
+    heroVideoUrl: z.string().optional(),
+    themeColor: z.string().optional(),
+    benefits: z.array(z.object({
+      title: z.string(),
+      description: z.string(),
+      icon: z.string().optional()
+    })).optional(),
+    faqs: z.array(z.object({
+      question: z.string(),
+      answer: z.string()
+    })).optional(),
+    testimonials: z.array(z.object({
+      name: z.string(),
+      role: z.string(),
+      content: z.string(),
+      avatarUrl: z.string().optional()
+    })).optional()
+  }).optional()
 });
 
 const adminCreateSchema = memberRegisterSchema.extend({
@@ -184,11 +204,14 @@ function publicProduct(product: typeof store.data.products[number]) {
 
 function publicOrder(order: typeof store.data.orders[number]) {
   const product = store.data.products.find((item) => item.id === order.productId);
+  const member = store.data.members.find((m) => m.id === order.memberId);
   return {
     ...order,
     product: product ? publicProduct(product) : undefined,
     formattedAmount: formatCurrency(order.amount),
-    formattedTotalAmount: formatCurrency(order.totalAmount ?? order.amount)
+    formattedTotalAmount: formatCurrency(order.totalAmount ?? order.amount),
+    memberName: member?.name,
+    memberEmail: member?.email
   };
 }
 

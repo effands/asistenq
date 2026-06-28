@@ -1,0 +1,6 @@
+{
+  "name": "MIXIN9 - Audio Batch Mixing Software",
+  "description": "Landing page modern, futuristik, dan high-converting untuk software desktop audio batch mixing MIXIN9. Dilengkapi simulator mixer interaktif, pembayaran QRIS, dan konfirmasi Telegram.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
