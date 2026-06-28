@@ -250,7 +250,7 @@ function Brand({ compact = false }: { compact?: boolean }) {
       <div className="brand-mark">AQ</div>
       <div>
         <strong>AsistenQ</strong>
-        <span>asistenq.com</span>
+        <span>Tools Bantu nge-YouTube</span>
       </div>
     </button>
   );
@@ -324,10 +324,12 @@ function AdminShell({ activeSection, children, message, navigate, onSectionChang
   );
 }
 
-function LoginBox({ title, accountType = 'member', onSubmit, showName = false }: {
+function LoginBox({ title, accountType = 'member', footer, onSubmit, showName = false, submitLabel }: {
   title: string;
   accountType?: 'admin' | 'member';
+  footer?: ReactNode;
   showName?: boolean;
+  submitLabel?: string;
   onSubmit: (name: string, email: string, password: string) => Promise<void>;
 }) {
   const [name, setName] = useState('Member AsistenQ');
@@ -381,18 +383,21 @@ function LoginBox({ title, accountType = 'member', onSubmit, showName = false }:
       {mode === 'reset' && <label>Token Reset<input value={resetToken} onChange={(event) => setResetToken(event.target.value)} placeholder="Token reset password" /></label>}
       {notice && <p className="form-notice">{notice}</p>}
       <button className="primary" disabled={busy}>
-        <LogIn size={18} /> {mode === 'forgot' ? 'Kirim instruksi reset' : mode === 'reset' ? 'Simpan password baru' : 'Masuk'}
+        <LogIn size={18} /> {mode === 'forgot' ? 'Kirim instruksi reset' : mode === 'reset' ? 'Simpan password baru' : submitLabel ?? 'Masuk'}
       </button>
-      <button
-        className="link-button"
-        type="button"
-        onClick={() => {
-          setNotice('');
-          setMode(mode === 'login' ? 'forgot' : 'login');
-        }}
-      >
-        {mode === 'login' ? 'Lupa password?' : 'Kembali ke login'}
-      </button>
+      <div className="auth-links">
+        <button
+          className="link-button"
+          type="button"
+          onClick={() => {
+            setNotice('');
+            setMode(mode === 'login' ? 'forgot' : 'login');
+          }}
+        >
+          {mode === 'login' ? 'Lupa password?' : 'Kembali ke login'}
+        </button>
+        {mode === 'login' && footer}
+      </div>
     </form>
   );
 }
@@ -863,8 +868,8 @@ function Marketplace({ catalog, onJoin, onProductOpen }: {
         <div className="hero-orb hero-orb-b" />
         <div className="hero-content">
           <div className="hero-badge"><Sparkles size={16} /> Tools, kelas, dan resource untuk creator YouTube</div>
-          <h1>Kerja video lebih cepat, channel lebih rapi, hasil lebih siap upload.</h1>
-          <p>AsistenQ menyediakan tools pendukung editing video, template workflow, resource gratis, dan kelas YouTube berbayar agar proses produksi konten terasa lebih ringan dari ide sampai publish.</p>
+          <h1>Tools YouTube, lisensi, dan kelas dalam satu tempat.</h1>
+          <p>Mulai dari VJ Studio Pro, resource gratis, sampai kelas YouTube online/offline untuk mempercepat workflow konten.</p>
           <div className="hero-actions">
             <button className="primary public-hero-button" onClick={onJoin}>Lihat paket member <ArrowRight size={18} /></button>
             <a className="text-link" href="#produk">Lihat produk</a>
@@ -1041,18 +1046,36 @@ function MemberPanel({ session, products, dashboard, onRegister, onLogin, onChec
   onCheckout: (productId: string) => Promise<void>;
 }) {
   const [checkoutNotice, setCheckoutNotice] = useState('');
+  const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
+  const [activeMemberTab, setActiveMemberTab] = useState<'licenses' | 'products' | 'course' | 'help'>('licenses');
 
   if (!session) {
     return (
-      <main className="member-page">
-        <section className="member-hero">
+      <main className="member-page member-auth-page">
+        <section className="member-hero compact-member-hero">
           <span className="chip">Member Area</span>
-          <h1>Masuk ke akun AsistenQ</h1>
-          <p>Kelola pembelian, lisensi tools, dan akses kelas dari satu tempat.</p>
+          <h1>Akses lisensi dan kelas.</h1>
+          <p>Masuk untuk melihat token VJ Studio, status device, pembelian QRIS, dan materi course AsistenQ.</p>
         </section>
-        <div className="member-auth-grid">
-          <LoginBox title="Daftar Member" showName onSubmit={onRegister} />
-          <LoginBox title="Login Member" onSubmit={(_, email, password) => onLogin(email, password)} />
+        <div className="member-auth-single">
+          <LoginBox
+            title={authMode === 'login' ? 'Login Member' : 'Daftar Member'}
+            showName={authMode === 'register'}
+            submitLabel={authMode === 'login' ? 'Masuk' : 'Daftar'}
+            onSubmit={authMode === 'login' ? (_, email, password) => onLogin(email, password) : onRegister}
+            footer={(
+              <span className="auth-switch-copy">
+                {authMode === 'login' ? 'Belum punya akun?' : 'Sudah punya akun?'}
+                <button
+                  className="link-button inline-link"
+                  type="button"
+                  onClick={() => setAuthMode(authMode === 'login' ? 'register' : 'login')}
+                >
+                  {authMode === 'login' ? 'Daftar' : 'Login'}
+                </button>
+              </span>
+            )}
+          />
         </div>
       </main>
     );
@@ -1066,8 +1089,8 @@ function MemberPanel({ session, products, dashboard, onRegister, onLogin, onChec
       <section className="member-dashboard-hero">
         <div>
           <span className="chip">Member Workspace</span>
-          <h1>Halo, {session.user.name}. Kelola lisensi dan akses produk dari sini.</h1>
-          <p>Akun ini dipakai untuk menyimpan pembelian, token lisensi VJ Studio, status device, dan akses kelas/course AsistenQ.</p>
+          <h1>Halo, {session.user.name}. Ini pusat aksesmu.</h1>
+          <p>Cek token lisensi, status device, produk, dan course dari satu halaman yang lebih ringkas.</p>
         </div>
         <div className="member-stat-card">
           <span>Total lisensi</span>
@@ -1076,8 +1099,54 @@ function MemberPanel({ session, products, dashboard, onRegister, onLogin, onChec
         </div>
       </section>
 
-      <section className="member-dashboard-grid">
-        <div className="panel stack member-products-panel">
+      <section className="member-tabs">
+        <div className="member-tab-list" aria-label="Menu member">
+          <button className={activeMemberTab === 'licenses' ? 'active' : ''} onClick={() => setActiveMemberTab('licenses')}>Lisensi</button>
+          <button className={activeMemberTab === 'products' ? 'active' : ''} onClick={() => setActiveMemberTab('products')}>Beli Produk</button>
+          <button className={activeMemberTab === 'course' ? 'active' : ''} onClick={() => setActiveMemberTab('course')}>Course</button>
+          <button className={activeMemberTab === 'help' ? 'active' : ''} onClick={() => setActiveMemberTab('help')}>Bantuan</button>
+        </div>
+
+        {activeMemberTab === 'licenses' && (
+          <div className="panel stack member-license-panel">
+            <div className="panel-heading">
+              <div>
+                <p className="section-kicker">License Vault</p>
+                <h2>Lisensi Saya</h2>
+              </div>
+              <span className="soft-badge">{ownedLicenses.length} lisensi</span>
+            </div>
+            {ownedLicenses.length === 0 && (
+              <div className="empty-state">
+                Belum ada lisensi aktif untuk email ini. Setelah admin membuat lisensi VJ Studio dengan email akunmu, token akan muncul otomatis di sini.
+              </div>
+            )}
+            <div className="member-license-grid">
+              {ownedLicenses.map((license) => (
+                <article className="member-license-card" key={license.id}>
+                  <div className="license-card-head">
+                    <span className={`status-dot status-${license.status}`}>{licenseStatusLabel(license)}</span>
+                    <strong>{license.product?.name ?? license.productId}</strong>
+                  </div>
+                  <div className="license-detail-grid">
+                    <span>Plan<b>{license.plan?.name ?? license.planId}</b></span>
+                    <span>Expired<b>{formatDate(license.expiresAt)}</b></span>
+                    <span>Device HWID<b>{license.hwid}</b></span>
+                    <span>Aktivasi<b>{license.activatedAt ? formatDate(license.activatedAt) : 'Belum dipakai'}</b></span>
+                  </div>
+                  <div className="member-token-box">
+                    <small>Token Lisensi</small>
+                    <code>{license.key}</code>
+                    <button className="primary" onClick={() => navigator.clipboard.writeText(license.key)}>Copy Token</button>
+                  </div>
+                </article>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {activeMemberTab === 'products' && (
+          <div className="panel stack member-products-panel">
           <div className="panel-heading">
             <div>
               <p className="section-kicker">Marketplace Member</p>
@@ -1101,55 +1170,34 @@ function MemberPanel({ session, products, dashboard, onRegister, onLogin, onChec
             ))}
           </div>
           {checkoutNotice && <p className="form-notice">{checkoutNotice}</p>}
-        </div>
-
-        <div className="panel stack member-help-panel">
-          <p className="section-kicker">Cara Aktivasi VJ Studio</p>
-          <h2>Aktivasi pakai HWID dan token lisensi.</h2>
-          <div className="mini-checklist">
-            <span>1. Buka VJ Studio Pro di device pembeli.</span>
-            <span>2. Salin Device ID / HWID dari aplikasi.</span>
-            <span>3. Admin generate token lisensi berdasarkan HWID itu.</span>
-            <span>4. Member salin token dari dashboard ini lalu aktivasi di aplikasi.</span>
-          </div>
-        </div>
-      </section>
-
-      <section className="panel stack member-license-panel">
-        <div className="panel-heading">
-          <div>
-            <p className="section-kicker">License Vault</p>
-            <h2>Lisensi Saya</h2>
-          </div>
-          <span className="soft-badge">{ownedLicenses.length} lisensi</span>
-        </div>
-        {ownedLicenses.length === 0 && (
-          <div className="empty-state">
-            Belum ada lisensi aktif untuk email ini. Setelah admin membuat lisensi VJ Studio dengan email akunmu, token akan muncul otomatis di sini.
           </div>
         )}
-        <div className="member-license-grid">
-          {ownedLicenses.map((license) => (
-            <article className="member-license-card" key={license.id}>
-              <div className="license-card-head">
-                <span className={`status-dot status-${license.status}`}>{licenseStatusLabel(license)}</span>
-                <strong>{license.product?.name ?? license.productId}</strong>
-              </div>
-              <div className="license-detail-grid">
-                <span>Plan<b>{license.plan?.name ?? license.planId}</b></span>
-                <span>Expired<b>{formatDate(license.expiresAt)}</b></span>
-                <span>Device HWID<b>{license.hwid}</b></span>
-                <span>Aktivasi<b>{license.activatedAt ? formatDate(license.activatedAt) : 'Belum dipakai'}</b></span>
-              </div>
-              <div className="member-token-box">
-                <small>Token Lisensi</small>
-                <code>{license.key}</code>
-                <button className="primary" onClick={() => navigator.clipboard.writeText(license.key)}>Copy Token</button>
-              </div>
-              <p className="muted">Endpoint aktivasi: <code>{license.activationUrl}</code>. Token ini terkunci untuk HWID di atas.</p>
-            </article>
-          ))}
-        </div>
+
+        {activeMemberTab === 'course' && (
+          <div className="panel stack member-help-panel">
+            <p className="section-kicker">Course Access</p>
+            <h2>Kelas YouTube dan materi pendukung.</h2>
+            <p className="muted">Nanti akses video tutorial, ebook, template, dan update kelas akan ditampilkan di tab ini. Struktur ini sudah siap untuk course online maupun offline.</p>
+            <div className="mini-checklist">
+              <span>Materi video tersusun per modul.</span>
+              <span>Resource pendukung dan ebook.</span>
+              <span>Akses tahunan sesuai paket pembelian.</span>
+            </div>
+          </div>
+        )}
+
+        {activeMemberTab === 'help' && (
+          <div className="panel stack member-help-panel">
+            <p className="section-kicker">Cara Aktivasi VJ Studio</p>
+            <h2>Aktivasi pakai HWID dan token lisensi.</h2>
+            <div className="mini-checklist">
+              <span>1. Buka VJ Studio Pro di device pembeli.</span>
+              <span>2. Salin Device ID / HWID dari aplikasi.</span>
+              <span>3. Admin generate token lisensi berdasarkan HWID itu.</span>
+              <span>4. Member salin token dari dashboard ini lalu aktivasi di aplikasi.</span>
+            </div>
+          </div>
+        )}
       </section>
     </main>
   );
