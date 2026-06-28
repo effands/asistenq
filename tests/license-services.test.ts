@@ -4,6 +4,7 @@ import {
   activateLicense,
   banHwid,
   generateToolLicense,
+  publicPlansForProduct,
   resetLicenseDevice,
   verifyVoucher
 } from '../src/server/services';
@@ -90,5 +91,12 @@ describe('license services', () => {
       valid: false,
       message: 'Voucher tidak valid / kedaluwarsa.'
     });
+  });
+
+  it('returns public plans for a product slug', () => {
+    const plans = publicPlansForProduct(store, 'vjstudio');
+
+    expect(plans.map((item) => item.code)).toContain('1M');
+    expect(plans.every((item) => item.productSlug === 'vjstudio')).toBe(true);
   });
 });

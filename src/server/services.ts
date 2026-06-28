@@ -434,6 +434,22 @@ export function verifyVoucher(store: Store, input: {
   return { valid: true, voucher };
 }
 
+export function publicPlansForProduct(store: Store, productSlug: string) {
+  const product = findProductBySlug(store, productSlug);
+
+  return store.data.plans
+    .filter((plan) => plan.productId === product.id && plan.isActive)
+    .map((plan) => ({
+      productSlug: product.slug,
+      code: plan.code,
+      name: plan.name,
+      price: plan.price,
+      billingPeriod: plan.billingPeriod,
+      durationDays: plan.durationDays,
+      isFree: plan.isFree
+    }));
+}
+
 export function markOrderPaid(store: Store, orderId: string, paidAt = new Date()): {
   order: Order;
   subscription: Subscription;

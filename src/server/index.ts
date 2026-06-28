@@ -7,13 +7,21 @@ import { formatCurrency } from '../shared/domain';
 import { signSession, requireAdminScope, requireSession } from './auth';
 import { seedInitialData } from './seed';
 import {
+  activateLicense,
+  banHwid,
   createAdmin,
   createCheckout,
   createMember,
   createProductRecord,
+  generateToolLicense,
   markOrderPaid,
+  publicPlansForProduct,
+  resetLicenseDevice,
+  unbanHwid,
+  verifyLicense,
   verifyAdminLogin,
-  verifyMemberLogin
+  verifyMemberLogin,
+  verifyVoucher
 } from './services';
 import { createFileStore } from './store';
 
@@ -55,6 +63,38 @@ const productSchema = z.object({
 const adminCreateSchema = memberRegisterSchema.extend({
   role: z.enum(['super_admin', 'admin']),
   scopes: z.array(z.enum(['admins', 'products', 'members', 'orders', 'subscriptions', 'content']))
+});
+
+const licenseProductQuerySchema = z.object({
+  product: z.string().min(1)
+});
+
+const voucherQuerySchema = licenseProductQuerySchema.extend({
+  code: z.string().min(1)
+});
+
+const generateLicenseSchema = z.object({
+  productSlug: z.string().min(1),
+  planCode: z.string().min(1),
+  email: z.string().email(),
+  hwid: z.string().min(1)
+});
+
+const licenseTokenSchema = z.object({
+  productSlug: z.string().min(1),
+  token: z.string().min(1),
+  hwid: z.string().min(1)
+});
+
+const resetLicenseSchema = z.object({
+  licenseId: z.string().min(1),
+  newHwid: z.string().min(1)
+});
+
+const hwidActionSchema = z.object({
+  productSlug: z.string().min(1),
+  hwid: z.string().min(1),
+  reason: z.string().default('')
 });
 
 function publicProduct(product: typeof store.data.products[number]) {
@@ -111,6 +151,67 @@ app.get('/api/products/:slug', (req, res) => {
   }
 
   res.json(publicProduct(product));
+});
+
+app.get('/api/license/packages', (req, res) => {
+  const query = licenseProductQuerySchema.parse(req.query);
+  res.json(publicPlansForProduct(store, query.product));
+});
+
+app.get('/api/license/announcement', (req, res) => {
+  const query = licenseProductQuerySchema.parse(req.query);
+  const product = store.data.products.find((item) => item.slug === query.product);
+  const announcement = store.data.announcements.find((item) => item.productId === product?.id && item.enabled);
+
+  res.json(announcement ?? {});
+});
+
+app.get('/api/license/banned', (req, res) => {
+  const query = licenseProductQuerySchema.parse(req.query);
+  const product = store.data.products.find((item) => item.slug === query.product);
+  const banned = store.data.bannedHwids
+    .filter((item) => item.productId === product?.id)
+    .map((item) => item.hwid);
+
+  res.type('text/plain').send(banned.join('\n'));
+});
+
+app.get('/api/license/verify-voucher', (req, res) => {
+  const query = voucherQuerySchema.parse(req.query);
+  res.json(verifyVoucher(store, {
+    productSlug: query.product,
+    code: query.code
+  }));
+});
+
+app.post('/api/license/activate', (req, res) => {
+  const body = licenseTokenSchema.parse(req.body);
+  res.json(activateLicense(store, body));
+});
+
+app.post('/api/license/verify', (req, res) => {
+  const body = licenseTokenSchema.parse(req.body);
+  res.json(verifyLicense(store, body));
+});
+
+app.post('/api/license/generate', requireSession, requireAdminScope('products'), (req, res) => {
+  const body = generateLicenseSchema.parse(req.body);
+  res.status(201).json(generateToolLicense(store, body));
+});
+
+app.post('/api/license/reset-device', requireSession, requireAdminScope('products'), (req, res) => {
+  const body = resetLicenseSchema.parse(req.body);
+  res.json(resetLicenseDevice(store, body));
+});
+
+app.post('/api/license/ban-hwid', requireSession, requireAdminScope('products'), (req, res) => {
+  const body = hwidActionSchema.parse(req.body);
+  res.status(201).json(banHwid(store, body));
+});
+
+app.post('/api/license/unban-hwid', requireSession, requireAdminScope('products'), (req, res) => {
+  const body = hwidActionSchema.omit({ reason: true }).parse(req.body);
+  res.json(unbanHwid(store, body));
 });
 
 app.get('/api/admin/summary', requireSession, requireAdminScope('products'), (_req, res) => {
