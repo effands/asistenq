@@ -13,6 +13,7 @@ import {
   PlayCircle,
   ShieldCheck,
   Sparkles,
+  UploadCloud,
   Users,
   WandSparkles
 } from 'lucide-react';
@@ -20,7 +21,9 @@ import { useEffect, useState, type ReactNode } from 'react';
 import type { BillingPeriod, ProductType } from '../shared/types';
 import { apiRequest, type ForgotPasswordResult, type LoginResult, type MemberLicense, type PublicCatalog, type PublicProduct, type Summary } from './api';
 
-type Route = 'home' | 'admin' | 'member';
+type Route = 'home' | 'admin' | 'member' | 'product';
+type AdminSection = 'dashboard' | 'landing' | 'deploy';
+type AdminTheme = 'light' | 'dark';
 
 const productTypes: ProductType[] = ['tool', 'course', 'ebook', 'video', 'bundle', 'free', 'class'];
 const billingPeriods: BillingPeriod[] = ['trial', 'monthly', 'annual', 'lifetime', 'one_time'];
@@ -29,7 +32,12 @@ const emptyCatalog: PublicCatalog = { featured: [], paid: [], free: [] };
 function routeFromPath(pathname: string): Route {
   if (pathname.startsWith('/adminasistenq')) return 'admin';
   if (pathname.startsWith('/member')) return 'member';
+  if (pathname.startsWith('/produk/')) return 'product';
   return 'home';
+}
+
+function productSlugFromPath(pathname: string): string {
+  return pathname.startsWith('/produk/') ? decodeURIComponent(pathname.replace('/produk/', '').split('/')[0]) : '';
 }
 
 export function App() {
@@ -41,11 +49,27 @@ export function App() {
   const [summary, setSummary] = useState<Summary | null>(null);
   const [licenses, setLicenses] = useState<MemberLicense[]>([]);
   const [message, setMessage] = useState('Sistem AsistenQ siap.');
+  const [adminSection, setAdminSection] = useState<AdminSection>('dashboard');
+  const [adminTheme, setAdminTheme] = useState<AdminTheme>(() => (
+    window.localStorage.getItem('asistenq-admin-theme') === 'dark' ? 'dark' : 'light'
+  ));
+  const [productSlug, setProductSlug] = useState(() => productSlugFromPath(window.location.pathname));
 
   function navigate(nextRoute: Route) {
-    const path = nextRoute === 'home' ? '/' : nextRoute === 'admin' ? '/adminasistenq' : `/${nextRoute}`;
+    const path = nextRoute === 'home' ? '/' : nextRoute === 'admin' ? '/adminasistenq' : nextRoute === 'product' ? `/produk/${productSlug}` : `/${nextRoute}`;
     window.history.pushState({}, '', path);
     setRoute(nextRoute);
+  }
+
+  function navigateProduct(slug: string) {
+    window.history.pushState({}, '', `/produk/${slug}`);
+    setProductSlug(slug);
+    setRoute('product');
+  }
+
+  function setTheme(theme: AdminTheme) {
+    setAdminTheme(theme);
+    window.localStorage.setItem('asistenq-admin-theme', theme);
   }
 
   async function loadProducts() {
@@ -67,7 +91,10 @@ export function App() {
   }
 
   useEffect(() => {
-    const onPopState = () => setRoute(routeFromPath(window.location.pathname));
+    const onPopState = () => {
+      setProductSlug(productSlugFromPath(window.location.pathname));
+      setRoute(routeFromPath(window.location.pathname));
+    };
     window.addEventListener('popstate', onPopState);
     return () => window.removeEventListener('popstate', onPopState);
   }, []);
@@ -79,8 +106,16 @@ export function App() {
 
   if (route === 'admin') {
     return (
-      <AdminShell message={message} navigate={navigate}>
+      <AdminShell
+        activeSection={adminSection}
+        message={message}
+        navigate={navigate}
+        onSectionChange={setAdminSection}
+        onThemeChange={setTheme}
+        theme={adminTheme}
+      >
         <AdminPanel
+          activeSection={adminSection}
           session={adminSession}
           summary={summary}
           products={products}
@@ -97,6 +132,13 @@ export function App() {
             await loadCatalog();
             await loadAdminSummary();
             setMessage('Produk baru tersimpan.');
+          }}
+          onDeployUpdate={async () => {
+            if (!adminSession) throw new Error('Login admin dulu.');
+            return apiRequest<{ ok: boolean; message: string; stdout?: string; stderr?: string; detail?: string }>('/admin/deploy/update', {
+              token: adminSession.token,
+              method: 'POST'
+            });
           }}
         />
       </AdminShell>
@@ -138,7 +180,9 @@ export function App() {
 
   return (
     <PublicShell navigate={navigate} activeRoute="home">
-      <Marketplace catalog={catalog} onJoin={() => navigate('member')} />
+      {route === 'product'
+        ? <ProductLanding isLoading={products.length === 0} product={products.find((item) => item.slug === productSlug)} onJoin={() => navigate('member')} />
+        : <Marketplace catalog={catalog} onJoin={() => navigate('member')} onProductOpen={navigateProduct} />}
     </PublicShell>
   );
 }
@@ -180,20 +224,26 @@ function PublicShell({ children, navigate, activeRoute }: {
   );
 }
 
-function AdminShell({ children, message, navigate }: {
+function AdminShell({ activeSection, children, message, navigate, onSectionChange, onThemeChange, theme }: {
+  activeSection: AdminSection;
   children: ReactNode;
   message: string;
   navigate: (route: Route) => void;
+  onSectionChange: (section: AdminSection) => void;
+  onThemeChange: (theme: AdminTheme) => void;
+  theme: AdminTheme;
 }) {
   return (
-    <div className="admin-shell">
+    <div className={`admin-shell admin-${theme}`}>
       <aside className="admin-sidebar">
         <Brand compact />
         <nav className="admin-nav">
-          <button className="active"><LayoutDashboard size={18} /> Dashboard</button>
+          <button className={activeSection === 'dashboard' ? 'active' : ''} onClick={() => onSectionChange('dashboard')}><LayoutDashboard size={18} /> Dashboard</button>
+          <button className={activeSection === 'landing' ? 'active' : ''} onClick={() => onSectionChange('landing')}><Sparkles size={18} /> Landing</button>
           <button><Boxes size={18} /> Produk</button>
           <button><KeyRound size={18} /> Lisensi</button>
           <button><Users size={18} /> Member</button>
+          <button className={activeSection === 'deploy' ? 'active' : ''} onClick={() => onSectionChange('deploy')}><UploadCloud size={18} /> Update</button>
         </nav>
         <button className="admin-public-link" onClick={() => navigate('home')}><ArrowRight size={16} /> Lihat website</button>
       </aside>
@@ -203,7 +253,13 @@ function AdminShell({ children, message, navigate }: {
             <p className="section-kicker">AsistenQ Operations</p>
             <h1>Admin Panel</h1>
           </div>
-          <div className="status-pill">{message}</div>
+          <div className="admin-top-actions">
+            <div className="theme-toggle" aria-label="Pilih tema admin">
+              <button className={theme === 'light' ? 'active' : ''} onClick={() => onThemeChange('light')}>Light</button>
+              <button className={theme === 'dark' ? 'active' : ''} onClick={() => onThemeChange('dark')}>Dark</button>
+            </div>
+            <div className="status-pill">{message}</div>
+          </div>
         </header>
         {children}
       </main>
@@ -284,7 +340,8 @@ function LoginBox({ title, accountType = 'member', onSubmit, showName = false }:
   );
 }
 
-function AdminPanel({ session, summary, products, onLogin, onCreateProduct }: {
+function AdminPanel({ activeSection, session, summary, products, onLogin, onCreateProduct, onDeployUpdate }: {
+  activeSection: AdminSection;
   session: LoginResult | null;
   summary: Summary | null;
   products: PublicProduct[];
@@ -298,6 +355,7 @@ function AdminPanel({ session, summary, products, onLogin, onCreateProduct }: {
     headline: string;
     description: string;
   }) => Promise<void>;
+  onDeployUpdate: () => Promise<{ ok: boolean; message: string; stdout?: string; stderr?: string; detail?: string }>;
 }) {
   if (!session) {
     return (
@@ -312,6 +370,14 @@ function AdminPanel({ session, summary, products, onLogin, onCreateProduct }: {
     );
   }
 
+  if (activeSection === 'landing') {
+    return <LandingManager products={products} />;
+  }
+
+  if (activeSection === 'deploy') {
+    return <DeployPanel onDeployUpdate={onDeployUpdate} />;
+  }
+
   return (
     <section className="admin-content-grid">
       <div className="metrics">
@@ -322,6 +388,98 @@ function AdminPanel({ session, summary, products, onLogin, onCreateProduct }: {
       </div>
       <ProductForm onCreateProduct={onCreateProduct} />
       <ProductTable products={products} />
+    </section>
+  );
+}
+
+function LandingManager({ products }: { products: PublicProduct[] }) {
+  const [selectedSlug, setSelectedSlug] = useState(products[0]?.slug ?? '');
+  const selected = products.find((product) => product.slug === selectedSlug) ?? products[0];
+
+  useEffect(() => {
+    if (!selectedSlug && products[0]) {
+      setSelectedSlug(products[0].slug);
+    }
+  }, [products, selectedSlug]);
+
+  return (
+    <section className="admin-content-grid compact-admin-grid">
+      <div className="panel stack">
+        <div className="panel-heading">
+          <div>
+            <p className="section-kicker">Landing Builder</p>
+            <h2>Landing Produk</h2>
+          </div>
+          <span className="soft-badge">Public</span>
+        </div>
+        <p className="muted">Menu ini disiapkan khusus untuk sales page produk. Untuk sekarang datanya mengikuti produk aktif, lalu nanti bisa ditambah editor benefit, FAQ, testimoni, dan bonus.</p>
+        <label>Produk
+          <select value={selected?.slug ?? ''} onChange={(event) => setSelectedSlug(event.target.value)}>
+            {products.map((product) => <option key={product.id} value={product.slug}>{product.name}</option>)}
+          </select>
+        </label>
+        {selected && (
+          <div className="landing-preview-card">
+            <span>{selected.type} · {selected.billingPeriod}</span>
+            <h3>{selected.name}</h3>
+            <p>{selected.headline}</p>
+            <strong>{selected.formattedPrice}</strong>
+            <a href={`/produk/${selected.slug}`} target="_blank" rel="noreferrer">Preview landing</a>
+          </div>
+        )}
+      </div>
+      <div className="panel stack">
+        <p className="section-kicker">Struktur Sales Page</p>
+        <h2>Blok landing yang akan dipakai</h2>
+        <div className="mini-checklist">
+          <span>Hero manfaat utama</span>
+          <span>Masalah yang diselesaikan</span>
+          <span>Fitur dan benefit</span>
+          <span>Harga, bonus, dan CTA</span>
+          <span>FAQ dan bukti/testimoni</span>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function DeployPanel({ onDeployUpdate }: {
+  onDeployUpdate: () => Promise<{ ok: boolean; message: string; stdout?: string; stderr?: string; detail?: string }>;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [log, setLog] = useState('Belum ada update dijalankan.');
+
+  return (
+    <section className="admin-content-grid compact-admin-grid">
+      <div className="panel stack wide">
+        <div className="panel-heading">
+          <div>
+            <p className="section-kicker">GitHub Deployment</p>
+            <h2>Update dari GitHub</h2>
+          </div>
+          <span className="soft-badge">Safe mode</span>
+        </div>
+        <p className="muted">Klik tombol ini setelah ada push ke GitHub. Sistem akan pull, install dependency, dan build. Setelah selesai, restart aplikasi Node.js dari panel hosting agar proses memakai build terbaru.</p>
+        <button
+          className="primary deploy-button"
+          disabled={busy}
+          onClick={async () => {
+            setBusy(true);
+            setLog('Menjalankan update dari GitHub...');
+            try {
+              const result = await onDeployUpdate();
+              setLog([result.message, result.stdout, result.stderr, result.detail].filter(Boolean).join('\n\n'));
+            } catch (error) {
+              setLog(error instanceof Error ? error.message : 'Update gagal.');
+            } finally {
+              setBusy(false);
+            }
+          }}
+        >
+          <UploadCloud size={18} /> {busy ? 'Mengupdate...' : 'Update dari GitHub'}
+        </button>
+        <pre className="deploy-log">{log}</pre>
+      </div>
     </section>
   );
 }
@@ -416,10 +574,11 @@ function productIcon(product: PublicProduct) {
   return <WandSparkles />;
 }
 
-function ProductCard({ product, label, featured = false }: {
+function ProductCard({ product, label, featured = false, onOpen }: {
   product: PublicProduct;
   label?: string;
   featured?: boolean;
+  onOpen?: (slug: string) => void;
 }) {
   return (
     <article className={featured ? 'market-card featured-product-card' : 'market-card'}>
@@ -431,13 +590,17 @@ function ProductCard({ product, label, featured = false }: {
       <p>{product.description || product.headline}</p>
       <div className="market-card-footer">
         <strong>{product.price === 0 ? 'Gratis' : product.formattedPrice}</strong>
-        <button className="ghost-button">Lihat detail <ArrowRight size={15} /></button>
+        <button className="ghost-button" onClick={() => onOpen?.(product.slug)}>Lihat detail <ArrowRight size={15} /></button>
       </div>
     </article>
   );
 }
 
-function Marketplace({ catalog, onJoin }: { catalog: PublicCatalog; onJoin: () => void }) {
+function Marketplace({ catalog, onJoin, onProductOpen }: {
+  catalog: PublicCatalog;
+  onJoin: () => void;
+  onProductOpen: (slug: string) => void;
+}) {
   const primaryProduct = catalog.featured[0] ?? catalog.paid[0];
 
   return (
@@ -501,7 +664,7 @@ function Marketplace({ catalog, onJoin }: { catalog: PublicCatalog; onJoin: () =
         </div>
         <div className="market-grid featured-market-grid">
           {catalog.featured.map((product) => (
-            <ProductCard key={product.id} product={product} label="unggulan" featured />
+            <ProductCard key={product.id} product={product} label="unggulan" featured onOpen={onProductOpen} />
           ))}
         </div>
       </section>
@@ -529,10 +692,10 @@ function Marketplace({ catalog, onJoin }: { catalog: PublicCatalog; onJoin: () =
         </div>
         <div className="market-grid">
           {catalog.paid.map((product) => (
-            <ProductCard key={product.id} product={product} />
+            <ProductCard key={product.id} product={product} onOpen={onProductOpen} />
           ))}
           {catalog.free.map((product) => (
-            <ProductCard key={product.id} product={product} label="gratis" />
+            <ProductCard key={product.id} product={product} label="gratis" onOpen={onProductOpen} />
           ))}
         </div>
       </section>
@@ -543,6 +706,74 @@ function Marketplace({ catalog, onJoin }: { catalog: PublicCatalog; onJoin: () =
           <h2>Pilih tools atau kelas yang kamu butuhkan, lalu aktifkan lewat akun member.</h2>
         </div>
         <button className="primary public-hero-button" onClick={onJoin}>Buat akun member</button>
+      </section>
+    </main>
+  );
+}
+
+function ProductLanding({ isLoading, product, onJoin }: { isLoading: boolean; product?: PublicProduct; onJoin: () => void }) {
+  if (isLoading) {
+    return (
+      <main className="product-landing">
+        <section className="product-sales-hero">
+          <p className="section-kicker">Memuat produk</p>
+          <h1>Menyiapkan landing page...</h1>
+          <p>Data produk sedang dimuat dari katalog AsistenQ.</p>
+        </section>
+      </main>
+    );
+  }
+
+  if (!product) {
+    return (
+      <main className="product-landing">
+        <section className="product-sales-hero">
+          <p className="section-kicker">Produk tidak ditemukan</p>
+          <h1>Produk belum tersedia.</h1>
+          <p>Silakan kembali ke marketplace AsistenQ untuk melihat produk aktif.</p>
+          <a className="primary public-hero-button" href="/">Kembali ke marketplace</a>
+        </section>
+      </main>
+    );
+  }
+
+  const benefits = product.type === 'course' || product.type === 'class'
+    ? ['Materi bertahap dan mudah diikuti', 'Akses kelas melalui akun member', 'Update materi untuk workflow YouTube']
+    : ['Aktivasi lisensi per perangkat', 'Membantu workflow produksi video', 'Cocok untuk creator YouTube yang ingin lebih cepat'];
+
+  return (
+    <main className="product-landing">
+      <section className="product-sales-hero">
+        <div>
+          <span className="chip">{product.category ?? product.type}</span>
+          <h1>{product.headline || product.name}</h1>
+          <p>{product.description}</p>
+          <div className="hero-actions">
+            <button className="primary public-hero-button" onClick={onJoin}>Aktifkan lewat member <ArrowRight size={18} /></button>
+            <a className="text-link dark-link" href="#harga">Lihat harga</a>
+          </div>
+        </div>
+        <aside className="product-price-card" id="harga">
+          <p>Paket mulai</p>
+          <h2>{product.price === 0 ? 'Gratis' : product.formattedPrice}</h2>
+          <span>{product.billingPeriod}</span>
+          <button className="primary" onClick={onJoin}>Masuk member</button>
+        </aside>
+      </section>
+
+      <section className="product-sales-grid">
+        <div className="panel stack">
+          <p className="section-kicker">Benefit</p>
+          <h2>Apa yang kamu dapatkan?</h2>
+          <div className="mini-checklist">
+            {benefits.map((benefit) => <span key={benefit}>{benefit}</span>)}
+          </div>
+        </div>
+        <div className="panel stack">
+          <p className="section-kicker">Cara mulai</p>
+          <h2>Daftar, bayar QRIS, lalu akses.</h2>
+          <p>Alur dibuat simpel: buat akun member, pilih produk, lakukan pembayaran, lalu akses lisensi atau materi dari member area.</p>
+        </div>
       </section>
     </main>
   );

@@ -1,7 +1,9 @@
 import cors from 'cors';
 import express from 'express';
+import { exec } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
+import { promisify } from 'node:util';
 import { z } from 'zod';
 import { formatCurrency } from '../shared/domain';
 import { signSession, requireAdminScope, requireSession } from './auth';
@@ -35,6 +37,7 @@ const isProduction = process.env.NODE_ENV === 'production';
 const publicDir = path.resolve(process.cwd(), 'dist');
 const hasBuiltFrontend = fs.existsSync(path.join(publicDir, 'index.html'));
 const shouldServeFrontend = isProduction || hasBuiltFrontend;
+const execAsync = promisify(exec);
 
 if (!isProduction) {
   app.use(cors({ origin: ['http://127.0.0.1:3000', 'http://localhost:3000'] }));
@@ -283,6 +286,32 @@ app.post('/api/admin/products', requireSession, requireAdminScope('products'), (
   const product = createProductRecord(store, body);
 
   res.status(201).json(publicProduct(product));
+});
+
+app.post('/api/admin/deploy/update', requireSession, requireAdminScope('products'), async (_req, res) => {
+  const command = 'git pull origin master && npm install --include=dev && npm run build';
+
+  try {
+    const { stdout, stderr } = await execAsync(command, {
+      cwd: process.cwd(),
+      timeout: 180000,
+      maxBuffer: 1024 * 1024
+    });
+
+    res.json({
+      ok: true,
+      message: 'Update selesai. Restart aplikasi Node.js dari panel hosting agar proses memakai build terbaru.',
+      stdout,
+      stderr
+    });
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : 'deploy failed';
+    res.status(500).json({
+      ok: false,
+      message: 'Update gagal. Cek log untuk detail.',
+      detail
+    });
+  }
 });
 
 app.get('/api/admin/orders', requireSession, requireAdminScope('orders'), (_req, res) => {
