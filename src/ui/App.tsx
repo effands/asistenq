@@ -1260,6 +1260,7 @@ function AdminMemberPanel({ members, onRefresh, onUpdateMember }: {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState('');
   const [editPassword, setEditPassword] = useState('');
+  const [notice, setNotice] = useState('');
 
   const filteredMembers = members.filter((member) => {
     const haystack = `${member.name} ${member.email} ${member.whatsapp ?? ''} ${member.telegramId ?? ''}`.toLowerCase();
@@ -1268,10 +1269,12 @@ function AdminMemberPanel({ members, onRefresh, onUpdateMember }: {
 
   const handleAction = async (action: () => Promise<void>) => {
     setBusy(true);
+    setNotice('');
     try {
       await action();
+      setNotice('Aksi member berhasil diproses.');
     } catch (e: any) {
-      alert('Error: ' + e.message);
+      setNotice(e instanceof Error ? e.message : 'Aksi member gagal diproses.');
     } finally {
       setBusy(false);
     }
@@ -1296,6 +1299,7 @@ function AdminMemberPanel({ members, onRefresh, onUpdateMember }: {
           </button>
         </div>
         <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Cari nama, email, WhatsApp, atau Telegram..." />
+        {notice && <p className="form-notice">{notice}</p>}
         <div className="member-table-wrap">
           <div className="member-table member-table-head" aria-hidden="true">
             <span>Member</span><span>Kontak</span><span>Status</span><span>Aktivitas</span><span>Daftar</span><span>Aksi</span>
@@ -1310,13 +1314,13 @@ function AdminMemberPanel({ members, onRefresh, onUpdateMember }: {
                   <input value={editName} onChange={e => setEditName(e.target.value)} placeholder="Nama member" />
                   <input value={editPassword} onChange={e => setEditPassword(e.target.value)} placeholder="Password baru (opsional, min 6 char)" type="password" />
                   <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
-                    <button className="primary" onClick={() => handleAction(async () => {
+                    <button className="primary" type="button" onClick={() => handleAction(async () => {
                       const payload: any = { name: editName };
                       if (editPassword.length >= 6) payload.password = editPassword;
                       await onUpdateMember(member.id, payload);
                       setEditingId(null);
                     })}>Simpan</button>
-                    <button className="ghost-button" onClick={() => setEditingId(null)}>Batal</button>
+                    <button className="ghost-button" type="button" onClick={() => setEditingId(null)}>Batal</button>
                   </div>
                 </div>
               ) : (
@@ -1337,9 +1341,10 @@ function AdminMemberPanel({ members, onRefresh, onUpdateMember }: {
                     <small>Order: {member.latestOrder ? formatDate(member.latestOrder.createdAt) : '-'}</small>
                   </div>
                   <div className="member-admin-actions">
-                    <button className="ghost-button tiny-button" disabled={busy} onClick={() => startEdit(member)}>Edit</button>
+                    <button className="ghost-button tiny-button" type="button" disabled={busy} onClick={() => startEdit(member)}>Edit</button>
                     <button 
                       className={`ghost-button tiny-button ${member.active ? 'danger-lite' : ''}`} 
+                      type="button"
                       disabled={busy} 
                       onClick={() => handleAction(() => onUpdateMember(member.id, { active: !member.active }))}
                     >

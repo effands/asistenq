@@ -43,7 +43,7 @@ def request_json(url: str, method: str = "GET", body: Optional[Dict[str, Any]] =
     try:
         with urllib.request.urlopen(request, timeout=20) as response:
             raw = response.read().decode("utf-8")
-            return json.loads(raw) if raw else {}
+            return parse_json_response(raw, url)
     except urllib.error.HTTPError as error:
         raw = error.read().decode("utf-8", errors="replace")
         try:
@@ -51,6 +51,16 @@ def request_json(url: str, method: str = "GET", body: Optional[Dict[str, Any]] =
         except json.JSONDecodeError:
             message = raw
         raise RuntimeError(f"API {error.code}: {message}") from error
+
+
+def parse_json_response(raw: str, url: str) -> Any:
+    if not raw or not raw.strip():
+        return {}
+    try:
+        return json.loads(raw)
+    except json.JSONDecodeError as error:
+        preview = raw.replace("\n", " ").strip()[:160]
+        raise RuntimeError(f"Respons bukan JSON dari {url}: {preview}") from error
 
 
 def telegram(method: str, body: Optional[Dict[str, Any]] = None) -> Any:
