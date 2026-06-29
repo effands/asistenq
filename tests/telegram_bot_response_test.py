@@ -10,6 +10,9 @@ spec.loader.exec_module(bot)
 
 
 class TelegramBotResponseTest(unittest.TestCase):
+    def test_http_timeout_is_longer_than_telegram_poll_timeout(self):
+        self.assertGreater(bot.HTTP_TIMEOUT_SECONDS, bot.TELEGRAM_POLL_TIMEOUT_SECONDS)
+
     def test_parse_json_response_reports_non_json_body(self):
         with self.assertRaises(RuntimeError) as error:
             bot.parse_json_response("<html>Cannot GET /api/bot/orders</html>", "https://asistenq.com/api/bot/orders")

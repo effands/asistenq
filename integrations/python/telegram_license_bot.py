@@ -31,6 +31,8 @@ BOT_SECRET = (os.environ.get("ASISTENQ_BOT_SECRET") or LOCAL_SETTINGS.get("botAp
 STATE_FILE = Path(os.environ.get("ASISTENQ_BOT_STATE", "data/telegram-bot-state.json"))
 DEFAULT_PRODUCT = os.environ.get("ASISTENQ_DEFAULT_PRODUCT", "vjstudio")
 PLAN_CHOICES = ["1M", "3M", "6M", "12M", "LIFETIME"]
+TELEGRAM_POLL_TIMEOUT_SECONDS = 25
+HTTP_TIMEOUT_SECONDS = 40
 
 
 def request_json(url: str, method: str = "GET", body: Optional[Dict[str, Any]] = None,
@@ -41,7 +43,7 @@ def request_json(url: str, method: str = "GET", body: Optional[Dict[str, Any]] =
         request_headers["Content-Type"] = "application/json"
     request = urllib.request.Request(url, data=payload, headers=request_headers, method=method)
     try:
-        with urllib.request.urlopen(request, timeout=20) as response:
+        with urllib.request.urlopen(request, timeout=HTTP_TIMEOUT_SECONDS) as response:
             raw = response.read().decode("utf-8")
             return parse_json_response(raw, url)
     except urllib.error.HTTPError as error:
@@ -376,7 +378,7 @@ def main() -> None:
     offset = load_offset()
     while True:
         try:
-            query = urllib.parse.urlencode({"offset": offset, "timeout": 25})
+            query = urllib.parse.urlencode({"offset": offset, "timeout": TELEGRAM_POLL_TIMEOUT_SECONDS})
             updates = request_json(f"https://api.telegram.org/bot{BOT_TOKEN}/getUpdates?{query}")
             for update in updates.get("result", []):
                 offset = int(update["update_id"]) + 1

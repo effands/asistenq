@@ -904,6 +904,12 @@ app.post('/api/admin/deploy/settings', requireSession, requireAdminScope('produc
   const nextSmtpPort = body.smtpPort?.trim() || current.smtpPort || process.env.SMTP_PORT || '465';
   const nextSmtpUser = body.smtpUser?.trim() || current.smtpUser || process.env.SMTP_USER || 'cs@asistenq.com';
   const nextMailFrom = body.mailFrom?.trim() || current.mailFrom || process.env.MAIL_FROM || 'AsistenQ <cs@asistenq.com>';
+  const isSmtpSave = Boolean(body.smtpHost || body.smtpPort || body.smtpUser || body.mailFrom || body.smtpPass !== undefined);
+
+  if (isSmtpSave && !nextSmtpPass) {
+    res.status(400).json({ message: 'Password SMTP belum tersimpan. Isi kolom SMTP Password lalu klik Simpan SMTP lagi.' });
+    return;
+  }
 
   try {
     const deploySettings = parseDeploymentSettings(body);
