@@ -3588,15 +3588,12 @@ textarea {
   to { opacity: 1; transform: translateY(0); }
 }
 
-/* Force Landing Builder Grid Layout on Desktop */
-@media (min-width: 981px) {
-  .landing-builder-grid {
-    display: grid !important;
-    grid-template-columns: minmax(0, 1.2fr) minmax(300px, 0.8fr) !important;
-    align-items: start;
-  }
+.landing-builder-grid {
+  display: grid !important;
+  grid-template-columns: minmax(0, 1.2fr) minmax(300px, 0.8fr) !important;
+  align-items: start;
 }
-@media (max-width: 980px) {
+@media (max-width: 620px) {
   .landing-builder-grid {
     grid-template-columns: 1fr !important;
   }
