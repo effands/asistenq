@@ -571,12 +571,12 @@ p {
 
 .market-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-  gap: 18px;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 16px;
 }
 
 .featured-market-grid {
-  grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
 }
 
 .market-card,
@@ -592,9 +592,17 @@ p {
 
 .market-card {
   display: grid;
-  gap: 18px;
-  min-height: 330px;
-  padding: 24px;
+  gap: 12px;
+  min-height: 240px;
+  padding: 18px;
+}
+
+.market-card p {
+  font-size: 14px;
+  line-height: 1.4;
+  margin: 0;
+  color: var(--ink);
+  opacity: 0.8;
 }
 
 .featured-product-card {
@@ -642,8 +650,8 @@ p {
 
 .market-card h3 {
   margin: 0;
-  font-size: 28px;
-  letter-spacing: -.04em;
+  font-size: 20px;
+  letter-spacing: -.02em;
 }
 
 .market-card-footer {
