@@ -1447,8 +1447,9 @@ function DeployPanel({ settings, onDeployUpdate, onRefreshBotStatus, onSaveSetti
         <div className="compact-token-fields">
           <label>Repository<input value={githubRepo} onChange={(event) => setGithubRepo(event.target.value)} placeholder="effands/asistenq" /></label>
           <label>Branch<input value={githubBranch} onChange={(event) => setGithubBranch(event.target.value)} placeholder="master" /></label>
-          <label className="span-two">GitHub Token<input value={githubToken} onChange={(event) => setGithubToken(event.target.value)} placeholder={settings?.maskedGithubToken || 'ghp_...'} type="password" /></label>
+          <label className="span-two">GitHub Token / PAT<input value={githubToken} onChange={(event) => setGithubToken(event.target.value)} placeholder={settings?.maskedGithubToken || 'ghp_... atau github_pat_...'} type="password" /></label>
         </div>
+        <p className="form-helper">Untuk repository private, gunakan GitHub Personal Access Token dengan akses read ke repository ini. Token disimpan di server dan hanya ditampilkan dalam bentuk masking.</p>
         <button className="primary" disabled={saving}>{saving ? 'Menyimpan...' : 'Simpan Token GitHub'}</button>
         {settingsNotice && <p className="form-notice">{settingsNotice}</p>}
       </form>
