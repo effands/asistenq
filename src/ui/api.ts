@@ -102,6 +102,12 @@ export type DeploymentSettingsResult = {
   hasTelegramBotToken: boolean;
   maskedTelegramBotToken: string;
   telegramOwnerId: string;
+  smtpHost: string;
+  smtpPort: string;
+  smtpUser: string;
+  hasSmtpPass: boolean;
+  maskedSmtpPass: string;
+  mailFrom: string;
   botStatus: TelegramBotStatus;
   updatedAt?: string;
 };

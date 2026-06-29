@@ -480,7 +480,7 @@ function AdminShell({ activeSection, children, message, navigate, onSectionChang
           <button className={activeSection === 'orders' ? 'active' : ''} onClick={() => onSectionChange('orders')}><CreditCard size={18} /> Order</button>
           <button className={activeSection === 'licenses' ? 'active' : ''} onClick={() => onSectionChange('licenses')}><KeyRound size={18} /> Lisensi</button>
           <button className={activeSection === 'members' ? 'active' : ''} onClick={() => onSectionChange('members')}><Users size={18} /> Member</button>
-          <button className={activeSection === 'deploy' ? 'active' : ''} onClick={() => onSectionChange('deploy')}><UploadCloud size={18} /> Update</button>
+          <button className={activeSection === 'deploy' ? 'active' : ''} onClick={() => onSectionChange('deploy')}><ShieldCheck size={18} /> Settings</button>
         </nav>
         <button className="admin-public-link" onClick={() => navigate('home')}><ArrowRight size={16} /> Lihat website</button>
       </aside>
@@ -659,7 +659,7 @@ function AdminPanel({
   onStartBot: () => Promise<TelegramBotStatus>;
   onStopBot: () => Promise<TelegramBotStatus>;
   deploymentSettings: DeploymentSettingsResult | null;
-  onSaveDeploymentSettings: (input: { githubRepo: string; githubBranch: string; githubToken?: string; telegramBotToken?: string; telegramOwnerId?: string }) => Promise<void>;
+  onSaveDeploymentSettings: (input: { githubRepo: string; githubBranch: string; githubToken?: string; telegramBotToken?: string; telegramOwnerId?: string; smtpHost?: string; smtpPort?: string; smtpUser?: string; smtpPass?: string; mailFrom?: string }) => Promise<void>;
 }) {
   if (!session) {
     return (
@@ -1360,7 +1360,7 @@ function DeployPanel({ settings, onDeployUpdate, onRefreshBotStatus, onSaveSetti
   settings: DeploymentSettingsResult | null;
   onDeployUpdate: () => Promise<{ ok: boolean; message: string; stdout?: string; stderr?: string; detail?: string }>;
   onRefreshBotStatus: () => Promise<TelegramBotStatus>;
-  onSaveSettings: (input: { githubRepo: string; githubBranch: string; githubToken?: string; telegramBotToken?: string; telegramOwnerId?: string }) => Promise<void>;
+  onSaveSettings: (input: { githubRepo: string; githubBranch: string; githubToken?: string; telegramBotToken?: string; telegramOwnerId?: string; smtpHost?: string; smtpPort?: string; smtpUser?: string; smtpPass?: string; mailFrom?: string }) => Promise<void>;
   onStartBot: () => Promise<TelegramBotStatus>;
   onStopBot: () => Promise<TelegramBotStatus>;
 }) {
@@ -1375,6 +1375,12 @@ function DeployPanel({ settings, onDeployUpdate, onRefreshBotStatus, onSaveSetti
   const [telegramBotToken, setTelegramBotToken] = useState('');
   const [telegramOwnerId, setTelegramOwnerId] = useState(settings?.telegramOwnerId ?? '');
   const [telegramNotice, setTelegramNotice] = useState('');
+  const [smtpHost, setSmtpHost] = useState(settings?.smtpHost ?? 'mail.asistenq.com');
+  const [smtpPort, setSmtpPort] = useState(settings?.smtpPort ?? '465');
+  const [smtpUser, setSmtpUser] = useState(settings?.smtpUser ?? 'cs@asistenq.com');
+  const [smtpPass, setSmtpPass] = useState('');
+  const [mailFrom, setMailFrom] = useState(settings?.mailFrom ?? 'AsistenQ <cs@asistenq.com>');
+  const [smtpNotice, setSmtpNotice] = useState('');
   const botStatus = settings?.botStatus;
 
   useEffect(() => {
@@ -1382,6 +1388,10 @@ function DeployPanel({ settings, onDeployUpdate, onRefreshBotStatus, onSaveSetti
       setGithubRepo(settings.githubRepo);
       setGithubBranch(settings.githubBranch);
       setTelegramOwnerId(settings.telegramOwnerId);
+      setSmtpHost(settings.smtpHost || 'mail.asistenq.com');
+      setSmtpPort(settings.smtpPort || '465');
+      setSmtpUser(settings.smtpUser || 'cs@asistenq.com');
+      setMailFrom(settings.mailFrom || 'AsistenQ <cs@asistenq.com>');
     }
   }, [settings]);
 
@@ -1427,7 +1437,12 @@ function DeployPanel({ settings, onDeployUpdate, onRefreshBotStatus, onSaveSetti
             githubBranch: githubBranch.trim(),
             githubToken: githubToken.trim(),
             telegramBotToken: '',
-            telegramOwnerId
+            telegramOwnerId,
+            smtpHost,
+            smtpPort,
+            smtpUser,
+            smtpPass: '',
+            mailFrom
           });
           setGithubToken('');
           setSettingsNotice('Token GitHub tersimpan.');
@@ -1456,6 +1471,46 @@ function DeployPanel({ settings, onDeployUpdate, onRefreshBotStatus, onSaveSetti
       <form className="panel compact-token-card" onSubmit={async (event) => {
         event.preventDefault();
         setSaving(true);
+        setSmtpNotice('Menyimpan SMTP...');
+        try {
+          await onSaveSettings({
+            githubRepo: githubRepo.trim(),
+            githubBranch: githubBranch.trim(),
+            githubToken: '',
+            telegramBotToken: '',
+            telegramOwnerId: telegramOwnerId.trim(),
+            smtpHost: smtpHost.trim(),
+            smtpPort: smtpPort.trim(),
+            smtpUser: smtpUser.trim(),
+            smtpPass: smtpPass.trim(),
+            mailFrom: mailFrom.trim()
+          });
+          setSmtpPass('');
+          setSmtpNotice('Setting SMTP tersimpan. Kalau password dikosongkan, password lama tetap dipakai.');
+        } catch (error) {
+          setSmtpNotice(error instanceof Error ? error.message : 'Setting SMTP gagal disimpan.');
+        } finally {
+          setSaving(false);
+        }
+      }}>
+        <div className="panel-heading">
+          <div><p className="section-kicker">SMTP Email</p><h2>Email Invoice & Lisensi</h2></div>
+          <span className="soft-badge">{settings?.hasSmtpPass ? 'Password aktif' : 'Belum ada password'}</span>
+        </div>
+        <div className="compact-token-fields">
+          <label>SMTP Host<input value={smtpHost} onChange={(event) => setSmtpHost(event.target.value)} placeholder="mail.asistenq.com" /></label>
+          <label>SMTP Port<input value={smtpPort} onChange={(event) => setSmtpPort(event.target.value.replace(/\D/g, ''))} placeholder="465" inputMode="numeric" /></label>
+          <label>SMTP User<input value={smtpUser} onChange={(event) => setSmtpUser(event.target.value)} placeholder="cs@asistenq.com" /></label>
+          <label>SMTP Password<input value={smtpPass} onChange={(event) => setSmtpPass(event.target.value)} placeholder={settings?.maskedSmtpPass || 'Password email'} type="password" /></label>
+          <label className="span-two">Mail From<input value={mailFrom} onChange={(event) => setMailFrom(event.target.value)} placeholder="AsistenQ <cs@asistenq.com>" /></label>
+        </div>
+        <p className="form-helper">Isi password email cPanel untuk cs@asistenq.com. Rekomendasi screenshot: host mail.asistenq.com, port 465.</p>
+        <button className="primary" disabled={saving}>{saving ? 'Menyimpan...' : 'Simpan SMTP'}</button>
+        {smtpNotice && <p className="form-notice">{smtpNotice}</p>}
+      </form>
+      <form className="panel compact-token-card" onSubmit={async (event) => {
+        event.preventDefault();
+        setSaving(true);
         setTelegramNotice('Menyimpan...');
         try {
           await onSaveSettings({
@@ -1463,7 +1518,12 @@ function DeployPanel({ settings, onDeployUpdate, onRefreshBotStatus, onSaveSetti
             githubBranch: githubBranch.trim(),
             githubToken: '',
             telegramBotToken: telegramBotToken.trim(),
-            telegramOwnerId: telegramOwnerId.trim()
+            telegramOwnerId: telegramOwnerId.trim(),
+            smtpHost,
+            smtpPort,
+            smtpUser,
+            smtpPass: '',
+            mailFrom
           });
           setTelegramBotToken('');
           setTelegramNotice('Konfigurasi Telegram tersimpan.');

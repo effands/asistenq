@@ -198,7 +198,12 @@ const deploymentSettingsSchema = z.object({
   githubRepo: z.string().min(3).default('effands/asistenq'),
   githubBranch: z.string().min(1).default('master'),
   telegramBotToken: z.string().optional(),
-  telegramOwnerId: z.string().optional()
+  telegramOwnerId: z.string().optional(),
+  smtpHost: z.string().optional(),
+  smtpPort: z.string().optional(),
+  smtpUser: z.string().optional(),
+  smtpPass: z.string().optional(),
+  mailFrom: z.string().optional()
 });
 
 function publicProduct(product: typeof store.data.products[number]) {
@@ -860,6 +865,7 @@ app.get('/api/admin/deploy/settings', requireSession, requireAdminScope('product
   const settings = store.data.deploymentSettings ?? {};
   const token = settings.githubToken ?? process.env.GITHUB_TOKEN ?? '';
   const telegramToken = settings.telegramBotToken ?? process.env.TELEGRAM_BOT_TOKEN ?? '';
+  const smtpPass = settings.smtpPass ?? process.env.SMTP_PASS ?? '';
   const botStatus = getTelegramBotStatus(store);
   res.json({
     githubRepo: settings.githubRepo ?? 'effands/asistenq',
@@ -869,6 +875,12 @@ app.get('/api/admin/deploy/settings', requireSession, requireAdminScope('product
     hasTelegramBotToken: Boolean(telegramToken),
     maskedTelegramBotToken: maskedSecret(telegramToken),
     telegramOwnerId: settings.telegramOwnerId ?? process.env.TELEGRAM_OWNER_ID ?? '',
+    smtpHost: settings.smtpHost ?? process.env.SMTP_HOST ?? 'mail.asistenq.com',
+    smtpPort: settings.smtpPort ?? process.env.SMTP_PORT ?? '465',
+    smtpUser: settings.smtpUser ?? process.env.SMTP_USER ?? 'cs@asistenq.com',
+    hasSmtpPass: Boolean(smtpPass),
+    maskedSmtpPass: maskedSecret(smtpPass),
+    mailFrom: settings.mailFrom ?? process.env.MAIL_FROM ?? 'AsistenQ <cs@asistenq.com>',
     botStatus,
     updatedAt: settings.updatedAt
   });
@@ -887,6 +899,11 @@ app.post('/api/admin/deploy/settings', requireSession, requireAdminScope('produc
   const nextToken = body.githubToken?.trim() || current.githubToken || process.env.GITHUB_TOKEN || '';
   const nextTelegramToken = body.telegramBotToken?.trim() || current.telegramBotToken || process.env.TELEGRAM_BOT_TOKEN || '';
   const nextTelegramOwnerId = body.telegramOwnerId?.trim() || current.telegramOwnerId || process.env.TELEGRAM_OWNER_ID || '';
+  const nextSmtpPass = body.smtpPass?.trim() || current.smtpPass || process.env.SMTP_PASS || '';
+  const nextSmtpHost = body.smtpHost?.trim() || current.smtpHost || process.env.SMTP_HOST || 'mail.asistenq.com';
+  const nextSmtpPort = body.smtpPort?.trim() || current.smtpPort || process.env.SMTP_PORT || '465';
+  const nextSmtpUser = body.smtpUser?.trim() || current.smtpUser || process.env.SMTP_USER || 'cs@asistenq.com';
+  const nextMailFrom = body.mailFrom?.trim() || current.mailFrom || process.env.MAIL_FROM || 'AsistenQ <cs@asistenq.com>';
 
   try {
     const deploySettings = parseDeploymentSettings(body);
@@ -897,6 +914,11 @@ app.post('/api/admin/deploy/settings', requireSession, requireAdminScope('produc
       telegramBotToken: nextTelegramToken,
       telegramOwnerId: nextTelegramOwnerId,
       botApiSecret: current.botApiSecret,
+      smtpHost: nextSmtpHost,
+      smtpPort: nextSmtpPort,
+      smtpUser: nextSmtpUser,
+      smtpPass: nextSmtpPass,
+      mailFrom: nextMailFrom,
       updatedAt: new Date().toISOString()
     };
     store.save();
@@ -912,6 +934,12 @@ app.post('/api/admin/deploy/settings', requireSession, requireAdminScope('produc
       hasTelegramBotToken: Boolean(nextTelegramToken),
       maskedTelegramBotToken: maskedSecret(nextTelegramToken),
       telegramOwnerId: nextTelegramOwnerId,
+      smtpHost: nextSmtpHost,
+      smtpPort: nextSmtpPort,
+      smtpUser: nextSmtpUser,
+      hasSmtpPass: Boolean(nextSmtpPass),
+      maskedSmtpPass: maskedSecret(nextSmtpPass),
+      mailFrom: nextMailFrom,
       botStatus,
       updatedAt: store.data.deploymentSettings.updatedAt
     });
@@ -987,6 +1015,42 @@ app.post('/api/bot/license-send', requireBotSecret, (req, res) => {
     const message = error instanceof z.ZodError
       ? error.issues.map((issue) => issue.message).join(', ')
       : error instanceof Error ? error.message : 'Lisensi gagal dibuat.';
+    res.status(400).json({ message });
+  }
+});
+
+app.get('/api/bot/banned', requireBotSecret, (_req, res) => {
+  const rows = store.data.bannedHwids.map((item) => {
+    const product = store.data.products.find((candidate) => candidate.id === item.productId);
+    return {
+      ...item,
+      productSlug: product?.slug ?? item.productId,
+      productName: product?.name ?? item.productId
+    };
+  });
+  res.json({ bannedHwids: rows });
+});
+
+app.post('/api/bot/ban-hwid', requireBotSecret, (req, res) => {
+  try {
+    const body = hwidActionSchema.parse(req.body);
+    res.status(201).json(banHwid(store, body));
+  } catch (error) {
+    const message = error instanceof z.ZodError
+      ? error.issues.map((issue) => issue.message).join(', ')
+      : error instanceof Error ? error.message : 'HWID gagal dibanned.';
+    res.status(400).json({ message });
+  }
+});
+
+app.post('/api/bot/unban-hwid', requireBotSecret, (req, res) => {
+  try {
+    const body = z.object({ productSlug: z.string().min(1), hwid: z.string().min(1) }).parse(req.body);
+    res.json(unbanHwid(store, body));
+  } catch (error) {
+    const message = error instanceof z.ZodError
+      ? error.issues.map((issue) => issue.message).join(', ')
+      : error instanceof Error ? error.message : 'HWID gagal di-unban.';
     res.status(400).json({ message });
   }
 });

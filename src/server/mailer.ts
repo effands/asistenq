@@ -2,6 +2,7 @@ import net from 'node:net';
 import tls from 'node:tls';
 import fs from 'node:fs';
 import path from 'node:path';
+import type { DeploymentSettings } from '../shared/types';
 
 type MailInput = {
   to: string;
@@ -27,15 +28,33 @@ function readMailSettings(): MailSettings {
   }
 }
 
+function readDeploymentMailSettings(): Partial<DeploymentSettings> {
+  try {
+    const filePath = path.resolve('data/asistenq.json');
+    const data = JSON.parse(fs.readFileSync(filePath, 'utf-8')) as { deploymentSettings?: DeploymentSettings };
+    return data.deploymentSettings ?? {};
+  } catch {
+    return {};
+  }
+}
+
+export function resolveMailSettings(
+  env: NodeJS.ProcessEnv,
+  file: MailSettings,
+  admin: Partial<DeploymentSettings>
+): MailSettings {
+  return {
+    SMTP_HOST: env.SMTP_HOST || admin.smtpHost || file.SMTP_HOST,
+    SMTP_PORT: env.SMTP_PORT || admin.smtpPort || file.SMTP_PORT,
+    SMTP_USER: env.SMTP_USER || admin.smtpUser || file.SMTP_USER,
+    SMTP_PASS: env.SMTP_PASS || admin.smtpPass || file.SMTP_PASS,
+    MAIL_FROM: env.MAIL_FROM || admin.mailFrom || file.MAIL_FROM
+  };
+}
+
 function settings(): MailSettings {
   const file = readMailSettings();
-  return {
-    SMTP_HOST: process.env.SMTP_HOST || file.SMTP_HOST,
-    SMTP_PORT: process.env.SMTP_PORT || file.SMTP_PORT,
-    SMTP_USER: process.env.SMTP_USER || file.SMTP_USER,
-    SMTP_PASS: process.env.SMTP_PASS || file.SMTP_PASS,
-    MAIL_FROM: process.env.MAIL_FROM || file.MAIL_FROM
-  };
+  return resolveMailSettings(process.env, file, readDeploymentMailSettings());
 }
 
 function configured(mailSettings: MailSettings) {
@@ -63,7 +82,7 @@ async function command(socket: net.Socket, text: string): Promise<string> {
 }
 
 function message(input: MailInput): string {
-  const from = process.env.MAIL_FROM ?? '';
+  const from = settings().MAIL_FROM ?? '';
   const boundary = `asistenq-${Date.now()}`;
   const text = input.text ?? input.html.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
 
@@ -87,6 +106,11 @@ function message(input: MailInput): string {
   ].join('\r\n');
 }
 
+function senderAddress(from: string): string {
+  const match = from.match(/<([^>]+)>/);
+  return (match?.[1] ?? from).trim();
+}
+
 export async function sendMail(input: MailInput): Promise<{ sent: boolean; reason?: string }> {
   const mailSettings = settings();
   if (!configured(mailSettings)) {
@@ -96,6 +120,7 @@ export async function sendMail(input: MailInput): Promise<{ sent: boolean; reaso
   const host = mailSettings.SMTP_HOST ?? '';
   const port = Number(mailSettings.SMTP_PORT ?? 587);
   const from = mailSettings.MAIL_FROM ?? '';
+  const envelopeFrom = senderAddress(from);
   const secure = port === 465;
   const socket = secure
     ? tls.connect({ host, port, servername: host })
@@ -111,7 +136,7 @@ export async function sendMail(input: MailInput): Promise<{ sent: boolean; reaso
       await command(upgraded, 'AUTH LOGIN');
       await command(upgraded, Buffer.from(mailSettings.SMTP_USER ?? '').toString('base64'));
       await command(upgraded, Buffer.from(mailSettings.SMTP_PASS ?? '').toString('base64'));
-      await command(upgraded, `MAIL FROM:<${from}>`);
+      await command(upgraded, `MAIL FROM:<${envelopeFrom}>`);
       await command(upgraded, `RCPT TO:<${input.to}>`);
       await command(upgraded, 'DATA');
       await command(upgraded, message(input));
@@ -122,7 +147,7 @@ export async function sendMail(input: MailInput): Promise<{ sent: boolean; reaso
     await command(socket, 'AUTH LOGIN');
     await command(socket, Buffer.from(mailSettings.SMTP_USER ?? '').toString('base64'));
     await command(socket, Buffer.from(mailSettings.SMTP_PASS ?? '').toString('base64'));
-    await command(socket, `MAIL FROM:<${from}>`);
+    await command(socket, `MAIL FROM:<${envelopeFrom}>`);
     await command(socket, `RCPT TO:<${input.to}>`);
     await command(socket, 'DATA');
     await command(socket, message(input));

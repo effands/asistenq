@@ -197,6 +197,11 @@ export interface DeploymentSettings {
   telegramBotToken?: string;
   telegramOwnerId?: string;
   botApiSecret?: string;
+  smtpHost?: string;
+  smtpPort?: string;
+  smtpUser?: string;
+  smtpPass?: string;
+  mailFrom?: string;
   updatedAt?: string;
 }
 
