@@ -259,12 +259,73 @@ function sendProductAccessDenied(req: express.Request, res: express.Response, pr
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Akses Member Dibutuhkan</title>
     <style>
-      body{margin:0;min-height:100vh;display:grid;place-items:center;background:linear-gradient(135deg,#e9fbf5,#f7fff9);font-family:system-ui,sans-serif;color:#082f2a}
-      main{max-width:520px;margin:24px;padding:34px;border:1px solid rgba(4,64,56,.16);border-radius:28px;background:rgba(255,255,255,.84);box-shadow:0 24px 70px rgba(4,64,56,.16)}
-      h1{margin:0 0 12px;font-size:32px;line-height:1.08}p{color:#55716b;line-height:1.6}a{display:inline-flex;margin-top:14px;padding:14px 18px;border-radius:999px;background:#053b34;color:white;text-decoration:none;font-weight:800}
+      :root {
+        --bg-grad: linear-gradient(135deg, #eaf7f1, #f5fbf7);
+        --card-bg: rgba(255, 255, 255, 0.7);
+        --card-border: rgba(0, 140, 134, 0.15);
+        --text-main: #062c28;
+        --text-sub: #3d5a55;
+        --btn-bg: #062c28;
+        --btn-hover: #008c86;
+        --shadow: 0 32px 80px rgba(6, 44, 40, 0.12);
+        --icon-bg: #dcf7ed;
+        --icon-color: #0e3f35;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg-grad: linear-gradient(135deg, #0a1411, #12201c);
+          --card-bg: rgba(18, 32, 28, 0.6);
+          --card-border: rgba(255, 255, 255, 0.05);
+          --text-main: #ffffff;
+          --text-sub: #9caea9;
+          --btn-bg: #008c86;
+          --btn-hover: #5de0cb;
+          --shadow: 0 32px 80px rgba(0, 0, 0, 0.4);
+          --icon-bg: rgba(0, 140, 134, 0.2);
+          --icon-color: #5de0cb;
+        }
+      }
+      body {
+        margin: 0; min-height: 100vh; display: grid; place-items: center;
+        background: var(--bg-grad); font-family: 'Inter', system-ui, sans-serif; color: var(--text-main);
+      }
+      main {
+        max-width: 440px; margin: 24px; padding: 48px 40px; text-align: center;
+        border: 1px solid var(--card-border); border-radius: 32px;
+        background: var(--card-bg); backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px);
+        box-shadow: var(--shadow);
+        animation: fadeUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+      }
+      .icon {
+        width: 64px; height: 64px; margin: 0 auto 24px; display: grid; place-items: center;
+        background: var(--icon-bg); color: var(--icon-color); border-radius: 20px;
+      }
+      .icon svg { width: 32px; height: 32px; stroke-width: 2.2; }
+      h1 { margin: 0 0 12px; font-size: 28px; line-height: 1.2; font-weight: 800; letter-spacing: -0.02em; }
+      p { color: var(--text-sub); line-height: 1.6; font-size: 15px; margin: 0 0 32px; }
+      a {
+        display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+        width: 100%; padding: 16px 24px; border-radius: 999px;
+        background: var(--btn-bg); color: #fff; text-decoration: none; font-weight: 700; font-size: 15px;
+        transition: all 0.2s; box-shadow: 0 8px 24px rgba(0,0,0,0.1); box-sizing: border-box;
+      }
+      a:hover { background: var(--btn-hover); transform: translateY(-2px); box-shadow: 0 12px 32px rgba(0,0,0,0.15); }
+      @keyframes fadeUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
     </style>
   </head>
-  <body><main><h1>Akses tools belum terbuka.</h1><p>${product.accessRequirement ?? 'Silakan login member dan ambil akses produk dulu.'}</p>${action}</main></body>
+  <body>
+    <main>
+      <div class="icon">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+          <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+        </svg>
+      </div>
+      <h1>Akses tools belum terbuka.</h1>
+      <p>${product.accessRequirement ?? 'Silakan login member dan ambil akses produk dulu.'}</p>
+      ${action}
+    </main>
+  </body>
 </html>`);
 }
 
