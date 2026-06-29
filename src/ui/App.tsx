@@ -1872,14 +1872,11 @@ function Marketplace({ catalog, onJoin, onProductOpen }: {
       <section className="landing-section">
         <div className="section-head">
           <div>
-            <p className="section-kicker">Paid & Free</p>
-            <h2>Pilih sesuai kebutuhan</h2>
+            <p className="section-kicker">Free Tools</p>
+            <h2>Bisa diakses langsung setelah login</h2>
           </div>
         </div>
         <div className="market-grid">
-          {catalog.paid.map((product) => (
-            <ProductCard key={product.id} product={product} onOpen={onProductOpen} />
-          ))}
           {catalog.free.map((product) => (
             <ProductCard key={product.id} product={product} label="gratis" onOpen={onProductOpen} />
           ))}
