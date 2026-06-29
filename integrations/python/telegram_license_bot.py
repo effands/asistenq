@@ -69,10 +69,16 @@ def command_help() -> str:
     return (
         "AsistenQ License Bot\n\n"
         "/status\n"
+        "/orders\n"
+        "/paid <invoice>\n"
+        "/sendlicense <invoice> <HWID> [paket]\n"
         "/generate <produk> <paket> <email> <HWID>\n"
         "/activate <produk> <token> <HWID>\n"
         "/verify <produk> <token> <HWID>\n\n"
-        "Contoh:\n/generate vjstudio 1M pembeli@email.com ABCD1234EFGH5678"
+        "Contoh:\n"
+        "/orders\n"
+        "/paid INV-20260629-0001\n"
+        "/sendlicense INV-20260629-0001 ABCD1234EFGH5678 1M"
     )
 
 
@@ -87,6 +93,38 @@ def handle(text: str) -> str:
             f"AsistenQ aktif\nProduk: {summary['products']}\n"
             f"Member: {summary['members']}\nOrder: {summary['orders']}\n"
             f"Lisensi: {summary.get('licenses', 0)}"
+        )
+    if command == "/orders":
+        result = api("/bot/orders")
+        orders = result.get("orders", [])
+        if not orders:
+            return "Belum ada order pending."
+        lines = ["Order pending:"]
+        for order in orders:
+            lines.append(
+                f"{order['invoiceNumber']} | {order['productName']} | "
+                f"{order['memberEmail']} | {order['formattedTotalAmount']}"
+            )
+        return "\n".join(lines)
+    if command == "/paid" and len(parts) == 2:
+        result = api("/bot/orders/paid", "POST", {"invoiceNumber": parts[1]})
+        order = result["order"]
+        return (
+            f"Order paid\n{order.get('invoiceNumber')}\n"
+            f"{order.get('memberEmail')} | {order.get('formattedTotalAmount')}"
+        )
+    if command == "/sendlicense" and len(parts) in {3, 4}:
+        body = {"invoiceNumber": parts[1], "hwid": parts[2]}
+        if len(parts) == 4:
+            body["planCode"] = parts[3]
+        result = api("/bot/license-send", "POST", body)
+        return (
+            "Lisensi dibuat dari invoice\n"
+            f"Invoice: {parts[1]}\n"
+            f"Email: {result['email']}\n"
+            f"HWID: {result['hwid']}\n"
+            f"Token: {result['key']}\n\n"
+            "Kirim token ini ke member atau forward pesan ini."
         )
     if command == "/generate" and len(parts) == 5:
         result = api("/bot/license-generate", "POST", {

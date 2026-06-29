@@ -5,7 +5,10 @@ import {
   createCheckout,
   createMember,
   createProductRecord,
+  generateLicenseForPaidOrder,
+  listPendingOrders,
   markOrderPaid,
+  markOrderPaidByInvoice,
   requestPasswordReset,
   resetPassword,
   verifyMemberLogin
@@ -73,6 +76,67 @@ describe('server services', () => {
 
     expect(result.order.status).toBe('paid');
     expect(result.subscription.endsAt).toBe('2026-07-28T00:00:00.000Z');
+  });
+
+  it('lists pending orders and marks an invoice paid for Telegram approval', async () => {
+    const member = await createMember(store, { name: 'Buyer', email: 'buyer@asistenq.com', password: 'secret123' });
+    const product = createProductRecord(store, {
+      name: 'VJ Studio Pro',
+      slug: 'vjstudio',
+      type: 'tool',
+      billingPeriod: 'monthly',
+      price: 49900
+    });
+    const order = createCheckout(store, member.id, product.id);
+
+    expect(listPendingOrders(store, 5)[0]).toMatchObject({
+      invoiceNumber: order.invoiceNumber,
+      memberEmail: 'buyer@asistenq.com',
+      productSlug: 'vjstudio'
+    });
+
+    const paid = markOrderPaidByInvoice(store, order.invoiceNumber ?? '', new Date('2026-06-28T00:00:00.000Z'));
+
+    expect(paid.order.status).toBe('paid');
+    expect(store.data.subscriptions).toHaveLength(1);
+  });
+
+  it('generates a license from a paid invoice and HWID', async () => {
+    const member = await createMember(store, { name: 'Buyer', email: 'buyer@asistenq.com', password: 'secret123' });
+    const product = createProductRecord(store, {
+      name: 'VJ Studio Pro',
+      slug: 'vjstudio',
+      type: 'tool',
+      billingPeriod: 'monthly',
+      price: 49900
+    });
+    store.data.plans.push({
+      id: 'plan_1m',
+      productId: product.id,
+      code: '1M',
+      name: 'Lisensi 1 Bulan',
+      price: 49900,
+      billingPeriod: 'monthly',
+      durationDays: 30,
+      isFree: false,
+      isActive: true
+    });
+    const order = createCheckout(store, member.id, product.id);
+    markOrderPaid(store, order.id, new Date('2026-06-28T00:00:00.000Z'));
+
+    const license = generateLicenseForPaidOrder(store, {
+      invoiceNumber: order.invoiceNumber ?? '',
+      hwid: 'CA00E2C30BA61C8D',
+      planCode: '1M',
+      now: new Date('2026-06-28T00:00:00.000Z'),
+      salt: 'vjstudio_secret_salt_2026_xyz'
+    });
+
+    expect(license).toMatchObject({
+      email: 'buyer@asistenq.com',
+      hwid: 'CA00E2C30BA61C8D',
+      status: 'generated'
+    });
   });
 
   it('resets member password with a valid reset token', async () => {

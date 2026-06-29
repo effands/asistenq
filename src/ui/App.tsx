@@ -2291,6 +2291,17 @@ function MemberPanel({ session, products, dashboard, orders, onRegister, onLogin
 }
 
 function InvoiceModal({ order, onClose }: { order: PublicOrder; onClose: () => void }) {
+  const telegramText = [
+    'Konfirmasi pembayaran AsistenQ',
+    `Invoice: ${order.invoiceNumber ?? order.id}`,
+    `Produk: ${order.product?.name ?? order.productName ?? order.productId}`,
+    `Email: ${order.memberEmail ?? '-'}`,
+    `Total: ${order.formattedTotalAmount}`,
+    '',
+    'Saya sudah transfer sesuai total invoice. Bukti transfer saya lampirkan di chat ini.'
+  ].join('\n');
+  const telegramConfirmUrl = `https://t.me/share/url?url=${encodeURIComponent('https://asistenq.com')}&text=${encodeURIComponent(telegramText)}`;
+
   return (
     <div className="invoice-backdrop" role="dialog" aria-modal="true">
       <article className="invoice-modal">
@@ -2312,6 +2323,11 @@ function InvoiceModal({ order, onClose }: { order: PublicOrder; onClose: () => v
           <div className="qris-box">
             {order.paymentQrUrl && <img src={order.paymentQrUrl} alt="QRIS pembayaran" />}
             <p>Scan QRIS ini lalu bayar sesuai total invoice. Kode unik membantu admin mencocokkan transaksi.</p>
+            <div className="payment-confirm-box">
+              <strong>Sudah bayar?</strong>
+              <span>Kirim konfirmasi dan bukti transfer via Telegram agar admin bisa cek lalu kirim lisensi.</span>
+              <a className="primary" href={telegramConfirmUrl} target="_blank" rel="noreferrer">Konfirmasi via Telegram</a>
+            </div>
           </div>
         </div>
       </article>

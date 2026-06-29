@@ -19,7 +19,10 @@ import {
   createMember,
   createProductRecord,
   generateToolLicense,
+  generateLicenseForPaidOrder,
+  listPendingOrders,
   markOrderPaid,
+  markOrderPaidByInvoice,
   memberLicenseDashboard,
   publicCatalog,
   publicPlansForProduct,
@@ -875,6 +878,20 @@ app.get('/api/bot/admin-summary', requireBotSecret, (_req, res) => {
   });
 });
 
+app.get('/api/bot/orders', requireBotSecret, (_req, res) => {
+  res.json({ orders: listPendingOrders(store, 10) });
+});
+
+app.post('/api/bot/orders/paid', requireBotSecret, (req, res) => {
+  try {
+    const body = z.object({ invoiceNumber: z.string().min(1) }).parse(req.body);
+    const result = markOrderPaidByInvoice(store, body.invoiceNumber);
+    res.json({ ok: true, order: publicOrder(result.order), subscription: result.subscription });
+  } catch (error) {
+    res.status(400).json({ message: error instanceof Error ? error.message : 'Order gagal ditandai paid.' });
+  }
+});
+
 app.post('/api/bot/license-generate', requireBotSecret, (req, res) => {
   try {
     const body = generateLicenseSchema.parse(req.body);
@@ -883,6 +900,24 @@ app.post('/api/bot/license-generate', requireBotSecret, (req, res) => {
     const message = error instanceof z.ZodError
       ? error.issues.map((issue) => issue.message).join(', ')
       : error instanceof Error ? error.message : 'Data lisensi tidak valid.';
+    res.status(400).json({ message });
+  }
+});
+
+app.post('/api/bot/license-send', requireBotSecret, (req, res) => {
+  try {
+    const body = z.object({
+      invoiceNumber: z.string().min(1),
+      hwid: z.string().trim().regex(/^[A-Za-z0-9]{16}$/, 'HWID harus tepat 16 karakter huruf/angka.'),
+      planCode: z.string().optional()
+    }).parse(req.body);
+    markOrderPaidByInvoice(store, body.invoiceNumber);
+    const license = generateLicenseForPaidOrder(store, body);
+    res.status(201).json(license);
+  } catch (error) {
+    const message = error instanceof z.ZodError
+      ? error.issues.map((issue) => issue.message).join(', ')
+      : error instanceof Error ? error.message : 'Lisensi gagal dibuat.';
     res.status(400).json({ message });
   }
 });

@@ -2496,6 +2496,8 @@ textarea {
 
 .invoice-modal {
   width: min(860px, 100%);
+  max-height: calc(100vh - 36px);
+  overflow: auto;
   border: 1px solid var(--line);
   border-radius: 28px;
   background: var(--paper);
@@ -2543,6 +2545,9 @@ textarea {
 
 .qris-box img {
   width: 100%;
+  max-width: 100%;
+  height: auto;
+  display: block;
   border-radius: 16px;
 }
 
@@ -2550,6 +2555,33 @@ textarea {
   margin: 0;
   font-size: 13px;
   line-height: 1.45;
+}
+
+.payment-confirm-box {
+  display: grid;
+  gap: 8px;
+  border: 1px solid rgba(0, 140, 134, .18);
+  border-radius: 18px;
+  background: #f4fbf8;
+  padding: 12px;
+}
+
+.payment-confirm-box strong {
+  color: var(--ink);
+  font-size: 15px;
+}
+
+.payment-confirm-box span {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.payment-confirm-box .primary {
+  justify-content: center;
+  min-height: 42px;
+  padding: 11px 14px;
+  text-align: center;
 }
 
 .member-admin-list {
@@ -3730,5 +3762,55 @@ textarea {
 @media (max-width: 620px) {
   .landing-builder-grid {
     grid-template-columns: 1fr !important;
+  }
+
+  .invoice-backdrop {
+    align-items: start;
+    padding: 12px;
+    overflow-y: auto;
+  }
+
+  .invoice-modal {
+    width: 100%;
+    max-height: none;
+    border-radius: 22px;
+    padding: 16px;
+  }
+
+  .invoice-modal .panel-heading {
+    align-items: flex-start;
+    gap: 12px;
+  }
+
+  .invoice-modal .panel-heading h2 {
+    font-size: 25px;
+    overflow-wrap: anywhere;
+  }
+
+  .invoice-body {
+    grid-template-columns: 1fr;
+  }
+
+  .invoice-summary {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .invoice-summary span {
+    min-width: 0;
+  }
+
+  .invoice-summary span:first-child,
+  .invoice-summary span:last-child {
+    grid-column: 1 / -1;
+  }
+
+  .invoice-summary b {
+    font-size: 16px;
+    overflow-wrap: anywhere;
+  }
+
+  .qris-box {
+    border-radius: 18px;
+    padding: 10px;
   }
 }

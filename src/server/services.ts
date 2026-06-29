@@ -769,6 +769,99 @@ export function markOrderPaid(store: Store, orderId: string, paidAt = new Date()
   return { order, subscription };
 }
 
+export function listPendingOrders(store: Store, limit = 10) {
+  return store.data.orders
+    .filter((order) => order.status === 'pending')
+    .sort((left, right) => right.createdAt.localeCompare(left.createdAt))
+    .slice(0, limit)
+    .map((order) => {
+      const product = store.data.products.find((item) => item.id === order.productId);
+      const member = store.data.members.find((item) => item.id === order.memberId);
+      return {
+        id: order.id,
+        invoiceNumber: order.invoiceNumber ?? order.id,
+        productName: product?.name ?? order.productName ?? order.productId,
+        productSlug: product?.slug ?? '',
+        memberName: member?.name ?? '',
+        memberEmail: member?.email ?? order.memberId,
+        totalAmount: order.totalAmount ?? order.amount,
+        formattedTotalAmount: formatCurrency(order.totalAmount ?? order.amount),
+        createdAt: order.createdAt
+      };
+    });
+}
+
+export function markOrderPaidByInvoice(store: Store, invoiceNumber: string, paidAt = new Date()) {
+  const order = store.data.orders.find((item) => (
+    item.invoiceNumber === invoiceNumber || item.id === invoiceNumber
+  ));
+
+  if (!order) {
+    throw new Error('order not found');
+  }
+
+  if (order.status === 'paid') {
+    const subscription = store.data.subscriptions.find((item) => (
+      item.memberId === order.memberId && item.productId === order.productId
+    ));
+    if (subscription) return { order, subscription };
+  }
+
+  return markOrderPaid(store, order.id, paidAt);
+}
+
+export function generateLicenseForPaidOrder(store: Store, input: {
+  invoiceNumber: string;
+  hwid: string;
+  planCode?: string;
+  now?: Date;
+  salt?: string;
+}): ToolLicense {
+  const order = store.data.orders.find((item) => (
+    item.invoiceNumber === input.invoiceNumber || item.id === input.invoiceNumber
+  ));
+
+  if (!order) {
+    throw new Error('order not found');
+  }
+
+  if (order.status !== 'paid') {
+    throw new Error('order belum paid');
+  }
+
+  const product = store.data.products.find((item) => item.id === order.productId);
+  const member = store.data.members.find((item) => item.id === order.memberId);
+
+  if (!product) {
+    throw new Error('product not found');
+  }
+
+  if (!member) {
+    throw new Error('member not found');
+  }
+
+  const requestedPlanCode = input.planCode?.trim().toUpperCase();
+  const activePlans = store.data.plans
+    .filter((plan) => plan.productId === product.id && plan.isActive)
+    .sort((left, right) => left.price - right.price);
+  const matchingPlan = requestedPlanCode
+    ? activePlans.find((plan) => plan.code === requestedPlanCode)
+    : activePlans.find((plan) => plan.price === order.amount) ?? activePlans[0];
+
+  if (!matchingPlan) {
+    throw new Error('plan not found');
+  }
+
+  return generateToolLicense(store, {
+    productSlug: product.slug,
+    planCode: matchingPlan.code,
+    email: member.email,
+    hwid: input.hwid,
+    now: input.now,
+    salt: input.salt
+  });
+}
+
 export async function updateMemberAccount(store: Store, memberId: string, input: {
   name?: string;
   active?: boolean;
