@@ -1876,9 +1876,14 @@ function Marketplace({ catalog, onJoin, onProductOpen }: {
             <h2>Bisa diakses langsung setelah login</h2>
           </div>
         </div>
-        <div className="market-grid">
+        <div className="free-tools-grid">
           {catalog.free.map((product) => (
-            <ProductCard key={product.id} product={product} label="gratis" onOpen={onProductOpen} />
+            <button key={product.id} className="free-tool-item" onClick={() => onProductOpen(product.slug)}>
+              <div className="product-icon">
+                {product.logoUrl ? <img src={product.logoUrl} alt="" /> : productIcon(product)}
+              </div>
+              <span>{product.name}</span>
+            </button>
           ))}
         </div>
       </section>
