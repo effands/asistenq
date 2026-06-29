@@ -1223,14 +1223,14 @@ function LandingManager({ products, onUpdateProduct, onCreateProduct }: {
         <p className="section-kicker">Live Preview</p>
         <h2 style={{ fontSize: '18px' }}>{basicInfo.name || 'Nama Produk'}</h2>
         <div className="landing-preview-card" style={{ borderColor: config.themeColor || 'var(--line)', background: 'var(--surface)', padding: '16px' }}>
-          <span style={{ color: config.themeColor || 'var(--primary)', fontSize: '11px', fontWeight: '900' }}>{basicInfo.type} · {basicInfo.billingPeriod}</span>
+          <span style={{ color: config.themeColor || undefined, fontSize: '11px', fontWeight: '900' }}>{basicInfo.type} · {basicInfo.billingPeriod}</span>
           <h3 style={{ fontSize: '16px', margin: '6px 0', lineHeight: 1.3 }}>{basicInfo.headline || 'Headline menarik di sini'}</h3>
           <p style={{ color: 'var(--muted)', fontSize: '12px', margin: '0 0 12px 0' }}>{basicInfo.description || 'Deskripsi singkat produk.'}</p>
           <strong style={{ fontSize: '20px', color: 'var(--ink)' }}>Rp{basicInfo.price.toLocaleString('id-ID')}</strong>
           <div className="mini-checklist" style={{ marginTop: '12px', fontSize: '11px' }}>
             {(config.benefits || []).map((b, i) => <span key={i}>✓ {b.title || 'Benefit baru'}</span>)}
           </div>
-          <button className="primary" style={{ display: 'block', width: '100%', textAlign: 'center', marginTop: '20px', background: config.themeColor || 'var(--primary)' }}>Beli Sekarang</button>
+          <button className="primary" style={{ display: 'block', width: '100%', textAlign: 'center', marginTop: '20px', background: config.themeColor || undefined }}>Beli Sekarang</button>
         </div>
         {!isCreating && selected && (
            <a href={`/produk/${selected.slug}`} target="_blank" rel="noreferrer" className="ghost-button" style={{ display: 'flex', justifyContent: 'center', marginTop: '16px' }}>Buka Halaman Publik</a>
