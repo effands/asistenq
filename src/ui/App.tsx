@@ -1869,20 +1869,6 @@ function Marketplace({ catalog, onJoin, onProductOpen }: {
         </div>
       </section>
 
-      <section className="landing-section split-section" id="course">
-        <div className="course-panel">
-          <span className="chip">Kelas YouTube</span>
-          <h2>Belajar produksi konten dengan alur yang jelas, bukan tebak-tebakan.</h2>
-          <p>Kelas berisi video tutorial, materi pendamping, dan update berkala. Cocok untuk creator yang ingin belajar dari dasar, merapikan workflow, atau mempercepat proses upload.</p>
-          <button className="ghost-button" onClick={onJoin}>Lihat akses kelas</button>
-        </div>
-        <div className="mini-stack">
-          <div><PlayCircle /> Video tutorial bertahap</div>
-          <div><BookOpen /> Ebook dan template</div>
-          <div><BadgeCheck /> Akses member tahunan</div>
-        </div>
-      </section>
-
       <section className="landing-section">
         <div className="section-head">
           <div>
