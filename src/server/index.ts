@@ -8,7 +8,7 @@ import { GoogleGenAI, Type } from '@google/genai';
 import { createId, formatCurrency } from '../shared/domain';
 import { clearSessionCookie, readSession, sessionCookie, signSession, requireAdminScope, requireSession } from './auth';
 import { getTelegramBotStatus, startTelegramBot, stopTelegramBot } from './bot-control';
-import { buildGitHubRemote, parseDeploymentSettings, runCommand } from './deploy';
+import { buildGitHubRemote, parseDeploymentSettings, runCommand, schedulePassengerRestart } from './deploy';
 import { seedInitialData } from './seed';
 import {
   adminLicenseDashboard,
@@ -226,6 +226,43 @@ function publicOrder(order: typeof store.data.orders[number]) {
     memberName: member?.name,
     memberEmail: member?.email
   };
+}
+
+async function runGitHubDeployUpdate(githubToken: string): Promise<{ stdout: string; stderr: string }> {
+  const settings = store.data.deploymentSettings ?? {};
+  const { githubRepo, githubBranch } = parseDeploymentSettings(settings);
+  const remote = buildGitHubRemote(githubRepo, githubToken);
+  const commandOptions = {
+    cwd: process.cwd(),
+    timeout: 180000,
+    maxBuffer: 1024 * 1024,
+    env: {
+      ...process.env,
+      PATH: fs.existsSync(cpanelNodeBin) ? `${cpanelNodeBin}${path.delimiter}${process.env.PATH ?? ''}` : process.env.PATH
+    }
+  };
+  const results = [
+    await runCommand('git', ['pull', remote, githubBranch], commandOptions),
+    await runCommand('npm', ['install', '--include=dev'], commandOptions),
+    await runCommand('npm', ['run', 'build'], commandOptions)
+  ];
+
+  fs.mkdirSync(path.resolve('tmp'), { recursive: true });
+  fs.writeFileSync(path.resolve('tmp/restart.txt'), new Date().toISOString());
+
+  return {
+    stdout: hideSecret(results.map((result) => result.stdout).join('\n'), githubToken),
+    stderr: hideSecret(results.map((result) => result.stderr).join('\n'), githubToken)
+  };
+}
+
+function scheduleNodeRestartAfterResponse(res: express.Response): void {
+  if (process.env.NODE_ENV === 'production' || process.env.PASSENGER_APP_ENV) {
+    res.on('finish', () => {
+      schedulePassengerRestart(process.cwd());
+      setTimeout(() => process.exit(0), 800);
+    });
+  }
 }
 
 async function emailInvoice(orderId: string) {
@@ -1061,42 +1098,42 @@ app.post('/api/bot/unban-hwid', requireBotSecret, (req, res) => {
   }
 });
 
+app.post('/api/bot/deploy-update', requireBotSecret, async (_req, res) => {
+  const settings = store.data.deploymentSettings ?? {};
+  const githubToken = settings.githubToken ?? process.env.GITHUB_TOKEN ?? '';
+
+  try {
+    const result = await runGitHubDeployUpdate(githubToken);
+    scheduleNodeRestartAfterResponse(res);
+    res.json({
+      ok: true,
+      message: 'Update selesai. NodeJS akan restart otomatis. Bot Telegram akan menyalakan ulang prosesnya.',
+      stdout: result.stdout,
+      stderr: result.stderr
+    });
+  } catch (error) {
+    const detail = hideSecret(error instanceof Error ? error.message : 'deploy failed', githubToken);
+    res.status(500).json({
+      ok: false,
+      message: 'Update gagal. Cek log untuk detail.',
+      detail
+    });
+  }
+});
+
 app.post('/api/admin/deploy/update', requireSession, requireAdminScope('products'), async (_req, res) => {
   const settings = store.data.deploymentSettings ?? {};
   const githubToken = settings.githubToken ?? process.env.GITHUB_TOKEN ?? '';
 
   try {
-    const { githubRepo, githubBranch } = parseDeploymentSettings(settings);
-    const remote = buildGitHubRemote(githubRepo, githubToken);
-    const commandOptions = {
-      cwd: process.cwd(),
-      timeout: 180000,
-      maxBuffer: 1024 * 1024,
-      env: {
-        ...process.env,
-        PATH: fs.existsSync(cpanelNodeBin) ? `${cpanelNodeBin}${path.delimiter}${process.env.PATH ?? ''}` : process.env.PATH
-      }
-    };
-    const results = [
-      await runCommand('git', ['pull', remote, githubBranch], commandOptions),
-      await runCommand('npm', ['install', '--include=dev'], commandOptions),
-      await runCommand('npm', ['run', 'build'], commandOptions)
-    ];
-
-    fs.mkdirSync(path.resolve('tmp'), { recursive: true });
-    fs.writeFileSync(path.resolve('tmp/restart.txt'), new Date().toISOString());
-
-    if (process.env.NODE_ENV === 'production' || process.env.PASSENGER_APP_ENV) {
-      res.on('finish', () => {
-        setTimeout(() => process.exit(0), 500);
-      });
-    }
+    const result = await runGitHubDeployUpdate(githubToken);
+    scheduleNodeRestartAfterResponse(res);
 
     res.json({
       ok: true,
-      message: 'Update selesai. Aplikasi akan restart otomatis.',
-      stdout: hideSecret(results.map((result) => result.stdout).join('\n'), githubToken),
-      stderr: hideSecret(results.map((result) => result.stderr).join('\n'), githubToken)
+      message: 'Update selesai. NodeJS akan restart otomatis.',
+      stdout: result.stdout,
+      stderr: result.stderr
     });
   } catch (error) {
     const detail = hideSecret(error instanceof Error ? error.message : 'deploy failed', githubToken);

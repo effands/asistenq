@@ -7,6 +7,8 @@ the AsistenQ admin panel, those values are passed automatically.
 
 import json
 import os
+import subprocess
+import sys
 import time
 import urllib.error
 import urllib.parse
@@ -33,17 +35,20 @@ DEFAULT_PRODUCT = os.environ.get("ASISTENQ_DEFAULT_PRODUCT", "vjstudio")
 PLAN_CHOICES = ["1M", "3M", "6M", "12M", "LIFETIME"]
 TELEGRAM_POLL_TIMEOUT_SECONDS = 25
 HTTP_TIMEOUT_SECONDS = 40
+DEPLOY_HTTP_TIMEOUT_SECONDS = 240
+DEPLOY_COMMANDS = {"/deploy", "/deployupdate"}
 
 
 def request_json(url: str, method: str = "GET", body: Optional[Dict[str, Any]] = None,
-                 headers: Optional[Dict[str, str]] = None) -> Any:
+                 headers: Optional[Dict[str, str]] = None,
+                 timeout: int = HTTP_TIMEOUT_SECONDS) -> Any:
     payload = json.dumps(body).encode("utf-8") if body is not None else None
     request_headers = {"Accept": "application/json", **(headers or {})}
     if payload is not None:
         request_headers["Content-Type"] = "application/json"
     request = urllib.request.Request(url, data=payload, headers=request_headers, method=method)
     try:
-        with urllib.request.urlopen(request, timeout=HTTP_TIMEOUT_SECONDS) as response:
+        with urllib.request.urlopen(request, timeout=timeout) as response:
             raw = response.read().decode("utf-8")
             return parse_json_response(raw, url)
     except urllib.error.HTTPError as error:
@@ -69,10 +74,11 @@ def telegram(method: str, body: Optional[Dict[str, Any]] = None) -> Any:
     return request_json(f"https://api.telegram.org/bot{BOT_TOKEN}/{method}", "POST", body or {})
 
 
-def api(path: str, method: str = "GET", body: Optional[Dict[str, Any]] = None) -> Any:
+def api(path: str, method: str = "GET", body: Optional[Dict[str, Any]] = None,
+        timeout: int = HTTP_TIMEOUT_SECONDS) -> Any:
     return request_json(f"{API_BASE}{path}", method, body, {
         "x-asistenq-bot-secret": BOT_SECRET
-    })
+    }, timeout=timeout)
 
 
 def keyboard(rows: List[List[Dict[str, str]]]) -> Dict[str, Any]:
@@ -85,6 +91,7 @@ def main_menu() -> Dict[str, Any]:
         [{"text": "🔐 Buat/Kirim Lisensi", "callback_data": "license_menu"}],
         [{"text": "🚫 Ban HWID", "callback_data": "ban_start"}, {"text": "♻️ Unban HWID", "callback_data": "unban_menu"}],
         [{"text": "🎟️ Voucher", "callback_data": "voucher_menu"}, {"text": "📊 Status", "callback_data": "status"}],
+        [{"text": "🚀 Update Website", "callback_data": "deploy_update"}],
         [{"text": "⚙️ Bantuan", "callback_data": "help"}],
     ])
 
@@ -111,7 +118,8 @@ def command_help() -> str:
         "/sendlicense <invoice> <HWID> [paket]\n"
         "/generate <produk> <paket> <email> <HWID>\n"
         "/activate <produk> <token> <HWID>\n"
-        "/verify <produk> <token> <HWID>"
+        "/verify <produk> <token> <HWID>\n"
+        "/deployupdate"
     )
 
 
@@ -165,6 +173,28 @@ def format_status() -> str:
         f"Lisensi: {summary.get('licenses', 0)}\n"
         f"Langganan aktif: {summary.get('activeSubscriptions', 0)}"
     )
+
+
+def run_deploy_update() -> str:
+    result = api("/bot/deploy-update", "POST", timeout=DEPLOY_HTTP_TIMEOUT_SECONDS)
+    return result.get("message", "Update selesai. NodeJS akan restart otomatis.")
+
+
+def restart_self() -> None:
+    log_path = Path("data/telegram-bot.log")
+    pid_path = Path("data/telegram-bot.pid")
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    with log_path.open("ab") as log_file:
+        child = subprocess.Popen(
+            [sys.executable, str(Path(__file__).resolve())],
+            stdout=log_file,
+            stderr=subprocess.STDOUT,
+            stdin=subprocess.DEVNULL,
+            start_new_session=True,
+            env=os.environ.copy(),
+        )
+    pid_path.write_text(str(child.pid), encoding="utf-8")
+    os._exit(0)
 
 
 def pending_orders() -> List[Dict[str, Any]]:
@@ -256,6 +286,12 @@ def handle_callback(chat_id: int, callback_id: str, data: str) -> None:
     if data == "status":
         send(chat_id, format_status(), main_menu())
         return
+    if data == "deploy_update":
+        send(chat_id, "Mulai update dari GitHub. Tunggu sampai ada pesan selesai.")
+        message = run_deploy_update()
+        send(chat_id, message + "\nBot Telegram akan restart setelah pesan ini.", main_menu())
+        restart_self()
+        return
     if data == "orders":
         show_orders(chat_id)
         return
@@ -324,6 +360,8 @@ def handle(text: str) -> str:
         return command_help()
     if command == "/status":
         return format_status()
+    if command in DEPLOY_COMMANDS:
+        return run_deploy_update()
     if command == "/orders":
         orders = pending_orders()
         if not orders:
@@ -403,8 +441,13 @@ def main() -> None:
                 try:
                     if handle_pending_text(chat_id, text):
                         continue
-                    reply_markup = main_menu() if text.strip().split(" ")[0].split("@")[0].lower() in {"/start", "/help"} else None
-                    send(chat_id, handle(text), reply_markup)
+                    command = text.strip().split(" ")[0].split("@")[0].lower()
+                    reply_markup = main_menu() if command in {"/start", "/help"} else None
+                    reply = handle(text)
+                    send(chat_id, reply, reply_markup)
+                    if command in DEPLOY_COMMANDS and "Update selesai" in reply:
+                        send(chat_id, "Bot Telegram restart sebentar supaya pakai versi terbaru.")
+                        restart_self()
                 except Exception as error:
                     send(chat_id, f"Gagal: {error}", main_menu())
         except Exception as error:

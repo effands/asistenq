@@ -1,4 +1,5 @@
 import { execFile } from 'node:child_process';
+import { spawn } from 'node:child_process';
 import { promisify } from 'node:util';
 
 const execFileAsync = promisify(execFile);
@@ -39,6 +40,30 @@ export function buildGitHubRemote(githubRepo: string, githubToken?: string): str
   if (!githubToken) return 'origin';
 
   return `https://x-access-token:${encodeURIComponent(githubToken)}@github.com/${githubRepo}.git`;
+}
+
+function shellQuote(value: string): string {
+  return `'${value.replace(/'/g, `'\\''`)}'`;
+}
+
+export function buildPassengerRestartScript(appRoot: string): string {
+  const normalizedAppRoot = appRoot.replace(/\\/g, '/');
+  const passengerPattern = `lsnode:${normalizedAppRoot}`;
+
+  return [
+    'mkdir -p tmp',
+    'touch tmp/restart.txt',
+    `(pkill -f ${shellQuote(passengerPattern)} || true)`
+  ].join(' && ');
+}
+
+export function schedulePassengerRestart(appRoot: string): void {
+  const script = `cd ${shellQuote(appRoot)} && ${buildPassengerRestartScript(appRoot)}`;
+  const child = spawn('bash', ['-lc', script], {
+    detached: true,
+    stdio: 'ignore'
+  });
+  child.unref();
 }
 
 export async function runCommand(command: string, args: string[], options: {

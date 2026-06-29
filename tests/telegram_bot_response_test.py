@@ -23,6 +23,29 @@ class TelegramBotResponseTest(unittest.TestCase):
     def test_parse_json_response_allows_empty_body(self):
         self.assertEqual(bot.parse_json_response("", "https://api.telegram.org/test"), {})
 
+    def test_main_menu_includes_deploy_update_action(self):
+        menu = bot.main_menu()
+        buttons = [button for row in menu["inline_keyboard"] for button in row]
+
+        self.assertIn({"text": "🚀 Update Website", "callback_data": "deploy_update"}, buttons)
+
+    def test_deploy_command_calls_bot_deploy_endpoint(self):
+        calls = []
+        original_api = bot.api
+        try:
+            def fake_api(path, method="GET", body=None, timeout=bot.HTTP_TIMEOUT_SECONDS):
+                calls.append((path, method, body, timeout))
+                return {"message": "Update selesai. NodeJS akan restart otomatis."}
+
+            bot.api = fake_api
+
+            reply = bot.handle("/deployupdate")
+        finally:
+            bot.api = original_api
+
+        self.assertEqual(calls, [("/bot/deploy-update", "POST", None, bot.DEPLOY_HTTP_TIMEOUT_SECONDS)])
+        self.assertIn("Update selesai", reply)
+
 
 if __name__ == "__main__":
     unittest.main()
