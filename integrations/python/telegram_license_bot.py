@@ -101,9 +101,10 @@ def handle(text: str) -> str:
             return "Belum ada order pending."
         lines = ["Order pending:"]
         for order in orders:
+            expires = order.get("expiresAt") or "-"
             lines.append(
                 f"{order['invoiceNumber']} | {order['productName']} | "
-                f"{order['memberEmail']} | {order['formattedTotalAmount']}"
+                f"{order['memberEmail']} | {order['formattedTotalAmount']} | batas {expires}"
             )
         return "\n".join(lines)
     if command == "/paid" and len(parts) == 2:

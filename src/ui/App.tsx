@@ -785,6 +785,16 @@ function formatDate(value?: string | null) {
   return new Date(value).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' });
 }
 
+function formatRemaining(value?: string | null) {
+  if (!value) return '24j';
+  const remainingMs = new Date(value).getTime() - Date.now();
+  if (remainingMs <= 0) return 'Kedaluwarsa';
+  const totalMinutes = Math.ceil(remainingMs / 60000);
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  return hours > 0 ? `${hours}j ${minutes}m` : `${minutes}m`;
+}
+
 function AdminOrderPanel({ orders }: { orders: PublicOrder[] }) {
   return (
     <section className="panel stack">
@@ -2248,7 +2258,7 @@ function MemberPanel({ session, products, dashboard, orders, onRegister, onLogin
                     <span className={`status-dot status-${order.status}`}>{order.status}</span>
                     <strong>{order.invoiceNumber ?? order.id}</strong>
                     <b>{order.product?.name ?? order.productName ?? order.productId}</b>
-                    <small>{formatDate(order.createdAt)}</small>
+                    <small>{formatDate(order.createdAt)} · Sisa bayar: {formatRemaining(order.expiresAt)}</small>
                   </div>
                   <div className="order-history-total">
                     <span>Total bayar</span>
@@ -2325,6 +2335,7 @@ function InvoiceModal({ order, onClose }: { order: PublicOrder; onClose: () => v
             <span>Kode unik<b>{order.uniqueCode ?? 0}</b></span>
             <span>Total bayar<b>{order.formattedTotalAmount}</b></span>
             <span>Status<b>{order.status}</b></span>
+            <span>Sisa waktu<b>{formatRemaining(order.expiresAt)}</b></span>
           </div>
           <div className="qris-box">
             {order.paymentQrUrl && <img src={order.paymentQrUrl} alt="QRIS pembayaran" />}

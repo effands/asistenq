@@ -154,6 +154,8 @@ export interface Order {
   qrisPayload: string;
   paymentQrUrl?: string;
   createdAt: string;
+  expiresAt?: string;
+  reminderSentAt?: string;
   paidAt?: string;
 }
 

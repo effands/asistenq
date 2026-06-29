@@ -424,7 +424,10 @@ export function createPlanRecord(store: Store, input: {
   return plan;
 }
 
-export function createCheckout(store: Store, memberId: string, productId: string): Order {
+export const invoiceLifetimeHours = 24;
+export const invoiceReminderHours = 3;
+
+export function createCheckout(store: Store, memberId: string, productId: string, now = new Date()): Order {
   const member = store.data.members.find((item) => item.id === memberId);
   const product = store.data.products.find((item) => item.id === productId && item.active);
 
@@ -438,7 +441,8 @@ export function createCheckout(store: Store, memberId: string, productId: string
 
   const uniqueCode = product.price > 0 ? Math.floor(Math.random() * 900) + 100 : 0;
   const totalAmount = product.price + uniqueCode;
-  const invoiceNumber = `INV-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${String(store.data.orders.length + 1).padStart(4, '0')}`;
+  const invoiceNumber = `INV-${now.toISOString().slice(0, 10).replace(/-/g, '')}-${String(store.data.orders.length + 1).padStart(4, '0')}`;
+  const expiresAt = new Date(now.getTime() + invoiceLifetimeHours * 60 * 60 * 1000).toISOString();
 
   const order: Order = {
     id: createId('order'),
@@ -454,12 +458,29 @@ export function createCheckout(store: Store, memberId: string, productId: string
       ? `ASISTENQ|${invoiceNumber}|${product.slug}|${totalAmount}|${member.email}`
       : `ASISTENQ|${invoiceNumber}|${product.slug}|FREE|${member.email}`,
     paymentQrUrl: 'https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEhut4hFJ1371v4Z-Xxd4_-ndcBaup55rpoiBgk066hJ-K1c5Lt9tgJIElFFdUL32KX7_2XRpZfgz8sAWNU8OEpr2dh_xYxkeL4I0ZQyTn76lBYAEdcfzp_WMQ9QkI8tYpagEqmJdGg9k8KzPMOBUgvqW_Ck9YR6RghxapNCkfcV7fUoAe_p3y_Ngg7BiWI/s735/photo_2026-06-16_07-23-26.jpg',
-    createdAt: new Date().toISOString()
+    createdAt: now.toISOString(),
+    expiresAt
   };
 
   store.data.orders.push(order);
   store.save();
   return order;
+}
+
+export function expirePendingOrders(store: Store, now = new Date()): number {
+  let count = 0;
+  for (const order of store.data.orders) {
+    const expiresAt = order.expiresAt
+      ? new Date(order.expiresAt)
+      : new Date(new Date(order.createdAt).getTime() + invoiceLifetimeHours * 60 * 60 * 1000);
+    if (order.status === 'pending' && expiresAt < now) {
+      order.status = 'expired';
+      order.expiresAt = expiresAt.toISOString();
+      count += 1;
+    }
+  }
+  if (count > 0) store.save();
+  return count;
 }
 
 export function generateToolLicense(store: Store, input: {
@@ -779,6 +800,7 @@ export function markOrderPaid(store: Store, orderId: string, paidAt = new Date()
 }
 
 export function listPendingOrders(store: Store, limit = 10) {
+  expirePendingOrders(store);
   return store.data.orders
     .filter((order) => order.status === 'pending')
     .sort((left, right) => right.createdAt.localeCompare(left.createdAt))

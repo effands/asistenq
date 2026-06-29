@@ -17,7 +17,9 @@ import {
   createAdmin,
   createCheckout,
   createMember,
+  expirePendingOrders,
   formatInvoiceHtml,
+  invoiceReminderHours,
   createProductRecord,
   generateToolLicense,
   generateLicenseForPaidOrder,
@@ -214,6 +216,8 @@ function publicOrder(order: typeof store.data.orders[number]) {
     product: product ? publicProduct(product) : undefined,
     formattedAmount: formatCurrency(order.amount),
     formattedTotalAmount: formatCurrency(order.totalAmount ?? order.amount),
+    expiresAt: order.expiresAt,
+    reminderSentAt: order.reminderSentAt,
     memberName: member?.name,
     memberEmail: member?.email
   };
@@ -232,6 +236,33 @@ async function emailInvoice(orderId: string) {
   } catch (error) {
     console.warn('Invoice email skipped:', error instanceof Error ? error.message : error);
   }
+}
+
+async function sendPendingOrderReminders() {
+  const now = new Date();
+  let changed = false;
+  for (const order of store.data.orders) {
+    if (order.status !== 'pending' || order.reminderSentAt) continue;
+    const createdAt = new Date(order.createdAt);
+    const shouldRemindAt = new Date(createdAt.getTime() + invoiceReminderHours * 60 * 60 * 1000);
+    const expiresAt = order.expiresAt ? new Date(order.expiresAt) : undefined;
+    if (shouldRemindAt > now || (expiresAt && expiresAt <= now)) continue;
+
+    const member = store.data.members.find((item) => item.id === order.memberId);
+    if (!member) continue;
+    await sendMail({
+      to: member.email,
+      subject: `Reminder pembayaran ${order.invoiceNumber ?? order.id}`,
+      html: `<h1>Reminder Invoice AsistenQ</h1>
+        <p>Invoice <b>${order.invoiceNumber ?? order.id}</b> masih menunggu pembayaran.</p>
+        <p>Total bayar: <b>${formatCurrency(order.totalAmount ?? order.amount)}</b></p>
+        <p>Batas bayar: <b>${order.expiresAt ? new Date(order.expiresAt).toLocaleString('id-ID') : '24 jam setelah order'}</b></p>
+        <p>Silakan login ke akun member AsistenQ untuk melihat QRIS dan download invoice.</p>`
+    });
+    order.reminderSentAt = now.toISOString();
+    changed = true;
+  }
+  if (changed) store.save();
 }
 
 async function emailLicense(license: ReturnType<typeof generateToolLicense>, invoiceNumber?: string) {
@@ -915,6 +946,7 @@ app.get('/api/bot/admin-summary', requireBotSecret, (_req, res) => {
 });
 
 app.get('/api/bot/orders', requireBotSecret, (_req, res) => {
+  void sendPendingOrderReminders();
   res.json({ orders: listPendingOrders(store, 10) });
 });
 
@@ -1154,6 +1186,8 @@ Output JSON object dengan title, description, tags, isAiGenerated.`,
 });
 
 app.get('/api/admin/orders', requireSession, requireAdminScope('orders'), (_req, res) => {
+  expirePendingOrders(store);
+  void sendPendingOrderReminders();
   res.json(store.data.orders.map(publicOrder));
 });
 
@@ -1179,6 +1213,8 @@ app.get('/api/member/orders', requireSession, (req, res) => {
     return;
   }
 
+  expirePendingOrders(store);
+  void sendPendingOrderReminders();
   res.json(store.data.orders
     .filter((order) => order.memberId === req.user?.id)
     .sort((left, right) => right.createdAt.localeCompare(left.createdAt))

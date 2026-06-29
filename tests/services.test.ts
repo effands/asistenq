@@ -7,6 +7,7 @@ import {
   createProductRecord,
   formatInvoiceHtml,
   generateLicenseForPaidOrder,
+  expirePendingOrders,
   listPendingOrders,
   markOrderPaid,
   markOrderPaidByInvoice,
@@ -70,6 +71,7 @@ describe('server services', () => {
     expect(order.invoiceNumber).toMatch(/^INV-/);
     expect(order.uniqueCode).toBeGreaterThanOrEqual(100);
     expect(order.totalAmount).toBeGreaterThan(order.amount);
+    expect(order.expiresAt).toBeTruthy();
     expect(order.paymentQrUrl).toContain('blogger.googleusercontent.com');
     expect(order.qrisPayload).toContain('ASISTENQ');
 
@@ -77,6 +79,25 @@ describe('server services', () => {
 
     expect(result.order.status).toBe('paid');
     expect(result.subscription.endsAt).toBe('2026-07-28T00:00:00.000Z');
+  });
+
+  it('expires pending invoices after 24 hours', async () => {
+    const member = await createMember(store, { name: 'Buyer', email: 'buyer@asistenq.com', password: 'secret123' });
+    const product = createProductRecord(store, {
+      name: 'VJ Studio Pro',
+      slug: 'vjstudio',
+      type: 'tool',
+      billingPeriod: 'monthly',
+      price: 49900
+    });
+    const order = createCheckout(store, member.id, product.id, new Date('2026-06-28T00:00:00.000Z'));
+
+    expect(order.expiresAt).toBe('2026-06-29T00:00:00.000Z');
+
+    const expired = expirePendingOrders(store, new Date('2026-06-29T00:00:01.000Z'));
+
+    expect(expired).toBe(1);
+    expect(store.data.orders[0].status).toBe('expired');
   });
 
   it('lists pending orders and marks an invoice paid for Telegram approval', async () => {
