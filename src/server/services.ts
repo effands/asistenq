@@ -37,6 +37,15 @@ function normalizeEmail(email: string): string {
   return email.trim().toLowerCase();
 }
 
+function escapeHtml(value: unknown): string {
+  return String(value ?? '')
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;');
+}
+
 function hashResetToken(token: string): string {
   return crypto.createHash('sha256').update(token).digest('hex');
 }
@@ -860,6 +869,72 @@ export function generateLicenseForPaidOrder(store: Store, input: {
     now: input.now,
     salt: input.salt
   });
+}
+
+export function formatInvoiceHtml(store: Store, orderIdOrInvoice: string, memberId?: string): string {
+  const order = store.data.orders.find((item) => (
+    item.id === orderIdOrInvoice || item.invoiceNumber === orderIdOrInvoice
+  ));
+
+  if (!order || (memberId && order.memberId !== memberId)) {
+    throw new Error('order not found');
+  }
+
+  const product = store.data.products.find((item) => item.id === order.productId);
+  const member = store.data.members.find((item) => item.id === order.memberId);
+  const invoiceNumber = order.invoiceNumber ?? order.id;
+  const total = formatCurrency(order.totalAmount ?? order.amount);
+
+  return `<!doctype html>
+<html lang="id">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Invoice ${escapeHtml(invoiceNumber)}</title>
+    <style>
+      body { margin: 0; background: #f4fbf8; color: #0b2622; font-family: Arial, sans-serif; }
+      main { max-width: 760px; margin: 32px auto; background: #fff; border: 1px solid #dbe8e3; border-radius: 24px; padding: 32px; }
+      header { display: flex; justify-content: space-between; gap: 20px; border-bottom: 1px solid #dbe8e3; padding-bottom: 20px; }
+      h1 { margin: 0; font-size: 30px; }
+      .muted { color: #62736f; }
+      .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; margin: 24px 0; }
+      .box { border: 1px solid #dbe8e3; border-radius: 16px; padding: 14px; }
+      .box span { display: block; color: #62736f; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; }
+      .box b { display: block; margin-top: 6px; font-size: 18px; }
+      .total { background: #062c28; color: #fff; border-radius: 18px; padding: 18px; }
+      .total span { color: #b8ddd2; }
+      img { max-width: 260px; width: 100%; border-radius: 16px; border: 1px solid #dbe8e3; }
+      @media print { body { background: #fff; } main { margin: 0; border: 0; } .no-print { display: none; } }
+      @media (max-width: 640px) { main { margin: 12px; padding: 20px; } header, .grid { grid-template-columns: 1fr; display: grid; } }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header>
+        <div>
+          <p class="muted">AsistenQ Invoice</p>
+          <h1>${escapeHtml(invoiceNumber)}</h1>
+          <p class="muted">${escapeHtml(new Date(order.createdAt).toLocaleString('id-ID'))}</p>
+        </div>
+        <div>
+          <strong>AsistenQ</strong>
+          <p class="muted">Tools Bantu nge-YouTube</p>
+        </div>
+      </header>
+      <section class="grid">
+        <div class="box"><span>Member</span><b>${escapeHtml(member?.name ?? '-')}</b><p>${escapeHtml(member?.email ?? order.memberId)}</p></div>
+        <div class="box"><span>Produk</span><b>${escapeHtml(product?.name ?? order.productName ?? order.productId)}</b><p>${escapeHtml(product?.slug ?? '')}</p></div>
+        <div class="box"><span>Harga</span><b>${escapeHtml(formatCurrency(order.amount))}</b></div>
+        <div class="box"><span>Kode Unik</span><b>${escapeHtml(order.uniqueCode ?? 0)}</b></div>
+        <div class="box"><span>Status</span><b>${escapeHtml(order.status)}</b></div>
+        <div class="box total"><span>Total Bayar</span><b>${escapeHtml(total)}</b></div>
+      </section>
+      ${order.paymentQrUrl ? `<img src="${escapeHtml(order.paymentQrUrl)}" alt="QRIS pembayaran" />` : ''}
+      <p class="muted">Jika sudah membayar, kirim bukti transfer via Telegram. Lisensi akan muncul di akun member setelah admin memproses pembayaran.</p>
+      <p class="no-print"><button onclick="window.print()">Print / Save PDF</button></p>
+    </main>
+  </body>
+</html>`;
 }
 
 export async function updateMemberAccount(store: Store, memberId: string, input: {

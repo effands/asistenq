@@ -2459,8 +2459,8 @@ textarea {
 
 .order-history-card {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
-  gap: 12px;
+  grid-template-columns: minmax(0, 1.2fr) minmax(150px, auto) auto;
+  gap: 14px;
   align-items: center;
   border: 1px solid var(--line);
   border-radius: 18px;
@@ -2482,6 +2482,48 @@ textarea {
   color: var(--muted);
   font-size: 12px;
   font-weight: 850;
+}
+
+.order-history-main,
+.order-history-total,
+.order-history-actions {
+  display: grid;
+  gap: 5px;
+}
+
+.order-history-main strong {
+  color: var(--ink);
+  font-size: 17px;
+}
+
+.order-history-main b {
+  color: var(--ink);
+  font-size: 13px;
+}
+
+.order-history-main small,
+.order-history-total small {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.order-history-total {
+  justify-items: end;
+}
+
+.order-history-total b {
+  color: var(--ink);
+  font-size: 18px;
+}
+
+.order-history-actions {
+  grid-template-columns: 1fr;
+}
+
+.order-history-actions .ghost-button {
+  justify-content: center;
+  min-height: 38px;
+  white-space: nowrap;
 }
 
 .invoice-backdrop {
@@ -3812,5 +3854,17 @@ textarea {
   .qris-box {
     border-radius: 18px;
     padding: 10px;
+  }
+
+  .order-history-card {
+    grid-template-columns: 1fr;
+  }
+
+  .order-history-total {
+    justify-items: start;
+  }
+
+  .order-history-actions {
+    grid-template-columns: 1fr 1fr;
   }
 }

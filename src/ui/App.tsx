@@ -2244,15 +2244,21 @@ function MemberPanel({ session, products, dashboard, orders, onRegister, onLogin
             <div className="order-history-list">
               {orders.map((order) => (
                 <article className="order-history-card" key={order.id}>
-                  <div>
+                  <div className="order-history-main">
+                    <span className={`status-dot status-${order.status}`}>{order.status}</span>
                     <strong>{order.invoiceNumber ?? order.id}</strong>
-                    <span>{order.product?.name ?? order.productName ?? order.productId}</span>
+                    <b>{order.product?.name ?? order.productName ?? order.productId}</b>
+                    <small>{formatDate(order.createdAt)}</small>
                   </div>
-                  <div>
+                  <div className="order-history-total">
+                    <span>Total bayar</span>
                     <b>{order.formattedTotalAmount}</b>
-                    <span>{order.status}</span>
+                    <small>Kode unik: {order.uniqueCode ?? 0}</small>
                   </div>
-                  <button className="ghost-button" onClick={() => setActiveOrder(order)}>Lihat QRIS</button>
+                  <div className="order-history-actions">
+                    <button className="ghost-button" onClick={() => setActiveOrder(order)}>Lihat QRIS</button>
+                    <a className="ghost-button" href={`/api/member/orders/${order.id}/invoice.html`} target="_blank" rel="noreferrer">Download Invoice</a>
+                  </div>
                 </article>
               ))}
             </div>

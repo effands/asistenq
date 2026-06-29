@@ -5,6 +5,7 @@ import {
   createCheckout,
   createMember,
   createProductRecord,
+  formatInvoiceHtml,
   generateLicenseForPaidOrder,
   listPendingOrders,
   markOrderPaid,
@@ -137,6 +138,25 @@ describe('server services', () => {
       hwid: 'CA00E2C30BA61C8D',
       status: 'generated'
     });
+  });
+
+  it('renders a downloadable invoice html for a member order', async () => {
+    const member = await createMember(store, { name: 'Buyer', email: 'buyer@asistenq.com', password: 'secret123' });
+    const product = createProductRecord(store, {
+      name: 'VJ Studio Pro',
+      slug: 'vjstudio',
+      type: 'tool',
+      billingPeriod: 'monthly',
+      price: 49900
+    });
+    const order = createCheckout(store, member.id, product.id);
+
+    const html = formatInvoiceHtml(store, order.id, member.id);
+
+    expect(html).toContain(order.invoiceNumber);
+    expect(html).toContain('VJ Studio Pro');
+    expect(html).toContain('buyer@asistenq.com');
+    expect(html).toContain('Total Bayar');
   });
 
   it('resets member password with a valid reset token', async () => {

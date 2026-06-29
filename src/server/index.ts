@@ -17,6 +17,7 @@ import {
   createAdmin,
   createCheckout,
   createMember,
+  formatInvoiceHtml,
   createProductRecord,
   generateToolLicense,
   generateLicenseForPaidOrder,
@@ -38,6 +39,7 @@ import {
   verifyVoucher
 } from './services';
 import { createFileStore } from './store';
+import { sendMail } from './mailer';
 
 const app = express();
 const store = createFileStore();
@@ -215,6 +217,40 @@ function publicOrder(order: typeof store.data.orders[number]) {
     memberName: member?.name,
     memberEmail: member?.email
   };
+}
+
+async function emailInvoice(orderId: string) {
+  try {
+    const order = store.data.orders.find((item) => item.id === orderId);
+    const member = store.data.members.find((item) => item.id === order?.memberId);
+    if (!order || !member) return;
+    await sendMail({
+      to: member.email,
+      subject: `Invoice AsistenQ ${order.invoiceNumber ?? order.id}`,
+      html: formatInvoiceHtml(store, order.id, member.id)
+    });
+  } catch (error) {
+    console.warn('Invoice email skipped:', error instanceof Error ? error.message : error);
+  }
+}
+
+async function emailLicense(license: ReturnType<typeof generateToolLicense>, invoiceNumber?: string) {
+  try {
+    const product = store.data.products.find((item) => item.id === license.productId);
+    await sendMail({
+      to: license.email,
+      subject: `Lisensi AsistenQ ${product?.name ?? ''}`.trim(),
+      html: `<h1>Lisensi AsistenQ</h1>
+        <p>Invoice: ${invoiceNumber ?? '-'}</p>
+        <p>Produk: ${product?.name ?? license.productId}</p>
+        <p>HWID: <b>${license.hwid}</b></p>
+        <p>Token lisensi:</p>
+        <pre style="padding:16px;border-radius:12px;background:#062c28;color:#fff">${license.key}</pre>
+        <p>Token juga tersedia di akun member AsistenQ.</p>`
+    });
+  } catch (error) {
+    console.warn('License email skipped:', error instanceof Error ? error.message : error);
+  }
 }
 
 function hasActiveProductAccess(memberId: string, productId: string): boolean {
@@ -913,6 +949,7 @@ app.post('/api/bot/license-send', requireBotSecret, (req, res) => {
     }).parse(req.body);
     markOrderPaidByInvoice(store, body.invoiceNumber);
     const license = generateLicenseForPaidOrder(store, body);
+    void emailLicense(license, body.invoiceNumber);
     res.status(201).json(license);
   } catch (error) {
     const message = error instanceof z.ZodError
@@ -1131,7 +1168,9 @@ app.post('/api/checkout', requireSession, (req, res) => {
   }
 
   const body = z.object({ productId: z.string() }).parse(req.body);
-  res.status(201).json(publicOrder(createCheckout(store, req.user.id, body.productId)));
+  const order = createCheckout(store, req.user.id, body.productId);
+  void emailInvoice(order.id);
+  res.status(201).json(publicOrder(order));
 });
 
 app.get('/api/member/orders', requireSession, (req, res) => {
@@ -1144,6 +1183,23 @@ app.get('/api/member/orders', requireSession, (req, res) => {
     .filter((order) => order.memberId === req.user?.id)
     .sort((left, right) => right.createdAt.localeCompare(left.createdAt))
     .map(publicOrder));
+});
+
+app.get('/api/member/orders/:id/invoice.html', requireSession, (req, res) => {
+  if (req.user?.type !== 'member') {
+    res.status(403).send('member access required');
+    return;
+  }
+
+  try {
+    const html = formatInvoiceHtml(store, String(req.params.id), req.user.id);
+    const order = store.data.orders.find((item) => item.id === String(req.params.id) || item.invoiceNumber === String(req.params.id));
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${order?.invoiceNumber ?? req.params.id}.html"`);
+    res.send(html);
+  } catch {
+    res.status(404).send('invoice not found');
+  }
 });
 
 app.get('/api/member/licenses', requireSession, (req, res) => {
