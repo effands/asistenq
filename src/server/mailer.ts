@@ -1,5 +1,7 @@
 import net from 'node:net';
 import tls from 'node:tls';
+import fs from 'node:fs';
+import path from 'node:path';
 
 type MailInput = {
   to: string;
@@ -8,8 +10,36 @@ type MailInput = {
   text?: string;
 };
 
-function configured() {
-  return Boolean(process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS && process.env.MAIL_FROM);
+type MailSettings = {
+  SMTP_HOST?: string;
+  SMTP_PORT?: string;
+  SMTP_USER?: string;
+  SMTP_PASS?: string;
+  MAIL_FROM?: string;
+};
+
+function readMailSettings(): MailSettings {
+  try {
+    const filePath = path.resolve('data/mail-settings.json');
+    return JSON.parse(fs.readFileSync(filePath, 'utf-8')) as MailSettings;
+  } catch {
+    return {};
+  }
+}
+
+function settings(): MailSettings {
+  const file = readMailSettings();
+  return {
+    SMTP_HOST: process.env.SMTP_HOST || file.SMTP_HOST,
+    SMTP_PORT: process.env.SMTP_PORT || file.SMTP_PORT,
+    SMTP_USER: process.env.SMTP_USER || file.SMTP_USER,
+    SMTP_PASS: process.env.SMTP_PASS || file.SMTP_PASS,
+    MAIL_FROM: process.env.MAIL_FROM || file.MAIL_FROM
+  };
+}
+
+function configured(mailSettings: MailSettings) {
+  return Boolean(mailSettings.SMTP_HOST && mailSettings.SMTP_USER && mailSettings.SMTP_PASS && mailSettings.MAIL_FROM);
 }
 
 function readLine(socket: net.Socket): Promise<string> {
@@ -58,13 +88,14 @@ function message(input: MailInput): string {
 }
 
 export async function sendMail(input: MailInput): Promise<{ sent: boolean; reason?: string }> {
-  if (!configured()) {
+  const mailSettings = settings();
+  if (!configured(mailSettings)) {
     return { sent: false, reason: 'SMTP belum disetting.' };
   }
 
-  const host = process.env.SMTP_HOST ?? '';
-  const port = Number(process.env.SMTP_PORT ?? 587);
-  const from = process.env.MAIL_FROM ?? '';
+  const host = mailSettings.SMTP_HOST ?? '';
+  const port = Number(mailSettings.SMTP_PORT ?? 587);
+  const from = mailSettings.MAIL_FROM ?? '';
   const secure = port === 465;
   const socket = secure
     ? tls.connect({ host, port, servername: host })
@@ -78,8 +109,8 @@ export async function sendMail(input: MailInput): Promise<{ sent: boolean; reaso
       const upgraded = tls.connect({ socket, servername: host });
       await command(upgraded, `EHLO asistenq.com`);
       await command(upgraded, 'AUTH LOGIN');
-      await command(upgraded, Buffer.from(process.env.SMTP_USER ?? '').toString('base64'));
-      await command(upgraded, Buffer.from(process.env.SMTP_PASS ?? '').toString('base64'));
+      await command(upgraded, Buffer.from(mailSettings.SMTP_USER ?? '').toString('base64'));
+      await command(upgraded, Buffer.from(mailSettings.SMTP_PASS ?? '').toString('base64'));
       await command(upgraded, `MAIL FROM:<${from}>`);
       await command(upgraded, `RCPT TO:<${input.to}>`);
       await command(upgraded, 'DATA');
@@ -89,8 +120,8 @@ export async function sendMail(input: MailInput): Promise<{ sent: boolean; reaso
     }
 
     await command(socket, 'AUTH LOGIN');
-    await command(socket, Buffer.from(process.env.SMTP_USER ?? '').toString('base64'));
-    await command(socket, Buffer.from(process.env.SMTP_PASS ?? '').toString('base64'));
+    await command(socket, Buffer.from(mailSettings.SMTP_USER ?? '').toString('base64'));
+    await command(socket, Buffer.from(mailSettings.SMTP_PASS ?? '').toString('base64'));
     await command(socket, `MAIL FROM:<${from}>`);
     await command(socket, `RCPT TO:<${input.to}>`);
     await command(socket, 'DATA');
