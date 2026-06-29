@@ -914,45 +914,67 @@ export function formatInvoiceHtml(store: Store, orderIdOrInvoice: string, member
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Invoice ${escapeHtml(invoiceNumber)}</title>
     <style>
-      body { margin: 0; background: #f4fbf8; color: #0b2622; font-family: Arial, sans-serif; }
-      main { max-width: 760px; margin: 32px auto; background: #fff; border: 1px solid #dbe8e3; border-radius: 24px; padding: 32px; }
-      header { display: flex; justify-content: space-between; gap: 20px; border-bottom: 1px solid #dbe8e3; padding-bottom: 20px; }
-      h1 { margin: 0; font-size: 30px; }
-      .muted { color: #62736f; }
-      .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; margin: 24px 0; }
-      .box { border: 1px solid #dbe8e3; border-radius: 16px; padding: 14px; }
-      .box span { display: block; color: #62736f; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; }
-      .box b { display: block; margin-top: 6px; font-size: 18px; }
-      .total { background: #062c28; color: #fff; border-radius: 18px; padding: 18px; }
+      :root { --ink:#062c28; --muted:#60746f; --line:#d8e8e2; --soft:#f4fbf8; }
+      * { box-sizing: border-box; }
+      body { margin: 0; background: var(--soft); color: var(--ink); font-family: Arial, sans-serif; }
+      main { max-width: 760px; margin: 24px auto; background: #fff; border: 1px solid var(--line); border-radius: 22px; padding: 24px; box-shadow: 0 18px 50px rgba(6,44,40,.08); }
+      header { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 18px; align-items: start; border-bottom: 1px solid var(--line); padding-bottom: 16px; }
+      h1 { margin: 4px 0 6px; font-size: 28px; line-height: 1; letter-spacing: -.04em; }
+      h2 { margin: 0; font-size: 18px; }
+      p { margin: 0; }
+      .muted { color: var(--muted); }
+      .brand { text-align: right; }
+      .pill { display: inline-flex; border-radius: 999px; background: #e8f7f1; color: #007d74; font-size: 11px; font-weight: 800; letter-spacing: .1em; padding: 7px 10px; text-transform: uppercase; }
+      .meta { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; color: var(--muted); font-size: 12px; }
+      .summary { display: grid; grid-template-columns: 1.15fr .85fr; gap: 16px; margin-top: 18px; align-items: start; }
+      .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+      .box { border: 1px solid var(--line); border-radius: 14px; padding: 11px 12px; min-height: 74px; }
+      .box span, .total span { display: block; color: var(--muted); font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .12em; }
+      .box b { display: block; margin-top: 5px; font-size: 16px; line-height: 1.15; }
+      .box p { margin-top: 6px; color: var(--muted); font-size: 13px; }
+      .payment { display: grid; gap: 10px; }
+      .total { background: var(--ink); color: #fff; border-radius: 16px; padding: 14px; }
       .total span { color: #b8ddd2; }
-      img { max-width: 260px; width: 100%; border-radius: 16px; border: 1px solid #dbe8e3; }
-      @media print { body { background: #fff; } main { margin: 0; border: 0; } .no-print { display: none; } }
-      @media (max-width: 640px) { main { margin: 12px; padding: 20px; } header, .grid { grid-template-columns: 1fr; display: grid; } }
+      .total b { display: block; margin-top: 4px; font-size: 25px; letter-spacing: -.03em; }
+      .qris { border: 1px solid var(--line); border-radius: 18px; padding: 10px; background: #fff; }
+      img { width: 100%; max-width: 230px; display: block; margin: 0 auto; border-radius: 14px; }
+      .note { margin-top: 16px; border: 1px dashed #b7d8cf; border-radius: 14px; padding: 12px; color: var(--muted); font-size: 13px; line-height: 1.45; background: #fbfffd; }
+      button { border: 0; border-radius: 999px; background: var(--ink); color: #fff; padding: 10px 16px; font-weight: 800; cursor: pointer; }
+      .no-print { margin-top: 14px; }
+      @media print { body { background: #fff; } main { margin: 0; border: 0; box-shadow: none; } .no-print { display: none; } }
+      @media (max-width: 640px) { main { margin: 10px; padding: 16px; } header, .summary, .grid { grid-template-columns: 1fr; } .brand { text-align: left; } h1 { font-size: 24px; } }
     </style>
   </head>
   <body>
     <main>
       <header>
         <div>
-          <p class="muted">AsistenQ Invoice</p>
+          <span class="pill">Invoice QRIS</span>
           <h1>${escapeHtml(invoiceNumber)}</h1>
-          <p class="muted">${escapeHtml(new Date(order.createdAt).toLocaleString('id-ID'))}</p>
+          <div class="meta">
+            <span>${escapeHtml(new Date(order.createdAt).toLocaleString('id-ID'))}</span>
+            <span>Status: ${escapeHtml(order.status)}</span>
+            <span>Batas: ${escapeHtml(order.expiresAt ? new Date(order.expiresAt).toLocaleString('id-ID') : '24 jam')}</span>
+          </div>
         </div>
-        <div>
-          <strong>AsistenQ</strong>
+        <div class="brand">
+          <h2>AsistenQ</h2>
           <p class="muted">Tools Bantu nge-YouTube</p>
         </div>
       </header>
-      <section class="grid">
-        <div class="box"><span>Member</span><b>${escapeHtml(member?.name ?? '-')}</b><p>${escapeHtml(member?.email ?? order.memberId)}</p></div>
-        <div class="box"><span>Produk</span><b>${escapeHtml(product?.name ?? order.productName ?? order.productId)}</b><p>${escapeHtml(product?.slug ?? '')}</p></div>
-        <div class="box"><span>Harga</span><b>${escapeHtml(formatCurrency(order.amount))}</b></div>
-        <div class="box"><span>Kode Unik</span><b>${escapeHtml(order.uniqueCode ?? 0)}</b></div>
-        <div class="box"><span>Status</span><b>${escapeHtml(order.status)}</b></div>
-        <div class="box total"><span>Total Bayar</span><b>${escapeHtml(total)}</b></div>
+      <section class="summary">
+        <div class="grid">
+          <div class="box"><span>Member</span><b>${escapeHtml(member?.name ?? '-')}</b><p>${escapeHtml(member?.email ?? order.memberId)}</p></div>
+          <div class="box"><span>Produk</span><b>${escapeHtml(product?.name ?? order.productName ?? order.productId)}</b><p>${escapeHtml(product?.slug ?? '')}</p></div>
+          <div class="box"><span>Harga</span><b>${escapeHtml(formatCurrency(order.amount))}</b></div>
+          <div class="box"><span>Kode Unik</span><b>${escapeHtml(order.uniqueCode ?? 0)}</b></div>
+        </div>
+        <aside class="payment">
+          <div class="total"><span>Total Bayar</span><b>${escapeHtml(total)}</b></div>
+          ${order.paymentQrUrl ? `<div class="qris"><img src="${escapeHtml(order.paymentQrUrl)}" alt="QRIS pembayaran" /></div>` : ''}
+        </aside>
       </section>
-      ${order.paymentQrUrl ? `<img src="${escapeHtml(order.paymentQrUrl)}" alt="QRIS pembayaran" />` : ''}
-      <p class="muted">Jika sudah membayar, kirim bukti transfer via Telegram. Lisensi akan muncul di akun member setelah admin memproses pembayaran.</p>
+      <p class="note">Bayar sesuai total termasuk kode unik. Setelah transfer, kirim bukti pembayaran via Telegram. Lisensi akan muncul di akun member setelah admin memproses pembayaran.</p>
       <p class="no-print"><button onclick="window.print()">Print / Save PDF</button></p>
     </main>
   </body>
