@@ -1089,7 +1089,7 @@ function LandingManager({ products, onUpdateProduct, onCreateProduct }: {
   };
 
   return (
-    <section className="admin-content-grid compact-admin-grid">
+    <section className="admin-content-grid landing-builder-grid">
       <div className="panel stack">
         <div className="panel-heading">
           <div>
