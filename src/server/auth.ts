@@ -3,7 +3,19 @@ import type { NextFunction, Request, Response } from 'express';
 import { canAdminAccess } from '../shared/domain';
 import type { AdminScope } from '../shared/types';
 
-const sessionSecret = process.env.SESSION_SECRET ?? 'local-asistenq-dev-secret';
+export function resolveSessionSecret(env: NodeJS.ProcessEnv = process.env): string {
+  const secret = env.SESSION_SECRET?.trim();
+
+  if (secret) return secret;
+
+  if (env.NODE_ENV === 'production') {
+    throw new Error('SESSION_SECRET wajib diisi di production.');
+  }
+
+  return 'local-asistenq-dev-secret';
+}
+
+const sessionSecret = resolveSessionSecret();
 
 export type SessionUser = {
   id: string;

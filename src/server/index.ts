@@ -1,15 +1,14 @@
 import cors from 'cors';
 import express from 'express';
 import AdmZip from 'adm-zip';
-import { exec } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
-import { promisify } from 'node:util';
 import { z } from 'zod';
 import { GoogleGenAI, Type } from '@google/genai';
 import { createId, formatCurrency } from '../shared/domain';
 import { clearSessionCookie, readSession, sessionCookie, signSession, requireAdminScope, requireSession } from './auth';
 import { getTelegramBotStatus, startTelegramBot, stopTelegramBot } from './bot-control';
+import { buildGitHubRemote, parseDeploymentSettings, runCommand } from './deploy';
 import { seedInitialData } from './seed';
 import {
   adminLicenseDashboard,
@@ -44,7 +43,6 @@ const isProduction = process.env.NODE_ENV === 'production';
 const publicDir = path.resolve(process.cwd(), 'dist');
 const hasBuiltFrontend = fs.existsSync(path.join(publicDir, 'index.html'));
 const shouldServeFrontend = isProduction || hasBuiltFrontend;
-const execAsync = promisify(exec);
 const cpanelNodeBin = path.join(process.env.HOME ?? '', 'nodevenv/repositories/asistenq/20/bin');
 
 if (!isProduction) {
@@ -821,9 +819,10 @@ app.post('/api/admin/deploy/settings', requireSession, requireAdminScope('produc
   const nextTelegramOwnerId = body.telegramOwnerId?.trim() || current.telegramOwnerId || process.env.TELEGRAM_OWNER_ID || '';
 
   try {
+    const deploySettings = parseDeploymentSettings(body);
     store.data.deploymentSettings = {
-      githubRepo: body.githubRepo.trim(),
-      githubBranch: body.githubBranch.trim(),
+      githubRepo: deploySettings.githubRepo,
+      githubBranch: deploySettings.githubBranch,
       githubToken: nextToken,
       telegramBotToken: nextTelegramToken,
       telegramOwnerId: nextTelegramOwnerId,
@@ -891,18 +890,11 @@ app.post('/api/bot/license-generate', requireBotSecret, (req, res) => {
 app.post('/api/admin/deploy/update', requireSession, requireAdminScope('products'), async (_req, res) => {
   const settings = store.data.deploymentSettings ?? {};
   const githubToken = settings.githubToken ?? process.env.GITHUB_TOKEN ?? '';
-  const githubRepo = settings.githubRepo ?? 'effands/asistenq';
-  const githubBranch = settings.githubBranch ?? 'master';
-  const remote = githubToken
-    ? `https://${encodeURIComponent(githubToken)}@github.com/${githubRepo}.git`
-    : 'origin';
-  const restartCommand = process.platform === 'win32'
-    ? 'if not exist tmp mkdir tmp && type nul > tmp\\restart.txt'
-    : 'mkdir -p tmp && touch tmp/restart.txt';
-  const command = `git pull ${remote} ${githubBranch} && npm install --include=dev && npm run build && ${restartCommand}`;
 
   try {
-    const { stdout, stderr } = await execAsync(command, {
+    const { githubRepo, githubBranch } = parseDeploymentSettings(settings);
+    const remote = buildGitHubRemote(githubRepo, githubToken);
+    const commandOptions = {
       cwd: process.cwd(),
       timeout: 180000,
       maxBuffer: 1024 * 1024,
@@ -910,7 +902,15 @@ app.post('/api/admin/deploy/update', requireSession, requireAdminScope('products
         ...process.env,
         PATH: fs.existsSync(cpanelNodeBin) ? `${cpanelNodeBin}${path.delimiter}${process.env.PATH ?? ''}` : process.env.PATH
       }
-    });
+    };
+    const results = [
+      await runCommand('git', ['pull', remote, githubBranch], commandOptions),
+      await runCommand('npm', ['install', '--include=dev'], commandOptions),
+      await runCommand('npm', ['run', 'build'], commandOptions)
+    ];
+
+    fs.mkdirSync(path.resolve('tmp'), { recursive: true });
+    fs.writeFileSync(path.resolve('tmp/restart.txt'), new Date().toISOString());
 
     if (process.env.NODE_ENV === 'production' || process.env.PASSENGER_APP_ENV) {
       res.on('finish', () => {
@@ -921,8 +921,8 @@ app.post('/api/admin/deploy/update', requireSession, requireAdminScope('products
     res.json({
       ok: true,
       message: 'Update selesai. Aplikasi akan restart otomatis.',
-      stdout: hideSecret(stdout, githubToken),
-      stderr: hideSecret(stderr, githubToken)
+      stdout: hideSecret(results.map((result) => result.stdout).join('\n'), githubToken),
+      stderr: hideSecret(results.map((result) => result.stderr).join('\n'), githubToken)
     });
   } catch (error) {
     const detail = hideSecret(error instanceof Error ? error.message : 'deploy failed', githubToken);
