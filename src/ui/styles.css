@@ -615,17 +615,17 @@ p {
 
 .product-icon {
   display: grid;
-  width: 48px;
-  height: 48px;
+  width: 36px;
+  height: 36px;
   place-items: center;
-  border-radius: 16px;
+  border-radius: 10px;
   background: #dcf7ed;
   color: var(--forest);
 }
 
 .product-icon img {
-  max-width: 34px;
-  max-height: 34px;
+  max-width: 24px;
+  max-height: 24px;
   object-fit: contain;
 }
 
@@ -1829,28 +1829,30 @@ textarea {
 }
 
 .product-admin-list {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
-  gap: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  border-top: 1px solid var(--line);
 }
 
 .product-admin-card {
-  border: 1px solid rgba(0, 0, 0, 0.05);
-  border-radius: 16px;
-  background: rgba(255, 255, 255, 0.8);
-  padding: 16px;
-  backdrop-filter: blur(10px);
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  border: none;
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+  background: transparent;
+  padding: 12px 4px;
+  box-shadow: none;
+  transition: background 0.2s;
 }
 
 .product-admin-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.04);
+  background: rgba(0, 0, 0, 0.02);
+  transform: none;
+  box-shadow: none;
 }
 
-.admin-dark .product-admin-card {
-  background: var(--panel-strong);
-  border-color: rgba(255, 255, 255, 0.05);
+.admin-dark .product-admin-card:hover {
+  background: rgba(255, 255, 255, 0.03);
 }
 
 .product-admin-summary {
