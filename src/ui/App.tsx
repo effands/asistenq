@@ -1777,6 +1777,11 @@ function ProductCard({ product, label, featured = false, onOpen }: {
 }) {
   return (
     <article className={featured ? 'market-card featured-product-card' : 'market-card'}>
+      {featured && product.coverUrl ? (
+        <div className="product-cover">
+          <img src={product.coverUrl} alt={product.name} />
+        </div>
+      ) : null}
       <div className="market-card-top">
         <div className="product-icon">
           {product.logoUrl ? <img src={product.logoUrl} alt="" /> : productIcon(product)}
