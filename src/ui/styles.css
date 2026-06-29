@@ -2999,20 +2999,16 @@ textarea {
 
 .product-form-grid {
   display: grid;
-  gap: 9px;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 14px;
 }
 
-.product-form-grid.two {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-
-.product-form-grid.three {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-}
-
-.product-form-grid.four {
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-}
+.col-1 { grid-column: span 1; }
+.col-2 { grid-column: span 2; }
+.col-3 { grid-column: span 3; }
+.col-4 { grid-column: span 4; }
+.col-5 { grid-column: span 5; }
+.col-6 { grid-column: span 6; }
 
 .product-form-grid label {
   gap: 4px;
@@ -3292,8 +3288,17 @@ textarea {
     grid-template-columns: 1fr;
   }
 
-  .product-form-grid.four {
+  .product-form-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  
+  .product-form-grid > * {
+    grid-column: span 1 !important;
+  }
+  
+  .product-form-grid .col-6,
+  .product-form-grid .col-4 {
+    grid-column: span 2 !important;
   }
 
   .deploy-settings-grid {
@@ -3326,8 +3331,12 @@ textarea {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .form-grid {
+  .form-grid, .product-form-grid {
     grid-template-columns: 1fr;
+  }
+  
+  .product-form-grid > * {
+    grid-column: 1 / -1 !important;
   }
 
   .admin-login-copy {
