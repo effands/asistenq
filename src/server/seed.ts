@@ -62,7 +62,7 @@ export async function seedInitialData(store: Store): Promise<void> {
     featured: true,
     headline: 'Lisensi resmi untuk workflow video YouTube yang lebih cepat.',
     description: 'VJ Studio Pro membantu creator mengelola workflow produksi dan editing video dengan aktivasi lisensi per perangkat.',
-    coverUrl: '',
+    coverUrl: 'https://images.unsplash.com/photo-1574717024653-61fd2cf4d44d?auto=format&fit=crop&w=800&q=80',
     accessUrl: '/member/licenses'
   });
 
@@ -92,8 +92,8 @@ export async function seedInitialData(store: Store): Promise<void> {
     featured: true,
     headline: 'Kelas tahunan untuk membangun channel YouTube dengan workflow yang rapi.',
     description: 'Akses video tutorial, materi pendukung, dan update kelas untuk produksi konten YouTube.',
-    coverUrl: '',
-    accessUrl: '/member/courses'
+    coverUrl: 'https://images.unsplash.com/photo-1611162617474-5b21e879e113?auto=format&fit=crop&w=800&q=80',
+    accessUrl: '/member/courses/kelas-youtube'
   });
 
   ensureProduct(store, {
