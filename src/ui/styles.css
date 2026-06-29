@@ -1830,7 +1830,8 @@ textarea {
 
 .product-admin-list {
   display: grid;
-  gap: 12px;
+  grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+  gap: 16px;
 }
 
 .product-admin-card {
