@@ -5,7 +5,9 @@ import {
   Boxes,
   CheckCircle2,
   CreditCard,
+  ExternalLink,
   Film,
+  FileText,
   GraduationCap,
   KeyRound,
   LayoutDashboard,
@@ -16,6 +18,7 @@ import {
   PlayCircle,
   RefreshCw,
   ShieldCheck,
+  ShoppingCart,
   Sparkles,
   UploadCloud,
   Users,
@@ -27,6 +30,7 @@ import {
   apiRequest,
   type AdminLicenseDashboard,
   type AdminMemberRow,
+  type CourseItem,
   type DeploymentSettingsResult,
   type ForgotPasswordResult,
   type LicenseDashboardRow,
@@ -41,7 +45,7 @@ import {
 } from './api';
 
 type Route = 'home' | 'admin' | 'member' | 'product';
-type AdminSection = 'dashboard' | 'landing' | 'products' | 'orders' | 'licenses' | 'members' | 'deploy';
+type AdminSection = 'dashboard' | 'landing' | 'products' | 'orders' | 'licenses' | 'members' | 'course' | 'deploy';
 type AdminTheme = 'light' | 'dark';
 
 const productTypes: ProductType[] = ['tool', 'course', 'ebook', 'video', 'bundle', 'free', 'class'];
@@ -68,6 +72,11 @@ function browserIdentity(storage: Storage, key: string): string {
 
 function requiresMemberForAccess(product: PublicProduct): boolean {
   return product.price === 0 || (product.accessMode ?? 'public') !== 'public';
+}
+
+function youtubeEmbedUrl(url: string): string | null {
+  const match = url.match(/(?:v=|youtu\.be\/|embed\/)([A-Za-z0-9_-]{6,})/);
+  return match ? `https://www.youtube.com/embed/${match[1]}` : null;
 }
 
 function routeFromPath(pathname: string): Route {
@@ -623,6 +632,7 @@ function AdminShell({ activeSection, children, message, navigate, onSectionChang
           <button className={activeSection === 'orders' ? 'active' : ''} onClick={() => onSectionChange('orders')}><CreditCard size={18} /> Order</button>
           <button className={activeSection === 'licenses' ? 'active' : ''} onClick={() => onSectionChange('licenses')}><KeyRound size={18} /> Lisensi</button>
           <button className={activeSection === 'members' ? 'active' : ''} onClick={() => onSectionChange('members')}><Users size={18} /> Member</button>
+          <button className={activeSection === 'course' ? 'active' : ''} onClick={() => onSectionChange('course')}><BookOpen size={18} /> Course</button>
           <button className={activeSection === 'deploy' ? 'active' : ''} onClick={() => onSectionChange('deploy')}><ShieldCheck size={18} /> Settings</button>
         </nav>
         <button className="admin-public-link" onClick={() => navigate('home')}><ArrowRight size={16} /> Lihat website</button>
@@ -876,6 +886,10 @@ function AdminPanel({
 
   if (activeSection === 'members') {
     return <AdminMemberPanel members={members} onRefresh={onRefreshMembers} onUpdateMember={onUpdateMember} />;
+  }
+
+  if (activeSection === 'course') {
+    return <CourseAdminPanel products={products} onUpdateProduct={onUpdateProduct} />;
   }
 
   if (activeSection === 'deploy') {
@@ -1795,6 +1809,100 @@ function DeployPanel({ settings, onDeployUpdate, onRefreshBotStatus, onSaveSetti
   );
 }
 
+function CourseAdminPanel({ products, onUpdateProduct }: {
+  products: PublicProduct[];
+  onUpdateProduct: (productId: string, input: Partial<PublicProduct>) => Promise<void>;
+}) {
+  const courseProducts = products.filter((product) => product.type === 'course' || product.type === 'class' || (product.courseMaterials?.length ?? 0) > 0);
+  const [selectedId, setSelectedId] = useState(courseProducts[0]?.id ?? '');
+  const selected = courseProducts.find((product) => product.id === selectedId) ?? courseProducts[0];
+  const [materials, setMaterials] = useState<CourseItem[]>(selected?.courseMaterials ?? []);
+  const [notice, setNotice] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    if (!selectedId && courseProducts[0]) setSelectedId(courseProducts[0].id);
+  }, [courseProducts, selectedId]);
+
+  useEffect(() => {
+    setMaterials(selected?.courseMaterials ?? []);
+  }, [selected?.id]);
+
+  return (
+    <section className="panel stack">
+      <div className="panel-heading">
+        <div>
+          <p className="section-kicker">Course Manager</p>
+          <h2>Materi video, ebook, dan resource</h2>
+        </div>
+        <span className="soft-badge">{courseProducts.length} produk</span>
+      </div>
+      {courseProducts.length === 0 ? (
+        <div className="empty-state">Belum ada produk course. Buat produk bertipe `course` atau `class` dulu, lalu materi bisa diatur di sini.</div>
+      ) : (
+        <>
+          <label>
+            Pilih produk course
+            <select value={selected?.id ?? ''} onChange={(event) => setSelectedId(event.target.value)}>
+              {courseProducts.map((product) => (
+                <option key={product.id} value={product.id}>{product.name}</option>
+              ))}
+            </select>
+          </label>
+          <div className="course-admin-list">
+            {materials.map((item, index) => (
+              <div className="course-admin-item" key={item.id}>
+                <select value={item.type} onChange={(event) => setMaterials((current) => current.map((entry, entryIndex) => entryIndex === index ? { ...entry, type: event.target.value as CourseItem['type'] } : entry))}>
+                  <option value="youtube">YouTube Video</option>
+                  <option value="ebook">Ebook</option>
+                  <option value="link">Link Resource</option>
+                </select>
+                <input value={item.title} onChange={(event) => setMaterials((current) => current.map((entry, entryIndex) => entryIndex === index ? { ...entry, title: event.target.value } : entry))} placeholder="Judul materi" />
+                <input value={item.url} onChange={(event) => setMaterials((current) => current.map((entry, entryIndex) => entryIndex === index ? { ...entry, url: event.target.value } : entry))} placeholder="https://..." />
+                <input value={item.description ?? ''} onChange={(event) => setMaterials((current) => current.map((entry, entryIndex) => entryIndex === index ? { ...entry, description: event.target.value } : entry))} placeholder="Deskripsi singkat" />
+                <button className="ghost-button danger-lite" onClick={() => setMaterials((current) => current.filter((_, entryIndex) => entryIndex !== index))} type="button">Hapus</button>
+              </div>
+            ))}
+          </div>
+          <div className="course-admin-actions">
+            <button className="ghost-button" onClick={() => setMaterials((current) => [...current, { id: crypto.randomUUID(), type: 'youtube', title: '', url: '', description: '' }])} type="button">
+              <BookOpen size={16} /> Tambah materi
+            </button>
+            <button
+              className="primary"
+              disabled={busy || !selected}
+              onClick={async () => {
+                if (!selected) return;
+                setBusy(true);
+                setNotice('');
+                try {
+                  await onUpdateProduct(selected.id, {
+                    courseMaterials: materials.filter((item) => item.title.trim() && item.url.trim()).map((item) => ({
+                      ...item,
+                      title: item.title.trim(),
+                      url: item.url.trim(),
+                      description: item.description?.trim() || undefined
+                    }))
+                  });
+                  setNotice('Materi course berhasil disimpan.');
+                } catch (error) {
+                  setNotice(error instanceof Error ? error.message : 'Simpan materi gagal.');
+                } finally {
+                  setBusy(false);
+                }
+              }}
+              type="button"
+            >
+              Simpan materi
+            </button>
+          </div>
+          {notice && <p className="form-notice">{notice}</p>}
+        </>
+      )}
+    </section>
+  );
+}
+
 function ProductForm({ onCreateProduct }: {
   onCreateProduct: (input: {
     name: string;
@@ -2551,6 +2659,8 @@ function MemberPanel({ session, products, dashboard, orders, onRegister, onLogin
   const [licenseNotice, setLicenseNotice] = useState('');
   const [memberResetValues, setMemberResetValues] = useState<Record<string, string>>({});
   const [memberResetBusy, setMemberResetBusy] = useState('');
+  const [cartProductIds, setCartProductIds] = useState<string[]>([]);
+  const [cartBusy, setCartBusy] = useState(false);
   const [activeOrder, setActiveOrder] = useState<PublicOrder | null>(null);
   const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
   const [activeMemberTab, setActiveMemberTab] = useState<'licenses' | 'products' | 'orders' | 'course' | 'help'>('licenses');
@@ -2589,6 +2699,18 @@ function MemberPanel({ session, products, dashboard, orders, onRegister, onLogin
 
   const ownedLicenses = dashboard?.licenses ?? [];
   const paidProducts = products.filter((product) => product.visibility === 'public');
+  const accessibleCourseProducts = paidProducts.filter((product) => {
+    if ((product.courseMaterials?.length ?? 0) === 0) return false;
+    const hasPaidOrder = orders.some((order) => order.productId === product.id && order.status === 'paid');
+    const hasSubscription = (dashboard?.subscriptions ?? []).some((subscription) => subscription.productId === product.id && subscription.status === 'active');
+    return hasPaidOrder || hasSubscription;
+  });
+
+  function toggleCart(productId: string) {
+    setCartProductIds((current) => current.includes(productId)
+      ? current.filter((id) => id !== productId)
+      : [...current, productId]);
+  }
 
   return (
     <main className="member-page">
@@ -2624,7 +2746,7 @@ function MemberPanel({ session, products, dashboard, orders, onRegister, onLogin
             </div>
             {ownedLicenses.length === 0 && (
               <div className="empty-state">
-                Belum ada lisensi aktif untuk email ini. Setelah admin membuat lisensi VJ Studio dengan email akunmu, token akan muncul otomatis di sini.
+                Belum ada lisensi aktif untuk akun anda, silahkan order tools sesuai kebutuhan.
               </div>
             )}
             <div className="member-license-grid">
@@ -2687,17 +2809,37 @@ function MemberPanel({ session, products, dashboard, orders, onRegister, onLogin
                 <p className="section-kicker">Marketplace Member</p>
                 <h2>Beli Produk</h2>
               </div>
-              <span className="soft-badge">QRIS</span>
+              <div className="member-products-toolbar">
+                <span className="soft-badge">QRIS</span>
+                <button
+                  className="ghost-button cart-batch-button"
+                  disabled={cartBusy || cartProductIds.length === 0}
+                  onClick={async () => {
+                    setCheckoutNotice('');
+                    setCartBusy(true);
+                    try {
+                      const selected = paidProducts.filter((product) => cartProductIds.includes(product.id));
+                      let lastOrder: PublicOrder | undefined;
+                      for (const product of selected) {
+                        lastOrder = await onCheckout(product.id);
+                      }
+                      if (lastOrder) setActiveOrder(lastOrder);
+                      setCheckoutNotice(`${selected.length} invoice berhasil dibuat dari keranjang.`);
+                      setCartProductIds([]);
+                    } catch (error) {
+                      setCheckoutNotice(error instanceof Error ? error.message : 'Checkout keranjang gagal.');
+                    } finally {
+                      setCartBusy(false);
+                    }
+                  }}
+                >
+                  <ShoppingCart size={16} /> Keranjang {cartProductIds.length > 0 ? `(${cartProductIds.length})` : ''}
+                </button>
+              </div>
             </div>
             <div className="member-product-list">
               {paidProducts.map((product) => (
                 <article className="member-product-card" key={product.id}>
-                  <button className="member-product-link" type="button" onClick={() => {
-                    window.history.pushState({}, '', product.landingPath ?? `/produk/${product.slug}`);
-                    window.dispatchEvent(new PopStateEvent('popstate'));
-                  }}>
-                    Lihat landing <ArrowRight size={14} />
-                  </button>
                   <div className="member-product-top">
                     <span>{product.type}</span>
                     {productIcon(product)}
@@ -2706,16 +2848,21 @@ function MemberPanel({ session, products, dashboard, orders, onRegister, onLogin
                   <small>{product.headline}</small>
                   <div className="member-product-footer">
                     <b>{product.price === 0 ? 'Gratis' : product.formattedPrice}</b>
-                    <button className="primary" onClick={async () => {
-                      setCheckoutNotice('');
-                      const order = await onCheckout(product.id);
-                      if (order) {
-                        setActiveOrder(order);
-                        setCheckoutNotice(`Invoice ${order.invoiceNumber} dibuat untuk ${product.name}.`);
-                      }
-                    }}>
-                      {product.price === 0 ? 'Ambil' : 'Beli'}
-                    </button>
+                    <div className="member-product-actions">
+                      <button className="ghost-button" type="button" onClick={() => {
+                        window.history.pushState({}, '', product.landingPath ?? `/produk/${product.slug}`);
+                        window.dispatchEvent(new PopStateEvent('popstate'));
+                      }}>
+                        Selengkapnya
+                      </button>
+                      <button
+                        className={cartProductIds.includes(product.id) ? 'ghost-button active-cart-button' : 'primary'}
+                        onClick={() => toggleCart(product.id)}
+                        type="button"
+                      >
+                        <ShoppingCart size={16} />
+                      </button>
+                    </div>
                   </div>
                 </article>
               ))}
@@ -2749,8 +2896,8 @@ function MemberPanel({ session, products, dashboard, orders, onRegister, onLogin
                     <small>Kode unik: {order.uniqueCode ?? 0}</small>
                   </div>
                   <div className="order-history-actions">
-                    <button className="ghost-button" onClick={() => setActiveOrder(order)}>Lihat QRIS</button>
-                    <a className="ghost-button" href={`/api/member/orders/${order.id}/invoice.html`} target="_blank" rel="noreferrer">Download Invoice</a>
+                    <button className="ghost-button" onClick={() => setActiveOrder(order)}>QRIS</button>
+                    <a className="ghost-button" href={`/api/member/orders/${order.id}/invoice.html`} target="_blank" rel="noreferrer">Invoice</a>
                   </div>
                 </article>
               ))}
@@ -2761,25 +2908,104 @@ function MemberPanel({ session, products, dashboard, orders, onRegister, onLogin
         {activeMemberTab === 'course' && (
           <div className="panel stack member-help-panel">
             <p className="section-kicker">Course Access</p>
-            <h2>Kelas YouTube dan materi pendukung.</h2>
-            <p className="muted">Nanti akses video tutorial, ebook, template, dan update kelas akan ditampilkan di tab ini. Struktur ini sudah siap untuk course online maupun offline.</p>
-            <div className="mini-checklist">
-              <span>Materi video tersusun per modul.</span>
-              <span>Resource pendukung dan ebook.</span>
-              <span>Akses tahunan sesuai paket pembelian.</span>
-            </div>
+            <h2>Kelas dan materi pendukung.</h2>
+            {accessibleCourseProducts.length === 0 ? (
+              <div className="empty-state">Belum ada course aktif di akun ini. Order kelas yang dibutuhkan, lalu materi video dan ebook akan muncul di sini.</div>
+            ) : (
+              <div className="course-access-list">
+                {accessibleCourseProducts.map((product) => {
+                  const youtubeItems = (product.courseMaterials ?? []).filter((item) => item.type === 'youtube');
+                  const otherItems = (product.courseMaterials ?? []).filter((item) => item.type !== 'youtube');
+                  const preview = youtubeItems[0] ? youtubeEmbedUrl(youtubeItems[0].url) : null;
+                  return (
+                    <article className="course-access-card" key={product.id}>
+                      <div className="course-access-head">
+                        <div>
+                          <strong>{product.name}</strong>
+                          <small>{product.headline}</small>
+                        </div>
+                        <span className="soft-badge">{(product.courseMaterials ?? []).length} materi</span>
+                      </div>
+                      {preview && (
+                        <div className="course-video-preview">
+                          <iframe src={preview} title={youtubeItems[0].title} allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen />
+                        </div>
+                      )}
+                      {youtubeItems.length > 0 && (
+                        <div className="course-material-group">
+                          <h3>Video</h3>
+                          <div className="course-material-list">
+                            {youtubeItems.map((item) => (
+                              <a className="course-material-item" href={item.url} key={item.id} rel="noreferrer" target="_blank">
+                                <PlayCircle size={18} />
+                                <span>
+                                  <b>{item.title}</b>
+                                  <small>{item.description || 'Buka video di YouTube'}</small>
+                                </span>
+                                <ExternalLink size={14} />
+                              </a>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      {otherItems.length > 0 && (
+                        <div className="course-material-group">
+                          <h3>Ebook & Resource</h3>
+                          <div className="course-material-list">
+                            {otherItems.map((item) => (
+                              <a className="course-material-item" href={item.url} key={item.id} rel="noreferrer" target="_blank">
+                                {item.type === 'ebook' ? <FileText size={18} /> : <BookOpen size={18} />}
+                                <span>
+                                  <b>{item.title}</b>
+                                  <small>{item.description || 'Buka materi'}</small>
+                                </span>
+                                <ExternalLink size={14} />
+                              </a>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </article>
+                  );
+                })}
+              </div>
+            )}
           </div>
         )}
 
         {activeMemberTab === 'help' && (
           <div className="panel stack member-help-panel">
-            <p className="section-kicker">Cara Aktivasi VJ Studio</p>
-            <h2>Aktivasi pakai HWID dan token lisensi.</h2>
-            <div className="mini-checklist">
-              <span>1. Buka VJ Studio Pro di device pembeli.</span>
-              <span>2. Salin Device ID / HWID dari aplikasi.</span>
-              <span>3. Admin generate token lisensi berdasarkan HWID itu.</span>
-              <span>4. Member salin token dari dashboard ini lalu aktivasi di aplikasi.</span>
+            <p className="section-kicker">Pusat Bantuan</p>
+            <h2>Tata cara order, aktivasi lisensi, dan akses materi.</h2>
+            <div className="help-guide-grid">
+              <article className="help-guide-card">
+                <strong>Cara order tools</strong>
+                <span>1. Buka tab `Beli Produk`.</span>
+                <span>2. Klik `Selengkapnya` bila ingin lihat detail landing.</span>
+                <span>3. Klik ikon keranjang untuk memasukkan produk yang ingin dibeli.</span>
+                <span>4. Klik tombol `Keranjang` untuk membuat invoice QRIS.</span>
+                <span>5. Setelah bayar, cek tab `History` untuk buka invoice lagi.</span>
+              </article>
+              <article className="help-guide-card">
+                <strong>Cara aktivasi lisensi</strong>
+                <span>1. Buka aplikasi tools di device pembeli.</span>
+                <span>2. Salin Device ID / HWID dari aplikasi.</span>
+                <span>3. Admin membuat token lisensi berdasarkan HWID tersebut.</span>
+                <span>4. Token akan muncul di tab `Lisensi` akun member.</span>
+                <span>5. Salin token dan aktivasi di aplikasi.</span>
+              </article>
+              <article className="help-guide-card">
+                <strong>Cara akses course</strong>
+                <span>1. Selesaikan order course terlebih dahulu.</span>
+                <span>2. Masuk ke tab `Course` di member area.</span>
+                <span>3. Video YouTube, ebook, dan resource akan tampil sesuai produk yang sudah aktif.</span>
+                <span>4. Bila materi belum muncul, refresh halaman atau hubungi CS.</span>
+              </article>
+            </div>
+            <div className="help-contact-box">
+              <strong>Customer Service</strong>
+              <a href="mailto:cs@ziqva.com">cs@ziqva.com</a>
+              <a href="mailto:cs@asistenq.com">cs@asistenq.com</a>
             </div>
           </div>
         )}

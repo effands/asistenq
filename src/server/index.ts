@@ -121,6 +121,13 @@ const productSchema = z.object({
   logoUrl: z.string().optional(),
   landingPath: z.string().regex(/^\/[a-z0-9-]+$/).optional(),
   landingTemplate: z.string().optional(),
+  courseMaterials: z.array(z.object({
+    id: z.string().min(1),
+    type: z.enum(['youtube', 'ebook', 'link']),
+    title: z.string().min(1),
+    url: z.string().url(),
+    description: z.string().optional()
+  })).optional(),
   ctaLabel: z.string().optional(),
   accessRequirement: z.string().optional(),
   destinationType: z.enum(['internal', 'hosted', 'external']).optional(),

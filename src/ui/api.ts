@@ -1,4 +1,4 @@
-import type { BannedHwid, MemberAccount, Order, Product, ProductPlan, Subscription, ToolLicense } from '../shared/types';
+import type { BannedHwid, CourseMaterial, MemberAccount, Order, Product, ProductPlan, Subscription, ToolLicense } from '../shared/types';
 
 const API_BASE = '/api';
 
@@ -66,6 +66,8 @@ export interface LandingConfig {
   faqs?: LandingFaq[];
   testimonials?: LandingTestimonial[];
 }
+
+export type CourseItem = CourseMaterial;
 
 export type PublicProduct = Product & {
   formattedPrice: string;

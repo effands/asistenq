@@ -60,6 +60,16 @@ export interface LandingConfig {
   testimonials?: LandingTestimonial[];
 }
 
+export type CourseMaterialType = 'youtube' | 'ebook' | 'link';
+
+export interface CourseMaterial {
+  id: string;
+  type: CourseMaterialType;
+  title: string;
+  url: string;
+  description?: string;
+}
+
 export interface Product {
   id: string;
   name: string;
@@ -77,6 +87,7 @@ export interface Product {
   landingPath?: string;
   landingTemplate?: string;
   landingConfig?: LandingConfig;
+  courseMaterials?: CourseMaterial[];
   ctaLabel?: string;
   accessRequirement?: string;
   destinationType?: ProductDestinationType;

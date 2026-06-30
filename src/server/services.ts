@@ -14,6 +14,7 @@ import type {
   AdminScope,
   BannedHwid,
   BillingPeriod,
+  CourseMaterial,
   LicenseStatus,
   MemberAccount,
   Order,
@@ -327,6 +328,7 @@ export function createProductRecord(store: Store, input: {
   landingTemplate?: string;
   ctaLabel?: string;
   accessRequirement?: string;
+  courseMaterials?: CourseMaterial[];
   destinationType?: ProductDestinationType;
   externalUrl?: string;
   openMode?: ProductOpenMode;
@@ -388,6 +390,7 @@ export function updateProductRecord(store: Store, productId: string, input: Part
   landingTemplate: string;
   ctaLabel: string;
   accessRequirement: string;
+  courseMaterials: CourseMaterial[];
   destinationType: ProductDestinationType;
   externalUrl: string;
   openMode: ProductOpenMode;

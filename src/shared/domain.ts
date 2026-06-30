@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import type {
   AdminScope,
   BillingPeriod,
+  CourseMaterial,
   Product,
   ProductAccessMode,
   ProductDestinationType,
@@ -28,6 +29,7 @@ type ProductInput = {
   landingTemplate?: string;
   ctaLabel?: string;
   accessRequirement?: string;
+  courseMaterials?: CourseMaterial[];
   destinationType?: ProductDestinationType;
   externalUrl?: string;
   openMode?: ProductOpenMode;
@@ -64,6 +66,7 @@ export function createProduct(input: ProductInput): Product {
     logoUrl: input.logoUrl ?? '',
     landingPath: input.landingPath,
     landingTemplate: input.landingTemplate,
+    courseMaterials: input.courseMaterials ?? [],
     ctaLabel: input.ctaLabel,
     accessRequirement: input.accessRequirement,
     destinationType,
