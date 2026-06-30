@@ -1642,8 +1642,6 @@ function ProductForm({ onCreateProduct }: {
   const [type, setType] = useState<ProductType>('tool');
   const [visibility, setVisibility] = useState<ProductVisibility>('public');
   const [accessMode, setAccessMode] = useState<ProductAccessMode>('free_member');
-  const [billingPeriod, setBillingPeriod] = useState<BillingPeriod>('monthly');
-  const [price, setPrice] = useState(149000);
   const [planPrices, setPlanPrices] = useState<Record<string, number>>(() => Object.fromEntries(tieredPlanTemplates.map((plan) => [plan.code, plan.defaultPrice])));
   const [activePlans, setActivePlans] = useState<Record<string, boolean>>(() => Object.fromEntries(tieredPlanTemplates.map((plan) => [plan.code, true])));
   const [compareAtPrice, setCompareAtPrice] = useState(0);
@@ -1679,8 +1677,8 @@ function ProductForm({ onCreateProduct }: {
         type,
         visibility,
         accessMode,
-        billingPeriod: primaryPlan?.billingPeriod ?? billingPeriod,
-        price: primaryPlan?.price ?? price,
+        billingPeriod: primaryPlan?.billingPeriod ?? 'monthly',
+        price: primaryPlan?.price ?? 0,
         plans: selectedPlans,
         compareAtPrice: compareAtPrice || undefined,
         discountLabel: discountLabel.trim() || undefined,
@@ -1710,16 +1708,15 @@ function ProductForm({ onCreateProduct }: {
           <label className="col-1">Jenis produk<select value={type} onChange={(event) => setType(event.target.value as ProductType)}>{productTypes.map((item) => <option key={item}>{item}</option>)}</select></label>
         </div>
       </div>
-      <div className="product-form-section">
-        <div className="product-form-section-title"><span>02</span><div><strong>Akses & harga</strong><small>Atur siapa yang dapat melihat dan membuka produk.</small></div></div>
-        <div className="product-form-grid">
-          <label className="col-2">Tampil di katalog<select value={visibility} onChange={(event) => setVisibility(event.target.value as ProductVisibility)}>{productVisibilities.map((item) => <option key={item} value={item}>{item === 'public' ? 'Publik' : item === 'private' ? 'Link privat' : 'Draft'}</option>)}</select></label>
-          <label className="col-2">Syarat akses<select value={accessMode} onChange={(event) => setAccessMode(event.target.value as ProductAccessMode)}>{productAccessModes.map((item) => <option key={item} value={item}>{item === 'public' ? 'Tanpa login' : item === 'free_member' ? 'Member gratis' : item === 'trial' ? 'Trial aktif' : item === 'paid' ? 'Sudah bayar' : 'Admin saja'}</option>)}</select></label>
-          <label className="col-2">Harga utama katalog<input min="0" value={price} onChange={(event) => setPrice(Number(event.target.value))} type="number" /></label>
+      <div className="product-form-section access-section">
+        <div className="product-form-section-title"><span>02</span><div><strong>Akses produk</strong><small>Atur siapa yang dapat melihat dan membuka produk.</small></div></div>
+        <div className="product-form-grid two">
+          <label>Tampil di katalog<select value={visibility} onChange={(event) => setVisibility(event.target.value as ProductVisibility)}>{productVisibilities.map((item) => <option key={item} value={item}>{item === 'public' ? 'Publik' : item === 'private' ? 'Link privat' : 'Draft'}</option>)}</select></label>
+          <label>Syarat akses<select value={accessMode} onChange={(event) => setAccessMode(event.target.value as ProductAccessMode)}>{productAccessModes.map((item) => <option key={item} value={item}>{item === 'public' ? 'Tanpa login' : item === 'free_member' ? 'Member gratis' : item === 'trial' ? 'Trial aktif' : item === 'paid' ? 'Sudah bayar' : 'Admin saja'}</option>)}</select></label>
         </div>
       </div>
       <div className="product-form-section price-section">
-        <div className="product-form-section-title"><span>03</span><div><strong>Paket harga</strong><small>Aktifkan paket yang ingin dijual atau dipakai untuk generate lisensi.</small></div></div>
+        <div className="product-form-section-title"><span>03</span><div><strong>Paket harga</strong><small>Harga katalog mengikuti paket berbayar aktif pertama.</small></div></div>
         <div className="tiered-price-grid">
           {tieredPlanTemplates.map((plan) => (
             <label key={plan.code} className={`tiered-price-card ${activePlans[plan.code] ? 'is-active' : ''}`}>
