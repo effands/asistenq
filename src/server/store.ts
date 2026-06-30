@@ -21,6 +21,7 @@ const emptyData = (): DatabaseShape => ({
   orders: [],
   subscriptions: [],
   auditLogs: [],
+  toolAnalyticsEvents: [],
   deploymentSettings: {
     githubRepo: 'effands/asistenq',
     githubBranch: 'master'
@@ -43,6 +44,7 @@ function normalizeData(data: Partial<DatabaseShape>): DatabaseShape {
     orders: data.orders ?? [],
     subscriptions: data.subscriptions ?? [],
     auditLogs: data.auditLogs ?? [],
+    toolAnalyticsEvents: data.toolAnalyticsEvents ?? [],
     deploymentSettings: {
       githubRepo: 'effands/asistenq',
       githubBranch: 'master',

@@ -101,6 +101,21 @@ describe('server services', () => {
     ]);
   });
 
+  it('stores internal and external tool destinations without changing legacy defaults', () => {
+    const internal = createProductRecord(store, {
+      name: 'Internal Tool', slug: 'internal-tool', type: 'tool', billingPeriod: 'monthly', price: 0
+    });
+    const external = createProductRecord(store, {
+      name: 'External Tool', slug: 'external-tool', type: 'tool', billingPeriod: 'monthly', price: 99000,
+      destinationType: 'external', externalUrl: 'https://example.com/tool', openMode: 'new_tab', trackLiveUsers: false
+    });
+
+    expect(internal).toMatchObject({ destinationType: 'internal', openMode: 'same_tab', trackLiveUsers: true });
+    expect(external).toMatchObject({
+      destinationType: 'external', externalUrl: 'https://example.com/tool', openMode: 'new_tab', trackLiveUsers: false
+    });
+  });
+
   it('expires pending invoices after 24 hours', async () => {
     const member = await createMember(store, { name: 'Buyer', email: 'buyer@asistenq.com', password: 'secret123' });
     const product = createProductRecord(store, {

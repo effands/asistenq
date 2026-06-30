@@ -19,6 +19,8 @@ import type {
   Order,
   Product,
   ProductAccessMode,
+  ProductDestinationType,
+  ProductOpenMode,
   ProductPlan,
   ProductType,
   ProductVisibility,
@@ -325,6 +327,10 @@ export function createProductRecord(store: Store, input: {
   landingTemplate?: string;
   ctaLabel?: string;
   accessRequirement?: string;
+  destinationType?: ProductDestinationType;
+  externalUrl?: string;
+  openMode?: ProductOpenMode;
+  trackLiveUsers?: boolean;
   active?: boolean;
   featured?: boolean;
   headline?: string;
@@ -382,6 +388,10 @@ export function updateProductRecord(store: Store, productId: string, input: Part
   landingTemplate: string;
   ctaLabel: string;
   accessRequirement: string;
+  destinationType: ProductDestinationType;
+  externalUrl: string;
+  openMode: ProductOpenMode;
+  trackLiveUsers: boolean;
   active: boolean;
   featured: boolean;
   headline: string;

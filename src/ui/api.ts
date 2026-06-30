@@ -69,6 +69,8 @@ export interface LandingConfig {
 
 export type PublicProduct = Product & {
   formattedPrice: string;
+  discountPercent: number;
+  analytics?: ToolAnalyticsRow;
   landingConfig?: LandingConfig;
 };
 export type PublicOrder = Order & {
@@ -79,12 +81,34 @@ export type PublicOrder = Order & {
   memberEmail?: string;
 };
 export type PublicCatalog = {
+  all: PublicProduct[];
   featured: PublicProduct[];
   paid: PublicProduct[];
   free: PublicProduct[];
+  onlineUsers: number;
 };
 export type LoginResult = { token: string; user: { id: string; name: string; email: string; role?: string; scopes?: string[] } };
-export type Summary = { products: number; members: number; orders: number; licenses: number; activeSubscriptions: number };
+export type ToolAnalyticsRow = {
+  productId: string;
+  slug: string;
+  name: string;
+  destinationType: 'internal' | 'hosted' | 'external';
+  onlineUsers: number;
+  detailViews: number;
+  toolOpens: number;
+  checkoutClicks: number;
+};
+export type Summary = {
+  products: number;
+  members: number;
+  orders: number;
+  licenses: number;
+  activeSubscriptions: number;
+  onlineUsers: number;
+  toolOpens: number;
+  detailViews: number;
+  toolAnalytics: ToolAnalyticsRow[];
+};
 export type ForgotPasswordResult = { ok: true; message: string; resetUrl?: string; expiresAt?: string };
 export type TelegramBotStatus = {
   configured: boolean;

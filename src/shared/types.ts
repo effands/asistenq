@@ -1,6 +1,8 @@
 export type ProductType = 'tool' | 'course' | 'ebook' | 'video' | 'bundle' | 'free' | 'class';
 export type ProductVisibility = 'public' | 'private' | 'draft';
 export type ProductAccessMode = 'public' | 'free_member' | 'trial' | 'paid' | 'admin';
+export type ProductDestinationType = 'internal' | 'hosted' | 'external';
+export type ProductOpenMode = 'same_tab' | 'new_tab' | 'wrapper';
 export type BillingPeriod = 'trial' | 'monthly' | 'annual' | 'lifetime' | 'one_time';
 export type LicenseStatus = 'generated' | 'active' | 'expired' | 'suspended' | 'banned';
 export type DiscountType = 'amount' | 'percent';
@@ -77,6 +79,10 @@ export interface Product {
   landingConfig?: LandingConfig;
   ctaLabel?: string;
   accessRequirement?: string;
+  destinationType?: ProductDestinationType;
+  externalUrl?: string;
+  openMode?: ProductOpenMode;
+  trackLiveUsers?: boolean;
   active: boolean;
   featured?: boolean;
   headline: string;
@@ -179,6 +185,16 @@ export interface AuditLog {
   createdAt: string;
 }
 
+export type ToolAnalyticsEventType = 'detail_view' | 'tool_open' | 'checkout_click';
+
+export interface ToolAnalyticsEvent {
+  id: string;
+  productId: string;
+  visitorId: string;
+  eventType: ToolAnalyticsEventType;
+  createdAt: string;
+}
+
 export interface PasswordResetToken {
   id: string;
   accountType: 'admin' | 'member';
@@ -218,5 +234,6 @@ export interface DatabaseShape {
   orders: Order[];
   subscriptions: Subscription[];
   auditLogs: AuditLog[];
+  toolAnalyticsEvents: ToolAnalyticsEvent[];
   deploymentSettings?: DeploymentSettings;
 }

@@ -22,7 +22,7 @@ import {
   WandSparkles
 } from 'lucide-react';
 import { useEffect, useState, type ReactNode } from 'react';
-import type { BillingPeriod, ProductAccessMode, ProductType, ProductVisibility } from '../shared/types';
+import type { BillingPeriod, ProductAccessMode, ProductDestinationType, ProductOpenMode, ProductType, ProductVisibility } from '../shared/types';
 import {
   apiRequest,
   type AdminLicenseDashboard,
@@ -56,7 +56,15 @@ const tieredPlanTemplates = [
   { code: '1Y', name: '1 Tahun', label: '1 Tahun', billingPeriod: 'annual' as BillingPeriod, durationDays: 365, defaultPrice: 999000 },
   { code: 'LIFETIME', name: 'Lifetime', label: 'Lifetime', billingPeriod: 'lifetime' as BillingPeriod, durationDays: null, defaultPrice: 1999000 }
 ];
-const emptyCatalog: PublicCatalog = { featured: [], paid: [], free: [] };
+const emptyCatalog: PublicCatalog = { all: [], featured: [], paid: [], free: [], onlineUsers: 0 };
+
+function browserIdentity(storage: Storage, key: string): string {
+  const existing = storage.getItem(key);
+  if (existing) return existing;
+  const value = globalThis.crypto?.randomUUID?.() ?? `${Date.now().toString(36)}${Math.random().toString(36).slice(2)}`;
+  storage.setItem(key, value);
+  return value;
+}
 
 function routeFromPath(pathname: string): Route {
   if (pathname.startsWith('/adminasistenq')) return 'admin';
@@ -91,6 +99,8 @@ export function App() {
     window.localStorage.getItem('asistenq-admin-theme') === 'dark' ? 'dark' : 'light'
   ));
   const [productSlug, setProductSlug] = useState(() => productSlugFromPath(window.location.pathname));
+  const [visitorId] = useState(() => browserIdentity(window.localStorage, 'asistenq-visitor-id'));
+  const [instanceId] = useState(() => browserIdentity(window.sessionStorage, 'asistenq-site-instance-id'));
 
   function navigate(nextRoute: Route) {
     const path = nextRoute === 'home' ? '/' : nextRoute === 'admin' ? '/adminasistenq' : nextRoute === 'product' ? `/produk/${productSlug}` : `/${nextRoute}`;
@@ -100,6 +110,7 @@ export function App() {
 
   function navigateProduct(slug: string) {
     const product = products.find((item) => item.slug === slug);
+    void apiRequest('/analytics/event', { method: 'POST', body: { visitorId, productSlug: slug, eventType: 'detail_view' } });
     window.history.pushState({}, '', product?.landingPath ?? `/produk/${slug}`);
     setProductSlug(slug);
     setRoute('product');
@@ -108,6 +119,29 @@ export function App() {
   function setTheme(theme: AdminTheme) {
     setAdminTheme(theme);
     window.localStorage.setItem('asistenq-admin-theme', theme);
+  }
+
+  function openProductAccess(product: PublicProduct) {
+    void apiRequest('/analytics/event', {
+      method: 'POST',
+      body: { visitorId, productSlug: product.slug, eventType: 'tool_open' }
+    });
+
+    if ((product.accessMode ?? 'public') !== 'public' && !memberSession) {
+      navigate('member');
+      return;
+    }
+    if (product.openMode === 'wrapper' && product.destinationType === 'external') return;
+
+    const target = product.destinationType === 'external'
+      ? product.externalUrl
+      : product.accessUrl || product.landingPath || `/tools/${product.slug}`;
+    if (!target) return;
+    if (product.openMode === 'new_tab' || product.destinationType === 'external') {
+      window.open(target, '_blank', 'noopener,noreferrer');
+      return;
+    }
+    window.location.assign(target);
   }
 
   async function loadProducts() {
@@ -166,6 +200,22 @@ export function App() {
     loadProducts().catch((error) => setMessage(error.message));
     loadCatalog().catch((error) => setMessage(error.message));
   }, []);
+
+  useEffect(() => {
+    const heartbeat = async () => {
+      const live = await apiRequest<{ onlineUsers: number }>('/analytics/heartbeat', {
+        method: 'POST',
+        body: { visitorId, instanceId }
+      });
+      setCatalog((current) => ({ ...current, onlineUsers: live.onlineUsers }));
+    };
+    void heartbeat();
+    const timer = window.setInterval(() => {
+      void heartbeat();
+      void loadCatalog();
+    }, 20_000);
+    return () => window.clearInterval(timer);
+  }, [instanceId, visitorId]);
 
   const onUpdateMember = async (memberId: string, input: any) => {
     if (!adminSession) return;
@@ -243,6 +293,24 @@ export function App() {
             await loadProducts();
             await loadCatalog();
             setMessage('Landing ZIP berhasil diimport.');
+          }}
+          onImportLandingHtml={async (productId, file) => {
+            if (!adminSession) return;
+            const response = await fetch(`/api/admin/products/${productId}/landing-html`, {
+              method: 'POST',
+              headers: {
+                Authorization: `Bearer ${adminSession.token}`,
+                'Content-Type': 'text/html'
+              },
+              body: await file.arrayBuffer()
+            });
+            if (!response.ok) {
+              const error = await response.json().catch(() => ({ message: 'Import HTML gagal.' }));
+              throw new Error(error.message ?? 'Import HTML gagal.');
+            }
+            await loadProducts();
+            await loadCatalog();
+            setMessage('File HTML berhasil dijadikan tools internal.');
           }}
           onRefreshLicenses={async () => {
             await loadAdminLicenses();
@@ -383,6 +451,13 @@ export function App() {
           }}
           onCheckout={async (productId) => {
             if (!memberSession) throw new Error('Login member dulu.');
+            const product = products.find((item) => item.id === productId);
+            if (product) {
+              void apiRequest('/analytics/event', {
+                method: 'POST',
+                body: { visitorId, productSlug: product.slug, eventType: 'checkout_click' }
+              });
+            }
             const order = await apiRequest<PublicOrder>('/checkout', {
               token: memberSession.token,
               method: 'POST',
@@ -401,7 +476,7 @@ export function App() {
   return (
     <PublicShell navigate={navigate} activeRoute="home">
       {route === 'product'
-        ? <ProductLanding isLoading={products.length === 0} product={products.find((item) => item.slug === productSlug || item.landingPath === `/${productSlug}`)} onJoin={() => navigate('member')} />
+        ? <ProductLanding isLoading={products.length === 0} product={products.find((item) => item.slug === productSlug || item.landingPath === `/${productSlug}`)} onAccess={openProductAccess} onJoin={() => navigate('member')} />
         : <Marketplace catalog={catalog} onJoin={() => navigate('member')} onProductOpen={navigateProduct} />}
     </PublicShell>
   );
@@ -610,6 +685,7 @@ function AdminPanel({
   onCreateProduct,
   onUpdateProduct,
   onImportLandingZip,
+  onImportLandingHtml,
   onRefreshLicenses,
   onRefreshMembers,
   onUpdateMember,
@@ -657,6 +733,10 @@ function AdminPanel({
     logoUrl?: string;
     landingPath?: string;
     landingTemplate?: string;
+    destinationType?: ProductDestinationType;
+    externalUrl?: string;
+    openMode?: ProductOpenMode;
+    trackLiveUsers?: boolean;
     ctaLabel?: string;
     accessRequirement?: string;
     headline: string;
@@ -664,6 +744,7 @@ function AdminPanel({
   }) => Promise<void>;
   onUpdateProduct: (productId: string, input: Partial<PublicProduct>) => Promise<void>;
   onImportLandingZip: (productId: string, file: File) => Promise<void>;
+  onImportLandingHtml: (productId: string, file: File) => Promise<void>;
   onRefreshLicenses: () => Promise<void>;
   onRefreshMembers: () => Promise<void>;
   onUpdateMember: (id: string, input: any) => Promise<void>;
@@ -705,7 +786,7 @@ function AdminPanel({
     return (
       <section className="admin-content-grid">
         <ProductForm onCreateProduct={onCreateProduct} />
-        <ProductTable onImportLandingZip={onImportLandingZip} onUpdateProduct={onUpdateProduct} products={products} />
+        <ProductTable onImportLandingHtml={onImportLandingHtml} onImportLandingZip={onImportLandingZip} onUpdateProduct={onUpdateProduct} products={products} />
       </section>
     );
   }
@@ -764,6 +845,24 @@ function AdminDashboardPanel({ products, summary, onResetOperationalData, onNavi
         <Metric icon={<Users />} label="Member" value={summary?.members ?? 0} onClick={() => onNavigate('members')} />
         <Metric icon={<CreditCard />} label="Order" value={summary?.orders ?? 0} onClick={() => onNavigate('orders')} />
         <Metric icon={<KeyRound />} label="Lisensi" value={summary?.licenses ?? 0} onClick={() => onNavigate('licenses')} />
+        <Metric icon={<Monitor />} label="Online sekarang" value={summary?.onlineUsers ?? 0} onClick={() => onNavigate('products')} />
+      </div>
+      <div className="panel stack wide analytics-panel">
+        <div className="panel-heading">
+          <div><p className="section-kicker">Live Analytics</p><h2>Aktivitas setiap tools</h2></div>
+          <span className="soft-badge">{summary?.toolOpens ?? 0} total buka</span>
+        </div>
+        <div className="tool-analytics-list">
+          {(summary?.toolAnalytics ?? []).map((item) => (
+            <div className="tool-analytics-row" key={item.productId}>
+              <span><strong>{item.name}</strong><small>{item.destinationType}</small></span>
+              <b><i className="live-dot" /> {item.onlineUsers} online</b>
+              <span><small>Detail</small><strong>{item.detailViews}</strong></span>
+              <span><small>Dibuka</small><strong>{item.toolOpens}</strong></span>
+              <span><small>Checkout</small><strong>{item.checkoutClicks}</strong></span>
+            </div>
+          ))}
+        </div>
       </div>
       <div className="panel stack wide">
         <div className="panel-heading">
@@ -1631,6 +1730,10 @@ function ProductForm({ onCreateProduct }: {
     logoUrl?: string;
     landingPath?: string;
     landingTemplate?: string;
+    destinationType?: ProductDestinationType;
+    externalUrl?: string;
+    openMode?: ProductOpenMode;
+    trackLiveUsers?: boolean;
     ctaLabel?: string;
     accessRequirement?: string;
     headline: string;
@@ -1650,10 +1753,28 @@ function ProductForm({ onCreateProduct }: {
   const [logoUrl, setLogoUrl] = useState('');
   const [landingPath, setLandingPath] = useState('');
   const [landingTemplate, setLandingTemplate] = useState('');
+  const [destinationType, setDestinationType] = useState<ProductDestinationType>('internal');
+  const [externalUrl, setExternalUrl] = useState('');
+  const [openMode, setOpenMode] = useState<ProductOpenMode>('same_tab');
+  const [trackLiveUsers, setTrackLiveUsers] = useState(true);
   const [ctaLabel, setCtaLabel] = useState('Daftar jadi member');
   const [accessRequirement, setAccessRequirement] = useState('Daftar jadi member untuk membuka akses.');
   const [headline, setHeadline] = useState('Bantu produksi video lebih cepat.');
   const [description, setDescription] = useState('Produk AsistenQ untuk workflow editing dan YouTube.');
+  const primaryPaidTemplate = tieredPlanTemplates.find((plan) => activePlans[plan.code] && !plan.isFree);
+  const primarySalePrice = primaryPaidTemplate ? Number(planPrices[primaryPaidTemplate.code] ?? 0) : 0;
+  const discountPercent = compareAtPrice > primarySalePrice && compareAtPrice > 0
+    ? Math.round((1 - primarySalePrice / compareAtPrice) * 100)
+    : 0;
+
+  function setDiscountPercent(percent: number) {
+    if (!primaryPaidTemplate || compareAtPrice <= 0) return;
+    const safePercent = Math.max(0, Math.min(99, percent));
+    setPlanPrices((current) => ({
+      ...current,
+      [primaryPaidTemplate.code]: Math.round(compareAtPrice * (1 - safePercent / 100))
+    }));
+  }
 
   return (
     <form className="panel stack wide product-create-form" onSubmit={async (event) => {
@@ -1686,6 +1807,10 @@ function ProductForm({ onCreateProduct }: {
         logoUrl: logoUrl.trim() || undefined,
         landingPath: landingPath.trim() || undefined,
         landingTemplate: landingTemplate.trim() || undefined,
+        destinationType,
+        externalUrl: destinationType === 'external' ? externalUrl.trim() || undefined : undefined,
+        openMode,
+        trackLiveUsers: destinationType === 'external' ? false : trackLiveUsers,
         ctaLabel: ctaLabel.trim() || undefined,
         accessRequirement: accessRequirement.trim() || undefined,
         headline,
@@ -1749,10 +1874,30 @@ function ProductForm({ onCreateProduct }: {
                 <strong>Promo</strong>
                 <small>Harga coret dan label penawaran.</small>
               </div>
-              <div className="product-form-grid three">
-                <label>Harga coret (Rp)<input min="0" value={compareAtPrice} onChange={(event) => setCompareAtPrice(Number(event.target.value))} type="number" placeholder="0" /></label>
-                <label>Badge promo<input value={discountLabel} onChange={(event) => setDiscountLabel(event.target.value)} placeholder="Contoh: Free Beta" /></label>
-                <label>Teks promo<input value={promoText} onChange={(event) => setPromoText(event.target.value)} placeholder="Promo singkat" /></label>
+              <div className="product-form-grid four">
+                <label>Harga asli / real<input min="0" value={compareAtPrice} onChange={(event) => setCompareAtPrice(Number(event.target.value))} type="number" placeholder="299000" /></label>
+                <label>Harga diskon<input min="0" value={primarySalePrice} onChange={(event) => primaryPaidTemplate && setPlanPrices((current) => ({ ...current, [primaryPaidTemplate.code]: Number(event.target.value) }))} type="number" placeholder="149000" /></label>
+                <label>Diskon (%)<input min="0" max="99" value={discountPercent} onChange={(event) => setDiscountPercent(Number(event.target.value))} type="number" placeholder="50" /></label>
+                <label>Badge promo<input value={discountLabel} onChange={(event) => setDiscountLabel(event.target.value)} placeholder={discountPercent ? `Hemat ${discountPercent}%` : 'Contoh: Best Deal'} /></label>
+                <label className="col-4">Teks promo<input value={promoText} onChange={(event) => setPromoText(event.target.value)} placeholder="Promo singkat yang tampil di kartu tools" /></label>
+              </div>
+            </div>
+
+            <div className="product-advanced-group tool-destination-group">
+              <div className="mini-section-title">
+                <strong>Tujuan tools</strong>
+                <small>Internal, upload HTML, atau aplikasi external.</small>
+              </div>
+              <div className="product-form-grid four">
+                <label>Jenis tujuan<select value={destinationType} onChange={(event) => {
+                  const next = event.target.value as ProductDestinationType;
+                  setDestinationType(next);
+                  setOpenMode(next === 'external' ? 'new_tab' : 'same_tab');
+                  setTrackLiveUsers(next !== 'external');
+                }}><option value="internal">Internal AsistenQ</option><option value="hosted">Upload HTML/ZIP</option><option value="external">Link external</option></select></label>
+                <label>Cara membuka<select value={openMode} onChange={(event) => setOpenMode(event.target.value as ProductOpenMode)}><option value="same_tab">Halaman yang sama</option><option value="new_tab">Tab baru</option><option value="wrapper">Wrapper / iframe</option></select></label>
+                <label className="col-2">URL external<input disabled={destinationType !== 'external'} value={externalUrl} onChange={(event) => setExternalUrl(event.target.value)} placeholder="https://aplikasi-lain.example.com" type="url" /></label>
+                <label className="tracking-toggle col-4"><input checked={trackLiveUsers} disabled={destinationType === 'external'} onChange={(event) => setTrackLiveUsers(event.target.checked)} type="checkbox" /> Hitung pengguna online untuk tools milik sendiri</label>
               </div>
             </div>
 
@@ -1799,10 +1944,11 @@ function Metric({ icon, label, value, onClick }: { icon: ReactNode; label: strin
   );
 }
 
-function ProductTable({ products, onUpdateProduct, onImportLandingZip }: {
+function ProductTable({ products, onUpdateProduct, onImportLandingZip, onImportLandingHtml }: {
   products: PublicProduct[];
   onUpdateProduct: (productId: string, input: Partial<PublicProduct>) => Promise<void>;
   onImportLandingZip: (productId: string, file: File) => Promise<void>;
+  onImportLandingHtml: (productId: string, file: File) => Promise<void>;
 }) {
   const [editingId, setEditingId] = useState('');
   const [draft, setDraft] = useState<Partial<PublicProduct>>({});
@@ -1827,6 +1973,10 @@ function ProductTable({ products, onUpdateProduct, onImportLandingZip }: {
       logoUrl: product.logoUrl,
       landingPath: product.landingPath,
       landingTemplate: product.landingTemplate,
+      destinationType: product.destinationType,
+      externalUrl: product.externalUrl,
+      openMode: product.openMode,
+      trackLiveUsers: product.trackLiveUsers,
       ctaLabel: product.ctaLabel,
       accessRequirement: product.accessRequirement,
       headline: product.headline,
@@ -1855,7 +2005,7 @@ function ProductTable({ products, onUpdateProduct, onImportLandingZip }: {
               <div className="product-icon">{product.logoUrl ? <img src={product.logoUrl} alt="" /> : productIcon(product)}</div>
               <div>
                 <strong>{product.name}</strong>
-                <span><b>{product.landingTemplate === 'tool-app' ? 'TOOL APP' : 'LANDING'}</b> · {product.landingPath ?? `/produk/${product.slug}`} · {product.visibility ?? 'public'} · {product.accessMode ?? 'public'} · {product.price === 0 ? 'Gratis' : product.formattedPrice}</span>
+                <span><b>{product.destinationType === 'external' ? 'EXTERNAL' : product.destinationType === 'hosted' ? 'HTML HOSTED' : product.landingTemplate === 'tool-app' ? 'TOOL APP' : 'INTERNAL'}</b> · {product.externalUrl ?? product.landingPath ?? `/produk/${product.slug}`} · {product.price === 0 ? 'Gratis' : product.formattedPrice} · {product.analytics?.onlineUsers ?? 0} online · {product.analytics?.toolOpens ?? 0} buka</span>
               </div>
               <button className="ghost-button" type="button" onClick={() => startEdit(product)}>Edit</button>
             </div>
@@ -1877,6 +2027,9 @@ function ProductTable({ products, onUpdateProduct, onImportLandingZip }: {
                   <input value={draft.logoUrl ?? ''} onChange={(event) => setDraft({ ...draft, logoUrl: event.target.value })} placeholder="URL logo" />
                   <input value={draft.landingPath ?? ''} onChange={(event) => setDraft({ ...draft, landingPath: event.target.value })} placeholder="/mixin9" />
                   <input value={draft.landingTemplate ?? ''} onChange={(event) => setDraft({ ...draft, landingTemplate: event.target.value })} placeholder="mixin9 / zip-html" />
+                  <select value={draft.destinationType ?? 'internal'} onChange={(event) => setDraft({ ...draft, destinationType: event.target.value as ProductDestinationType })}><option value="internal">Internal</option><option value="hosted">Upload HTML/ZIP</option><option value="external">External</option></select>
+                  <select value={draft.openMode ?? 'same_tab'} onChange={(event) => setDraft({ ...draft, openMode: event.target.value as ProductOpenMode })}><option value="same_tab">Tab yang sama</option><option value="new_tab">Tab baru</option><option value="wrapper">Wrapper</option></select>
+                  <input value={draft.externalUrl ?? ''} onChange={(event) => setDraft({ ...draft, externalUrl: event.target.value })} placeholder="URL external" type="url" />
                   <input value={draft.ctaLabel ?? ''} onChange={(event) => setDraft({ ...draft, ctaLabel: event.target.value })} placeholder="CTA" />
                 </div>
                 <textarea value={draft.headline ?? ''} onChange={(event) => setDraft({ ...draft, headline: event.target.value })} placeholder="Headline" />
@@ -1891,6 +2044,8 @@ function ProductTable({ products, onUpdateProduct, onImportLandingZip }: {
                       logoUrl: draft.logoUrl?.trim() || undefined,
                       landingPath: draft.landingPath?.trim() || undefined,
                       landingTemplate: draft.landingTemplate?.trim() || undefined,
+                      externalUrl: draft.destinationType === 'external' ? draft.externalUrl?.trim() || undefined : undefined,
+                      trackLiveUsers: draft.destinationType === 'external' ? false : draft.trackLiveUsers !== false,
                       ctaLabel: draft.ctaLabel?.trim() || undefined,
                       accessRequirement: draft.accessRequirement?.trim() || undefined
                     });
@@ -1904,6 +2059,16 @@ function ProductTable({ products, onUpdateProduct, onImportLandingZip }: {
                       if (!file) return;
                       await onImportLandingZip(product.id, file);
                       setNotice(`ZIP landing ${product.name} berhasil diimport.`);
+                      event.target.value = '';
+                    }} />
+                  </label>
+                  <label className="zip-upload-button html-upload-button">
+                    Upload 1 file HTML
+                    <input type="file" accept=".html,text/html" onChange={async (event) => {
+                      const file = event.target.files?.[0];
+                      if (!file) return;
+                      await onImportLandingHtml(product.id, file);
+                      setNotice(`HTML ${product.name} berhasil dijadikan tools internal.`);
                       event.target.value = '';
                     }} />
                   </label>
@@ -1958,12 +2123,35 @@ function ProductCard({ product, label, featured = false, onOpen }: {
   );
 }
 
+function CreatorToolCard({ product, onOpen }: { product: PublicProduct; onOpen: (slug: string) => void }) {
+  const premium = product.price > 0;
+  const owned = product.destinationType !== 'external';
+  return (
+    <button className="creator-tool-card" type="button" onClick={() => onOpen(product.slug)}>
+      <span className="creator-tool-icon">{product.logoUrl ? <img src={product.logoUrl} alt="" /> : productIcon(product)}</span>
+      <span className="creator-tool-copy">
+        <strong>{product.name}</strong>
+        <small>{product.promoText || product.description || product.headline}</small>
+      </span>
+      <span className="creator-tool-meta">
+        <b className={premium ? 'premium' : 'free'}>{premium ? product.formattedPrice : 'Gratis'}</b>
+        {product.discountPercent > 0 && <i>Hemat {product.discountPercent}%</i>}
+        {owned && (product.analytics?.onlineUsers ?? 0) > 0 && <em><span /> {product.analytics?.onlineUsers} online</em>}
+      </span>
+      <ArrowRight size={17} />
+    </button>
+  );
+}
+
 function Marketplace({ catalog, onJoin, onProductOpen }: {
   catalog: PublicCatalog;
   onJoin: () => void;
   onProductOpen: (slug: string) => void;
 }) {
   const primaryProduct = catalog.featured[0] ?? catalog.paid[0];
+  const allTools = catalog.all.length > 0
+    ? catalog.all
+    : [...catalog.featured, ...catalog.paid, ...catalog.free].filter((product, index, products) => products.findIndex((item) => item.id === product.id) === index);
 
   return (
     <main className="landing">
@@ -2019,33 +2207,14 @@ function Marketplace({ catalog, onJoin, onProductOpen }: {
       <section className="landing-section" id="produk">
         <div className="section-head">
           <div>
-            <p className="section-kicker">Featured Tools</p>
-            <h2>Tools yang siap kamu pakai</h2>
+            <p className="section-kicker">Creator Tools</p>
+            <h2>Semua tools dalam satu tempat</h2>
           </div>
-          <p>Pilih aplikasi gratis, tools premium, atau kelas. Semua aksesnya dirapikan lewat akun member.</p>
+          <p className="creator-tools-intro"><span className="live-dot" /> {catalog.onlineUsers} pengguna sedang online. Pilih tools gratis atau premium, lalu buka detailnya.</p>
         </div>
-        <div className="market-grid featured-market-grid">
-          {catalog.featured.map((product) => (
-            <ProductCard key={product.id} product={product} label="unggulan" featured onOpen={onProductOpen} />
-          ))}
-        </div>
-      </section>
-
-      <section className="landing-section">
-        <div className="section-head">
-          <div>
-            <p className="section-kicker">Free Tools</p>
-            <h2>Bisa diakses langsung setelah login</h2>
-          </div>
-        </div>
-        <div className="free-tools-grid">
-          {catalog.free.map((product) => (
-            <button key={product.id} className="free-tool-item" onClick={() => onProductOpen(product.slug)}>
-              <div className="product-icon">
-                {product.logoUrl ? <img src={product.logoUrl} alt="" /> : productIcon(product)}
-              </div>
-              <span>{product.name}</span>
-            </button>
+        <div className="creator-tools-grid">
+          {allTools.map((product) => (
+            <CreatorToolCard key={product.id} product={product} onOpen={onProductOpen} />
           ))}
         </div>
       </section>
@@ -2061,7 +2230,13 @@ function Marketplace({ catalog, onJoin, onProductOpen }: {
   );
 }
 
-function ProductLanding({ isLoading, product, onJoin }: { isLoading: boolean; product?: PublicProduct; onJoin: () => void }) {
+function ProductLanding({ isLoading, product, onJoin, onAccess }: {
+  isLoading: boolean;
+  product?: PublicProduct;
+  onJoin: () => void;
+  onAccess: (product: PublicProduct) => void;
+}) {
+  const [showWrapper, setShowWrapper] = useState(false);
   if (isLoading) {
     return (
       <main className="product-landing">
@@ -2089,6 +2264,11 @@ function ProductLanding({ isLoading, product, onJoin }: { isLoading: boolean; pr
     return <Mixin9Landing product={product} onJoin={onJoin} />;
   }
 
+  const accessProduct = () => {
+    onAccess(product);
+    if (product.destinationType === 'external' && product.openMode === 'wrapper') setShowWrapper(true);
+  };
+
   const conf = product.landingConfig || {};
   const hasBenefits = conf.benefits && conf.benefits.length > 0;
   const hasTestimonials = conf.testimonials && conf.testimonials.length > 0;
@@ -2108,7 +2288,7 @@ function ProductLanding({ isLoading, product, onJoin }: { isLoading: boolean; pr
           <h1 style={conf.heroImageUrl ? { color: '#fff' } : {}}>{product.headline || product.name}</h1>
           <p style={conf.heroImageUrl ? { color: '#eee' } : {}}>{product.promoText || product.description}</p>
           <div className="hero-actions">
-            <button className="primary public-hero-button" onClick={onJoin}>{product.ctaLabel || 'Aktifkan lewat member'} <ArrowRight size={18} /></button>
+            <button className="primary public-hero-button" onClick={product.type === 'tool' ? accessProduct : onJoin}>{product.ctaLabel || (product.type === 'tool' ? 'Buka tools' : 'Aktifkan lewat member')} <ArrowRight size={18} /></button>
             <a className={conf.heroImageUrl ? 'text-link dark-link-alt' : 'text-link dark-link'} href="#harga" style={conf.heroImageUrl ? { color: '#fff' } : {}}>Lihat harga</a>
           </div>
         </div>
@@ -2117,9 +2297,16 @@ function ProductLanding({ isLoading, product, onJoin }: { isLoading: boolean; pr
           {product.compareAtPrice ? <small className="compare-price">{new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(product.compareAtPrice).replace(/\s/g, '')}</small> : null}
           <h2>{product.price === 0 ? 'Gratis' : product.formattedPrice}</h2>
           <span>{product.billingPeriod}</span>
-          <button className="primary" onClick={onJoin}>Masuk member</button>
+          <button className="primary" onClick={product.type === 'tool' ? accessProduct : onJoin}>{product.type === 'tool' ? 'Buka tools' : 'Masuk member'}</button>
         </aside>
       </section>
+
+      {showWrapper && product.externalUrl && (
+        <section className="tool-wrapper-panel">
+          <div><strong>{product.name}</strong><button className="ghost-button" onClick={() => window.open(product.externalUrl, '_blank', 'noopener,noreferrer')}>Buka tab baru</button></div>
+          <iframe src={product.externalUrl} title={product.name} sandbox="allow-forms allow-modals allow-popups allow-same-origin allow-scripts" />
+        </section>
+      )}
 
       <section className="product-sales-grid">
         <div className="panel stack">

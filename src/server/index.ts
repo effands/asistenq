@@ -42,6 +42,7 @@ import {
 } from './services';
 import { createFileStore } from './store';
 import { sendMail } from './mailer';
+import { analyticsOverview, heartbeatPresence, recordAnalyticsEvent } from './analytics';
 
 const app = express();
 const store = createFileStore();
@@ -121,6 +122,10 @@ const productSchema = z.object({
   landingTemplate: z.string().optional(),
   ctaLabel: z.string().optional(),
   accessRequirement: z.string().optional(),
+  destinationType: z.enum(['internal', 'hosted', 'external']).optional(),
+  externalUrl: z.string().url().optional(),
+  openMode: z.enum(['same_tab', 'new_tab', 'wrapper']).optional(),
+  trackLiveUsers: z.boolean().optional(),
   headline: z.string().optional(),
   description: z.string().optional(),
   coverUrl: z.string().optional(),
@@ -202,6 +207,18 @@ const toolEventSchema = z.object({
   metadata: z.record(z.unknown()).optional()
 });
 
+const analyticsHeartbeatSchema = z.object({
+  visitorId: z.string().min(8).max(120),
+  instanceId: z.string().min(8).max(120),
+  productSlug: z.string().min(1).optional()
+});
+
+const analyticsEventSchema = z.object({
+  visitorId: z.string().min(8).max(120),
+  productSlug: z.string().min(1),
+  eventType: z.enum(['detail_view', 'tool_open', 'checkout_click'])
+});
+
 const deploymentSettingsSchema = z.object({
   githubToken: z.string().optional(),
   githubRepo: z.string().min(3).default('effands/asistenq'),
@@ -216,9 +233,18 @@ const deploymentSettingsSchema = z.object({
 });
 
 function publicProduct(product: typeof store.data.products[number]) {
+  const metrics = analyticsOverview(store).products.find((item) => item.productId === product.id);
+  const discountPercent = product.compareAtPrice && product.compareAtPrice > product.price
+    ? Math.round((1 - product.price / product.compareAtPrice) * 100)
+    : 0;
   return {
     ...product,
-    formattedPrice: formatCurrency(product.price)
+    destinationType: product.destinationType ?? 'internal',
+    openMode: product.openMode ?? (product.destinationType === 'external' ? 'new_tab' : 'same_tab'),
+    trackLiveUsers: product.trackLiveUsers ?? product.destinationType !== 'external',
+    formattedPrice: formatCurrency(product.price),
+    discountPercent,
+    analytics: metrics
   };
 }
 
@@ -622,7 +648,16 @@ app.get('/api/products', (_req, res) => {
 });
 
 app.get('/api/catalog', (_req, res) => {
-  res.json(publicCatalog(store));
+  const catalog = publicCatalog(store);
+  res.json({
+    all: [...catalog.featured, ...catalog.paid, ...catalog.free]
+      .filter((product, index, products) => products.findIndex((item) => item.id === product.id) === index)
+      .map(publicProduct),
+    featured: catalog.featured.map(publicProduct),
+    paid: catalog.paid.map(publicProduct),
+    free: catalog.free.map(publicProduct),
+    onlineUsers: analyticsOverview(store).onlineUsers
+  });
 });
 
 app.get('/api/products/:slug', (req, res) => {
@@ -693,9 +728,58 @@ app.post('/api/tool-events', (req, res) => {
     targetId: body.hwid ?? body.email ?? body.productSlug,
     createdAt: new Date().toISOString()
   });
+  const product = store.data.products.find((item) => item.slug === body.productSlug);
+  if (product && ['detail_view', 'tool_open', 'checkout_click'].includes(body.eventType)) {
+    recordAnalyticsEvent(store, {
+      productId: product.id,
+      visitorId: body.email ?? body.hwid ?? 'anonymous-tool',
+      eventType: body.eventType as 'detail_view' | 'tool_open' | 'checkout_click'
+    });
+  }
   store.save();
 
   res.status(201).json({ ok: true, message: 'Tool event received' });
+});
+
+app.post('/api/analytics/heartbeat', (req, res) => {
+  const body = analyticsHeartbeatSchema.parse(req.body);
+  const product = body.productSlug
+    ? store.data.products.find((item) => item.slug === body.productSlug && item.active)
+    : undefined;
+  const trackProduct = product && product.destinationType !== 'external' && product.trackLiveUsers !== false
+    ? product.id
+    : undefined;
+
+  heartbeatPresence({
+    visitorId: body.visitorId,
+    instanceId: body.instanceId,
+    productId: trackProduct
+  });
+
+  const overview = analyticsOverview(store);
+  res.json({
+    ok: true,
+    onlineUsers: overview.onlineUsers,
+    toolOnlineUsers: trackProduct
+      ? overview.products.find((item) => item.productId === trackProduct)?.onlineUsers ?? 0
+      : 0
+  });
+});
+
+app.post('/api/analytics/event', (req, res) => {
+  const body = analyticsEventSchema.parse(req.body);
+  const product = store.data.products.find((item) => item.slug === body.productSlug && item.active);
+  if (!product) {
+    res.status(404).json({ message: 'product not found' });
+    return;
+  }
+
+  recordAnalyticsEvent(store, {
+    productId: product.id,
+    visitorId: body.visitorId,
+    eventType: body.eventType
+  });
+  res.status(201).json({ ok: true });
 });
 
 app.post('/api/license/generate', requireSession, requireAdminScope('products'), (req, res) => {
@@ -726,13 +810,22 @@ app.post('/api/license/unban-hwid', requireSession, requireAdminScope('products'
 });
 
 app.get('/api/admin/summary', requireSession, requireAdminScope('products'), (_req, res) => {
+  const analytics = analyticsOverview(store);
   res.json({
     products: store.data.products.length,
     members: store.data.members.length,
     orders: store.data.orders.length,
     licenses: store.data.licenses.length,
-    activeSubscriptions: store.data.subscriptions.filter((item) => item.status === 'active').length
+    activeSubscriptions: store.data.subscriptions.filter((item) => item.status === 'active').length,
+    onlineUsers: analytics.onlineUsers,
+    toolOpens: analytics.totalToolOpens,
+    detailViews: analytics.totalDetailViews,
+    toolAnalytics: analytics.products
   });
+});
+
+app.get('/api/admin/analytics', requireSession, requireAdminScope('products'), (_req, res) => {
+  res.json(analyticsOverview(store));
 });
 
 app.post('/api/admin/reset-operational-data', requireSession, requireAdminScope('products'), (_req, res) => {
@@ -743,6 +836,7 @@ app.post('/api/admin/reset-operational-data', requireSession, requireAdminScope(
   store.data.vouchers = [];
   store.data.passwordResets = [];
   store.data.auditLogs = [];
+  store.data.toolAnalyticsEvents = [];
   store.save();
 
   res.json({ ok: true, message: 'Data operasional berhasil direset.' });
@@ -874,7 +968,11 @@ app.post(
     }
 
     product.landingTemplate = 'zip-html';
-    product.accessUrl = `/landing-imports/${safeSlug}/index.html`;
+    product.destinationType = 'hosted';
+    product.openMode = 'same_tab';
+    product.trackLiveUsers = true;
+    product.landingPath = product.landingPath ?? `/${safeSlug}`;
+    product.accessUrl = product.landingPath;
     product.updatedAt = new Date().toISOString();
     store.save();
 
@@ -885,6 +983,47 @@ app.post(
       ignoredCount,
       url: product.accessUrl
     });
+  }
+);
+
+app.post(
+  '/api/admin/products/:id/landing-html',
+  requireSession,
+  requireAdminScope('products'),
+  express.raw({ type: ['text/html', 'application/octet-stream'], limit: '5mb' }),
+  (req, res) => {
+    const product = store.data.products.find((item) => item.id === String(req.params.id));
+    if (!product) {
+      res.status(404).json({ message: 'product not found' });
+      return;
+    }
+    if (!Buffer.isBuffer(req.body) || req.body.length === 0) {
+      res.status(400).json({ message: 'File HTML kosong atau tidak terbaca.' });
+      return;
+    }
+
+    const html = req.body.toString('utf8');
+    if (!/<html[\s>]/i.test(html) || !/<body[\s>]/i.test(html)) {
+      res.status(400).json({ message: 'File harus berupa dokumen HTML lengkap.' });
+      return;
+    }
+
+    const safeSlug = product.slug.replace(/[^a-z0-9-]/g, '');
+    const targetDir = path.join(landingImportDir, safeSlug);
+    fs.rmSync(targetDir, { recursive: true, force: true });
+    fs.mkdirSync(targetDir, { recursive: true });
+    fs.writeFileSync(path.join(targetDir, 'index.html'), html);
+
+    product.landingTemplate = 'single-html';
+    product.destinationType = 'hosted';
+    product.openMode = 'same_tab';
+    product.trackLiveUsers = true;
+    product.landingPath = product.landingPath ?? `/${safeSlug}`;
+    product.accessUrl = product.landingPath;
+    product.updatedAt = new Date().toISOString();
+    store.save();
+
+    res.json({ ok: true, message: `HTML tersimpan untuk ${product.name}.`, url: product.accessUrl });
   }
 );
 
@@ -1370,9 +1509,50 @@ app.use('/api', (error: unknown, _req: express.Request, res: express.Response, _
   res.status(error instanceof z.ZodError ? 400 : 500).json({ message });
 });
 
+app.get('/tool-presence.js', (_req, res) => {
+  res.type('application/javascript').send(`(() => {
+    const script = document.currentScript;
+    const productSlug = script?.dataset?.productSlug || '';
+    const visitorKey = 'asistenq-visitor-id';
+    const instanceKey = 'asistenq-tool-instance-id';
+    const makeId = () => (globalThis.crypto?.randomUUID?.() || (Date.now().toString(36) + Math.random().toString(36).slice(2)));
+    const visitorId = localStorage.getItem(visitorKey) || makeId();
+    const instanceId = sessionStorage.getItem(instanceKey) || makeId();
+    localStorage.setItem(visitorKey, visitorId);
+    sessionStorage.setItem(instanceKey, instanceId);
+    const post = (url, body) => fetch(url, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), keepalive: true
+    }).catch(() => undefined);
+    const heartbeat = () => post('/api/analytics/heartbeat', { visitorId, instanceId, productSlug });
+    heartbeat();
+    post('/api/analytics/event', { visitorId, productSlug, eventType: 'tool_open' });
+    setInterval(heartbeat, 20000);
+  })();`);
+});
+
+function sendTrackedHtml(res: express.Response, indexPath: string, productSlug: string): void {
+  const source = fs.readFileSync(indexPath, 'utf8');
+  const tracker = `<script src="/tool-presence.js" data-product-slug="${productSlug}"></script>`;
+  const html = source.includes('</body>') ? source.replace('</body>', `${tracker}</body>`) : `${source}${tracker}`;
+  res.type('html').send(html);
+}
+
 if (shouldServeFrontend) {
   app.use('/landing-imports', express.static(landingImportDir));
   app.use('/landing-imports', express.static(bundledLandingDir));
+  app.get('/tools/:slug', (req, res, next) => {
+    const product = store.data.products.find((item) => item.slug === req.params.slug);
+    if (product && !canOpenProduct(req, product)) {
+      sendProductAccessDenied(req, res, product);
+      return;
+    }
+    const toolIndexPath = path.join(bundledToolDir, req.params.slug, 'index.html');
+    if (product && fs.existsSync(toolIndexPath)) {
+      sendTrackedHtml(res, toolIndexPath, product.slug);
+      return;
+    }
+    next();
+  });
   app.use('/tools/:slug', (req, res, next) => {
     const product = store.data.products.find((item) => item.slug === req.params.slug);
     if (product && !canOpenProduct(req, product)) {
@@ -1396,7 +1576,7 @@ if (shouldServeFrontend) {
 
       const toolIndexPath = path.join(bundledToolDir, product.slug, 'index.html');
       if (fs.existsSync(toolIndexPath)) {
-        res.sendFile(toolIndexPath);
+        sendTrackedHtml(res, toolIndexPath, product.slug);
         return;
       }
     }
@@ -1409,7 +1589,7 @@ if (shouldServeFrontend) {
       return;
     }
 
-    res.sendFile(indexPath);
+    sendTrackedHtml(res, indexPath, product.slug);
   });
   app.use(express.static(publicDir));
   app.get('*', (_req, res) => {

@@ -4,6 +4,8 @@ import type {
   BillingPeriod,
   Product,
   ProductAccessMode,
+  ProductDestinationType,
+  ProductOpenMode,
   ProductType,
   ProductVisibility,
   Subscription
@@ -26,6 +28,10 @@ type ProductInput = {
   landingTemplate?: string;
   ctaLabel?: string;
   accessRequirement?: string;
+  destinationType?: ProductDestinationType;
+  externalUrl?: string;
+  openMode?: ProductOpenMode;
+  trackLiveUsers?: boolean;
   active?: boolean;
   featured?: boolean;
   headline?: string;
@@ -40,6 +46,7 @@ export function createId(prefix: string): string {
 
 export function createProduct(input: ProductInput): Product {
   const now = new Date().toISOString();
+  const destinationType = input.destinationType ?? 'internal';
 
   return {
     id: createId('product'),
@@ -59,6 +66,10 @@ export function createProduct(input: ProductInput): Product {
     landingTemplate: input.landingTemplate,
     ctaLabel: input.ctaLabel,
     accessRequirement: input.accessRequirement,
+    destinationType,
+    externalUrl: input.externalUrl,
+    openMode: input.openMode ?? (destinationType === 'external' ? 'new_tab' : 'same_tab'),
+    trackLiveUsers: input.trackLiveUsers ?? destinationType !== 'external',
     active: input.active ?? true,
     featured: input.featured ?? false,
     headline: input.headline ?? input.name,
