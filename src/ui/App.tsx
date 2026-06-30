@@ -833,7 +833,7 @@ function AdminPanel({
   onStartBot: () => Promise<TelegramBotStatus>;
   onStopBot: () => Promise<TelegramBotStatus>;
   deploymentSettings: DeploymentSettingsResult | null;
-  onSaveDeploymentSettings: (input: { githubRepo: string; githubBranch: string; githubToken?: string; telegramBotToken?: string; telegramOwnerId?: string; smtpHost?: string; smtpPort?: string; smtpUser?: string; smtpPass?: string; mailFrom?: string }) => Promise<DeploymentSettingsResult>;
+  onSaveDeploymentSettings: (input: { githubRepo: string; githubBranch: string; githubToken?: string; telegramBotToken?: string; telegramOwnerId?: string; smtpHost?: string; smtpPort?: string; smtpUser?: string; smtpPass?: string; mailFrom?: string; danaSandboxApiUrl?: string; danaMerchantId?: string; danaClientId?: string; danaClientSecret?: string; danaPublicKey?: string; danaPrivateKey?: string }) => Promise<DeploymentSettingsResult>;
 }) {
   if (!session) {
     return (
@@ -1585,7 +1585,7 @@ function DeployPanel({ settings, onDeployUpdate, onRefreshBotStatus, onSaveSetti
   settings: DeploymentSettingsResult | null;
   onDeployUpdate: () => Promise<{ ok: boolean; message: string; stdout?: string; stderr?: string; detail?: string }>;
   onRefreshBotStatus: () => Promise<TelegramBotStatus>;
-  onSaveSettings: (input: { githubRepo: string; githubBranch: string; githubToken?: string; telegramBotToken?: string; telegramOwnerId?: string; smtpHost?: string; smtpPort?: string; smtpUser?: string; smtpPass?: string; mailFrom?: string }) => Promise<DeploymentSettingsResult>;
+  onSaveSettings: (input: { githubRepo: string; githubBranch: string; githubToken?: string; telegramBotToken?: string; telegramOwnerId?: string; smtpHost?: string; smtpPort?: string; smtpUser?: string; smtpPass?: string; mailFrom?: string; danaSandboxApiUrl?: string; danaMerchantId?: string; danaClientId?: string; danaClientSecret?: string; danaPublicKey?: string; danaPrivateKey?: string }) => Promise<DeploymentSettingsResult>;
   onStartBot: () => Promise<TelegramBotStatus>;
   onStopBot: () => Promise<TelegramBotStatus>;
 }) {
@@ -1606,6 +1606,13 @@ function DeployPanel({ settings, onDeployUpdate, onRefreshBotStatus, onSaveSetti
   const [smtpPass, setSmtpPass] = useState('');
   const [mailFrom, setMailFrom] = useState(settings?.mailFrom ?? 'AsistenQ <cs@asistenq.com>');
   const [smtpNotice, setSmtpNotice] = useState('');
+  const [danaSandboxApiUrl, setDanaSandboxApiUrl] = useState(settings?.danaSandboxApiUrl ?? 'https://api.sandbox.dana.id');
+  const [danaMerchantId, setDanaMerchantId] = useState(settings?.danaMerchantId ?? '');
+  const [danaClientId, setDanaClientId] = useState(settings?.danaClientId ?? '');
+  const [danaClientSecret, setDanaClientSecret] = useState('');
+  const [danaPublicKey, setDanaPublicKey] = useState(settings?.danaPublicKey ?? '');
+  const [danaPrivateKey, setDanaPrivateKey] = useState('');
+  const [danaNotice, setDanaNotice] = useState('');
   const botStatus = settings?.botStatus;
 
   useEffect(() => {
@@ -1617,6 +1624,10 @@ function DeployPanel({ settings, onDeployUpdate, onRefreshBotStatus, onSaveSetti
       setSmtpPort(settings.smtpPort || '465');
       setSmtpUser(settings.smtpUser || 'cs@asistenq.com');
       setMailFrom(settings.mailFrom || 'AsistenQ <cs@asistenq.com>');
+      setDanaSandboxApiUrl(settings.danaSandboxApiUrl || 'https://api.sandbox.dana.id');
+      setDanaMerchantId(settings.danaMerchantId || '');
+      setDanaClientId(settings.danaClientId || '');
+      setDanaPublicKey(settings.danaPublicKey || '');
     }
   }, [settings]);
 
@@ -1804,6 +1815,49 @@ function DeployPanel({ settings, onDeployUpdate, onRefreshBotStatus, onSaveSetti
           </div>
         </div>
         {telegramNotice && <p className="form-notice">{telegramNotice}</p>}
+      </form>
+      <form className="panel compact-token-card" onSubmit={async (event) => {
+        event.preventDefault();
+        setSaving(true);
+        setDanaNotice('Menyimpan credential DANA sandbox...');
+        try {
+          const result = await onSaveSettings({
+            githubRepo: githubRepo.trim(),
+            githubBranch: githubBranch.trim(),
+            githubToken: '',
+            telegramBotToken: '',
+            telegramOwnerId: telegramOwnerId.trim(),
+            danaSandboxApiUrl: danaSandboxApiUrl.trim(),
+            danaMerchantId: danaMerchantId.trim(),
+            danaClientId: danaClientId.trim(),
+            danaClientSecret: danaClientSecret.trim(),
+            danaPublicKey: danaPublicKey.trim(),
+            danaPrivateKey: danaPrivateKey.trim()
+          });
+          setDanaClientSecret('');
+          setDanaPrivateKey('');
+          setDanaNotice(result.hasDanaClientSecret && result.hasDanaPrivateKey ? 'Credential DANA sandbox tersimpan.' : 'Credential DANA sandbox belum lengkap.');
+        } catch (error) {
+          setDanaNotice(error instanceof Error ? error.message : 'Credential DANA sandbox gagal disimpan.');
+        } finally {
+          setSaving(false);
+        }
+      }}>
+        <div className="panel-heading">
+          <div><p className="section-kicker">DANA Sandbox</p><h2>Credential API</h2></div>
+          <span className={`soft-badge ${settings?.hasDanaClientSecret && settings?.hasDanaPrivateKey ? 'status-active' : ''}`}>{settings?.hasDanaClientSecret && settings?.hasDanaPrivateKey ? 'DANA siap test' : 'Belum lengkap'}</span>
+        </div>
+        <div className="compact-token-fields">
+          <label>Sandbox API URL<input name="danaSandboxApiUrl" value={danaSandboxApiUrl} onChange={(event) => setDanaSandboxApiUrl(event.target.value)} placeholder="https://api.sandbox.dana.id" /></label>
+          <label>Merchant ID<input name="danaMerchantId" value={danaMerchantId} onChange={(event) => setDanaMerchantId(event.target.value.replace(/\D/g, ''))} placeholder="Merchant ID DANA" /></label>
+          <label>Client ID<input name="danaClientId" value={danaClientId} onChange={(event) => setDanaClientId(event.target.value.replace(/\D/g, ''))} placeholder="Client ID DANA" /></label>
+          <label className="span-two">Client Secret<input name="danaClientSecret" value={danaClientSecret} onChange={(event) => setDanaClientSecret(event.target.value)} placeholder={settings?.maskedDanaClientSecret || 'Client Secret DANA'} type="password" autoComplete="new-password" /></label>
+          <label className="span-two">Public Key<textarea name="danaPublicKey" value={danaPublicKey} onChange={(event) => setDanaPublicKey(event.target.value)} placeholder="Public key DANA sandbox" rows={4} /></label>
+          <label className="span-two">Private Key<textarea name="danaPrivateKey" value={danaPrivateKey} onChange={(event) => setDanaPrivateKey(event.target.value)} placeholder={settings?.maskedDanaPrivateKey || 'Private key DANA sandbox'} rows={5} /></label>
+        </div>
+        <p className="form-helper">Credential ini dipakai hanya untuk pengujian sandbox DANA. Secret dan private key disimpan di server dalam bentuk private dan hanya ditampilkan sebagai masking setelah tersimpan.</p>
+        <button className="primary" disabled={saving}>{saving ? 'Menyimpan...' : 'Simpan Credential DANA'}</button>
+        {danaNotice && <p className="form-notice">{danaNotice}</p>}
       </form>
     </section>
   );

@@ -238,7 +238,13 @@ const deploymentSettingsSchema = z.object({
   smtpPort: z.string().optional(),
   smtpUser: z.string().optional(),
   smtpPass: z.string().optional(),
-  mailFrom: z.string().optional()
+  mailFrom: z.string().optional(),
+  danaSandboxApiUrl: z.string().optional(),
+  danaMerchantId: z.string().optional(),
+  danaClientId: z.string().optional(),
+  danaClientSecret: z.string().optional(),
+  danaPublicKey: z.string().optional(),
+  danaPrivateKey: z.string().optional()
 });
 
 function publicProduct(product: typeof store.data.products[number]) {
@@ -1102,6 +1108,8 @@ app.get('/api/admin/deploy/settings', requireSession, requireAdminScope('product
   const token = settings.githubToken ?? process.env.GITHUB_TOKEN ?? '';
   const telegramToken = settings.telegramBotToken ?? process.env.TELEGRAM_BOT_TOKEN ?? '';
   const smtpPass = settings.smtpPass ?? process.env.SMTP_PASS ?? '';
+  const danaClientSecret = settings.danaClientSecret ?? '';
+  const danaPrivateKey = settings.danaPrivateKey ?? '';
   const botStatus = getTelegramBotStatus(store);
   res.json({
     githubRepo: settings.githubRepo ?? 'effands/asistenq',
@@ -1117,6 +1125,14 @@ app.get('/api/admin/deploy/settings', requireSession, requireAdminScope('product
     hasSmtpPass: Boolean(smtpPass),
     maskedSmtpPass: maskedSecret(smtpPass),
     mailFrom: settings.mailFrom ?? process.env.MAIL_FROM ?? 'AsistenQ <cs@asistenq.com>',
+    danaSandboxApiUrl: settings.danaSandboxApiUrl ?? 'https://api.sandbox.dana.id',
+    danaMerchantId: settings.danaMerchantId ?? '',
+    danaClientId: settings.danaClientId ?? '',
+    hasDanaClientSecret: Boolean(danaClientSecret),
+    maskedDanaClientSecret: maskedSecret(danaClientSecret),
+    danaPublicKey: settings.danaPublicKey ?? '',
+    hasDanaPrivateKey: Boolean(danaPrivateKey),
+    maskedDanaPrivateKey: maskedSecret(danaPrivateKey),
     botStatus,
     updatedAt: settings.updatedAt
   });
@@ -1140,10 +1156,29 @@ app.post('/api/admin/deploy/settings', requireSession, requireAdminScope('produc
   const nextSmtpPort = body.smtpPort?.trim() || current.smtpPort || process.env.SMTP_PORT || '465';
   const nextSmtpUser = body.smtpUser?.trim() || current.smtpUser || process.env.SMTP_USER || 'cs@asistenq.com';
   const nextMailFrom = body.mailFrom?.trim() || current.mailFrom || process.env.MAIL_FROM || 'AsistenQ <cs@asistenq.com>';
+  const nextDanaSandboxApiUrl = body.danaSandboxApiUrl?.trim() || current.danaSandboxApiUrl || 'https://api.sandbox.dana.id';
+  const nextDanaMerchantId = body.danaMerchantId?.trim() || current.danaMerchantId || '';
+  const nextDanaClientId = body.danaClientId?.trim() || current.danaClientId || '';
+  const nextDanaClientSecret = body.danaClientSecret?.trim() || current.danaClientSecret || '';
+  const nextDanaPublicKey = body.danaPublicKey?.trim() || current.danaPublicKey || '';
+  const nextDanaPrivateKey = body.danaPrivateKey?.trim() || current.danaPrivateKey || '';
   const isSmtpSave = Boolean(body.smtpHost || body.smtpPort || body.smtpUser || body.mailFrom || body.smtpPass !== undefined);
+  const isDanaSave = Boolean(
+    body.danaSandboxApiUrl ||
+    body.danaMerchantId ||
+    body.danaClientId ||
+    body.danaClientSecret !== undefined ||
+    body.danaPublicKey ||
+    body.danaPrivateKey !== undefined
+  );
 
   if (isSmtpSave && !nextSmtpPass) {
     res.status(400).json({ message: 'Password SMTP belum tersimpan. Isi kolom SMTP Password lalu klik Simpan SMTP lagi.' });
+    return;
+  }
+
+  if (isDanaSave && (!nextDanaMerchantId || !nextDanaClientId || !nextDanaClientSecret || !nextDanaPublicKey || !nextDanaPrivateKey)) {
+    res.status(400).json({ message: 'Credential DANA sandbox belum lengkap. Isi Merchant ID, Client ID, Client Secret, Public Key, dan Private Key.' });
     return;
   }
 
@@ -1161,6 +1196,12 @@ app.post('/api/admin/deploy/settings', requireSession, requireAdminScope('produc
       smtpUser: nextSmtpUser,
       smtpPass: nextSmtpPass,
       mailFrom: nextMailFrom,
+      danaSandboxApiUrl: nextDanaSandboxApiUrl,
+      danaMerchantId: nextDanaMerchantId,
+      danaClientId: nextDanaClientId,
+      danaClientSecret: nextDanaClientSecret,
+      danaPublicKey: nextDanaPublicKey,
+      danaPrivateKey: nextDanaPrivateKey,
       updatedAt: new Date().toISOString()
     };
     store.save();
@@ -1182,6 +1223,14 @@ app.post('/api/admin/deploy/settings', requireSession, requireAdminScope('produc
       hasSmtpPass: Boolean(nextSmtpPass),
       maskedSmtpPass: maskedSecret(nextSmtpPass),
       mailFrom: nextMailFrom,
+      danaSandboxApiUrl: nextDanaSandboxApiUrl,
+      danaMerchantId: nextDanaMerchantId,
+      danaClientId: nextDanaClientId,
+      hasDanaClientSecret: Boolean(nextDanaClientSecret),
+      maskedDanaClientSecret: maskedSecret(nextDanaClientSecret),
+      danaPublicKey: nextDanaPublicKey,
+      hasDanaPrivateKey: Boolean(nextDanaPrivateKey),
+      maskedDanaPrivateKey: maskedSecret(nextDanaPrivateKey),
       botStatus,
       updatedAt: store.data.deploymentSettings.updatedAt
     });

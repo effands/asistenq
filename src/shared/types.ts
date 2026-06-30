@@ -234,6 +234,12 @@ export interface DeploymentSettings {
   smtpUser?: string;
   smtpPass?: string;
   mailFrom?: string;
+  danaSandboxApiUrl?: string;
+  danaMerchantId?: string;
+  danaClientId?: string;
+  danaClientSecret?: string;
+  danaPublicKey?: string;
+  danaPrivateKey?: string;
   updatedAt?: string;
 }
 
