@@ -8,7 +8,7 @@ import { GoogleGenAI, Type } from '@google/genai';
 import { createId, formatCurrency } from '../shared/domain';
 import { clearSessionCookie, readSession, sessionCookie, signSession, requireAdminScope, requireSession } from './auth';
 import { getTelegramBotStatus, startTelegramBot, stopTelegramBot } from './bot-control';
-import { buildGitHubRemote, parseDeploymentSettings, runCommand, schedulePassengerRestart } from './deploy';
+import { buildGitHubRemote, deploymentInstallArgs, parseDeploymentSettings, runCommand, schedulePassengerRestart } from './deploy';
 import { seedInitialData } from './seed';
 import {
   adminLicenseDashboard,
@@ -275,6 +275,7 @@ async function runGitHubDeployUpdate(githubToken: string): Promise<{ stdout: str
   const settings = store.data.deploymentSettings ?? {};
   const { githubRepo, githubBranch } = parseDeploymentSettings(settings);
   const remote = buildGitHubRemote(githubRepo, githubToken);
+  const hasLockfile = fs.existsSync(path.resolve('package-lock.json'));
   const commandOptions = {
     cwd: process.cwd(),
     timeout: 180000,
@@ -286,7 +287,7 @@ async function runGitHubDeployUpdate(githubToken: string): Promise<{ stdout: str
   };
   const results = [
     await runCommand('git', ['pull', remote, githubBranch], commandOptions),
-    await runCommand('npm', ['install', '--include=dev'], commandOptions),
+    await runCommand('npm', deploymentInstallArgs(hasLockfile), commandOptions),
     await runCommand('npm', ['run', 'build'], commandOptions)
   ];
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildGitHubRemote, buildPassengerRestartScript, parseDeploymentSettings } from '../src/server/deploy';
+import { buildGitHubRemote, buildPassengerRestartScript, deploymentInstallArgs, parseDeploymentSettings } from '../src/server/deploy';
 
 describe('deployment security helpers', () => {
   it('rejects repository names that could inject shell commands', () => {
@@ -28,5 +28,10 @@ describe('deployment security helpers', () => {
     expect(script).toContain('tmp/restart.txt');
     expect(script).toContain("lsnode:/home/asistenq/repositories/asistenq");
     expect(script).not.toContain('; rm');
+  });
+
+  it('prefers lockfile-based install commands during deploy', () => {
+    expect(deploymentInstallArgs(true)).toEqual(['ci', '--include=dev']);
+    expect(deploymentInstallArgs(false)).toEqual(['install', '--include=dev']);
   });
 });

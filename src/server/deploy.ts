@@ -42,6 +42,10 @@ export function buildGitHubRemote(githubRepo: string, githubToken?: string): str
   return `https://x-access-token:${encodeURIComponent(githubToken)}@github.com/${githubRepo}.git`;
 }
 
+export function deploymentInstallArgs(hasLockfile = true): string[] {
+  return hasLockfile ? ['ci', '--include=dev'] : ['install', '--include=dev'];
+}
+
 function shellQuote(value: string): string {
   return `'${value.replace(/'/g, `'\\''`)}'`;
 }
