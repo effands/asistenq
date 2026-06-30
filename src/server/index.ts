@@ -8,7 +8,7 @@ import { GoogleGenAI, Type } from '@google/genai';
 import { createId, formatCurrency } from '../shared/domain';
 import { clearSessionCookie, readSession, sessionCookie, signSession, requireAdminScope, requireSession } from './auth';
 import { getTelegramBotStatus, startTelegramBot, stopTelegramBot } from './bot-control';
-import { buildGitHubRemote, deploymentInstallArgs, parseDeploymentSettings, runCommand, schedulePassengerRestart } from './deploy';
+import { buildGitHubRemote, deploymentAuditArgs, deploymentInstallArgs, parseDeploymentSettings, runCommand, schedulePassengerRestart } from './deploy';
 import { seedInitialData } from './seed';
 import {
   adminLicenseDashboard,
@@ -288,6 +288,7 @@ async function runGitHubDeployUpdate(githubToken: string): Promise<{ stdout: str
   const results = [
     await runCommand('git', ['pull', remote, githubBranch], commandOptions),
     await runCommand('npm', deploymentInstallArgs(hasLockfile), commandOptions),
+    await runCommand('npm', deploymentAuditArgs(), commandOptions),
     await runCommand('npm', ['run', 'build'], commandOptions)
   ];
 

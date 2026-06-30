@@ -43,7 +43,12 @@ export function buildGitHubRemote(githubRepo: string, githubToken?: string): str
 }
 
 export function deploymentInstallArgs(hasLockfile = true): string[] {
-  return hasLockfile ? ['ci', '--include=dev'] : ['install', '--include=dev'];
+  const sharedArgs = ['--include=dev', '--no-audit', '--no-fund'];
+  return hasLockfile ? ['ci', ...sharedArgs] : ['install', ...sharedArgs];
+}
+
+export function deploymentAuditArgs(): string[] {
+  return ['audit', '--audit-level=low'];
 }
 
 function shellQuote(value: string): string {
