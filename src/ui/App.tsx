@@ -48,6 +48,14 @@ const productTypes: ProductType[] = ['tool', 'course', 'ebook', 'video', 'bundle
 const productVisibilities: ProductVisibility[] = ['public', 'private', 'draft'];
 const productAccessModes: ProductAccessMode[] = ['public', 'free_member', 'trial', 'paid', 'admin'];
 const billingPeriods: BillingPeriod[] = ['trial', 'monthly', 'annual', 'lifetime', 'one_time'];
+const tieredPlanTemplates = [
+  { code: 'TRIAL', name: 'Trial', label: 'Trial', billingPeriod: 'trial' as BillingPeriod, durationDays: 1, defaultPrice: 0, isFree: true },
+  { code: '1M', name: '1 Bulan', label: '1 Bulan', billingPeriod: 'monthly' as BillingPeriod, durationDays: 30, defaultPrice: 149000 },
+  { code: '3M', name: '3 Bulan', label: '3 Bulan', billingPeriod: 'monthly' as BillingPeriod, durationDays: 90, defaultPrice: 399000 },
+  { code: '6M', name: '6 Bulan', label: '6 Bulan', billingPeriod: 'monthly' as BillingPeriod, durationDays: 180, defaultPrice: 699000 },
+  { code: '1Y', name: '1 Tahun', label: '1 Tahun', billingPeriod: 'annual' as BillingPeriod, durationDays: 365, defaultPrice: 999000 },
+  { code: 'LIFETIME', name: 'Lifetime', label: 'Lifetime', billingPeriod: 'lifetime' as BillingPeriod, durationDays: null, defaultPrice: 1999000 }
+];
 const emptyCatalog: PublicCatalog = { featured: [], paid: [], free: [] };
 
 function routeFromPath(pathname: string): Route {
@@ -634,6 +642,15 @@ function AdminPanel({
     accessMode?: ProductAccessMode;
     billingPeriod: BillingPeriod;
     price: number;
+    plans?: Array<{
+      code: string;
+      name: string;
+      price: number;
+      billingPeriod: BillingPeriod;
+      durationDays: number | null;
+      isFree?: boolean;
+      isActive?: boolean;
+    }>;
     compareAtPrice?: number;
     discountLabel?: string;
     promoText?: string;
@@ -1599,6 +1616,15 @@ function ProductForm({ onCreateProduct }: {
     accessMode?: ProductAccessMode;
     billingPeriod: BillingPeriod;
     price: number;
+    plans?: Array<{
+      code: string;
+      name: string;
+      price: number;
+      billingPeriod: BillingPeriod;
+      durationDays: number | null;
+      isFree?: boolean;
+      isActive?: boolean;
+    }>;
     compareAtPrice?: number;
     discountLabel?: string;
     promoText?: string;
@@ -1618,6 +1644,8 @@ function ProductForm({ onCreateProduct }: {
   const [accessMode, setAccessMode] = useState<ProductAccessMode>('free_member');
   const [billingPeriod, setBillingPeriod] = useState<BillingPeriod>('monthly');
   const [price, setPrice] = useState(149000);
+  const [planPrices, setPlanPrices] = useState<Record<string, number>>(() => Object.fromEntries(tieredPlanTemplates.map((plan) => [plan.code, plan.defaultPrice])));
+  const [activePlans, setActivePlans] = useState<Record<string, boolean>>(() => Object.fromEntries(tieredPlanTemplates.map((plan) => [plan.code, true])));
   const [compareAtPrice, setCompareAtPrice] = useState(0);
   const [discountLabel, setDiscountLabel] = useState('');
   const [promoText, setPromoText] = useState('');
@@ -1632,14 +1660,28 @@ function ProductForm({ onCreateProduct }: {
   return (
     <form className="panel stack wide product-create-form" onSubmit={async (event) => {
       event.preventDefault();
+      const selectedPlans = tieredPlanTemplates
+        .filter((plan) => activePlans[plan.code])
+        .map((plan) => ({
+          code: plan.code,
+          name: plan.code === 'TRIAL' ? `Trial ${plan.durationDays ?? 1} Hari` : `Lisensi ${plan.name}`,
+          price: Number(planPrices[plan.code] ?? 0),
+          billingPeriod: plan.billingPeriod,
+          durationDays: plan.durationDays,
+          isFree: plan.isFree ?? Number(planPrices[plan.code] ?? 0) === 0,
+          isActive: true
+        }));
+      const primaryPlan = selectedPlans.find((plan) => !plan.isFree) ?? selectedPlans[0];
+
       await onCreateProduct({
         name,
         slug,
         type,
         visibility,
         accessMode,
-        billingPeriod,
-        price,
+        billingPeriod: primaryPlan?.billingPeriod ?? billingPeriod,
+        price: primaryPlan?.price ?? price,
+        plans: selectedPlans,
         compareAtPrice: compareAtPrice || undefined,
         discountLabel: discountLabel.trim() || undefined,
         promoText: promoText.trim() || undefined,
@@ -1656,7 +1698,7 @@ function ProductForm({ onCreateProduct }: {
         <div>
           <p className="section-kicker">Catalog control</p>
           <h2>Tambah Produk</h2>
-          <p className="form-intro">Isi data utama, atur akses, lalu lengkapi landing bila produk siap dipublikasikan.</p>
+          <p className="form-intro">Isi singkat saja: identitas, akses, paket harga. Landing bisa dibuka saat dibutuhkan.</p>
         </div>
         <span className="soft-badge">{type}</span>
       </div>
@@ -1673,8 +1715,32 @@ function ProductForm({ onCreateProduct }: {
         <div className="product-form-grid">
           <label className="col-2">Tampil di katalog<select value={visibility} onChange={(event) => setVisibility(event.target.value as ProductVisibility)}>{productVisibilities.map((item) => <option key={item} value={item}>{item === 'public' ? 'Publik' : item === 'private' ? 'Link privat' : 'Draft'}</option>)}</select></label>
           <label className="col-2">Syarat akses<select value={accessMode} onChange={(event) => setAccessMode(event.target.value as ProductAccessMode)}>{productAccessModes.map((item) => <option key={item} value={item}>{item === 'public' ? 'Tanpa login' : item === 'free_member' ? 'Member gratis' : item === 'trial' ? 'Trial aktif' : item === 'paid' ? 'Sudah bayar' : 'Admin saja'}</option>)}</select></label>
-          <label className="col-1">Periode<select value={billingPeriod} onChange={(event) => setBillingPeriod(event.target.value as BillingPeriod)}>{billingPeriods.map((item) => <option key={item}>{item}</option>)}</select></label>
-          <label className="col-1">Harga (Rp)<input min="0" value={price} onChange={(event) => setPrice(Number(event.target.value))} type="number" /></label>
+          <label className="col-2">Harga utama katalog<input min="0" value={price} onChange={(event) => setPrice(Number(event.target.value))} type="number" /></label>
+        </div>
+      </div>
+      <div className="product-form-section price-section">
+        <div className="product-form-section-title"><span>03</span><div><strong>Paket harga</strong><small>Aktifkan paket yang ingin dijual atau dipakai untuk generate lisensi.</small></div></div>
+        <div className="tiered-price-grid">
+          {tieredPlanTemplates.map((plan) => (
+            <label key={plan.code} className={`tiered-price-card ${activePlans[plan.code] ? 'is-active' : ''}`}>
+              <span className="tiered-price-top">
+                <input
+                  checked={activePlans[plan.code]}
+                  onChange={(event) => setActivePlans((current) => ({ ...current, [plan.code]: event.target.checked }))}
+                  type="checkbox"
+                />
+                <b>{plan.label}</b>
+                <small>{plan.code}</small>
+              </span>
+              <input
+                disabled={!activePlans[plan.code]}
+                min="0"
+                value={planPrices[plan.code] ?? 0}
+                onChange={(event) => setPlanPrices((current) => ({ ...current, [plan.code]: Number(event.target.value) }))}
+                type="number"
+              />
+            </label>
+          ))}
         </div>
       </div>
       <details className="product-advanced">

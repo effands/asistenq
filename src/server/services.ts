@@ -331,6 +331,15 @@ export function createProductRecord(store: Store, input: {
   description?: string;
   coverUrl?: string;
   accessUrl?: string;
+  plans?: Array<{
+    code: string;
+    name: string;
+    price: number;
+    billingPeriod: BillingPeriod;
+    durationDays: number | null;
+    isFree?: boolean;
+    isActive?: boolean;
+  }>;
 }): Product {
   if (store.data.products.some((product) => product.slug === input.slug)) {
     throw new Error('product slug already exists');
@@ -338,6 +347,20 @@ export function createProductRecord(store: Store, input: {
 
   const product = createProduct(input);
   store.data.products.push(product);
+  for (const plan of input.plans ?? []) {
+    if (plan.isActive === false) continue;
+    store.data.plans.push({
+      id: createId('plan'),
+      productId: product.id,
+      code: plan.code.trim().toUpperCase(),
+      name: plan.name,
+      price: plan.price,
+      billingPeriod: plan.billingPeriod,
+      durationDays: plan.durationDays,
+      isFree: plan.isFree ?? plan.price === 0,
+      isActive: true
+    });
+  }
   store.save();
   return product;
 }

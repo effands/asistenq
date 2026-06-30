@@ -81,6 +81,26 @@ describe('server services', () => {
     expect(result.subscription.endsAt).toBe('2026-07-28T00:00:00.000Z');
   });
 
+  it('creates license plans when a product is created with tiered pricing', () => {
+    const product = createProductRecord(store, {
+      name: 'VJ Studio Pro',
+      slug: 'vjstudio-pro',
+      type: 'tool',
+      billingPeriod: 'monthly',
+      price: 99000,
+      plans: [
+        { code: 'TRIAL', name: 'Trial 1 Hari', price: 0, billingPeriod: 'trial', durationDays: 1, isFree: true, isActive: true },
+        { code: '3M', name: 'Lisensi 3 Bulan', price: 249000, billingPeriod: 'monthly', durationDays: 90, isActive: true },
+        { code: 'OFF', name: 'Tidak Aktif', price: 1, billingPeriod: 'one_time', durationDays: null, isActive: false }
+      ]
+    });
+
+    expect(store.data.plans.filter((plan) => plan.productId === product.id)).toMatchObject([
+      { code: 'TRIAL', price: 0, durationDays: 1, isFree: true, isActive: true },
+      { code: '3M', price: 249000, durationDays: 90, isFree: false, isActive: true }
+    ]);
+  });
+
   it('expires pending invoices after 24 hours', async () => {
     const member = await createMember(store, { name: 'Buyer', email: 'buyer@asistenq.com', password: 'secret123' });
     const product = createProductRecord(store, {

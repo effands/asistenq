@@ -125,6 +125,15 @@ const productSchema = z.object({
   description: z.string().optional(),
   coverUrl: z.string().optional(),
   accessUrl: z.string().optional(),
+  plans: z.array(z.object({
+    code: z.string().min(1),
+    name: z.string().min(1),
+    price: z.number().int().nonnegative(),
+    billingPeriod: z.enum(['trial', 'monthly', 'annual', 'lifetime', 'one_time']),
+    durationDays: z.number().int().positive().nullable(),
+    isFree: z.boolean().optional(),
+    isActive: z.boolean().optional()
+  })).optional(),
   landingConfig: z.object({
     heroImageUrl: z.string().optional(),
     heroVideoUrl: z.string().optional(),
