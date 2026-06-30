@@ -378,9 +378,13 @@ function hasActiveProductAccess(memberId: string, productId: string): boolean {
 
 function canOpenProduct(req: express.Request, product: typeof store.data.products[number]): boolean {
   const mode = product.accessMode ?? 'public';
-  if (mode === 'public') return true;
-
   const user = readSession(req);
+
+  if (mode === 'public' && product.price > 0) return true;
+  if (mode === 'public' && product.price === 0) {
+    return user?.type === 'member' || user?.type === 'admin';
+  }
+
   if (!user) return false;
 
   if (user.type === 'admin') return true;
@@ -1487,6 +1491,38 @@ app.post('/api/admin/orders/:id/paid', requireSession, requireAdminScope('orders
   res.json(markOrderPaid(store, String(req.params.id)));
 });
 
+app.delete('/api/admin/orders/expired', requireSession, requireAdminScope('orders'), (_req, res) => {
+  expirePendingOrders(store);
+  const before = store.data.orders.length;
+  store.data.orders = store.data.orders.filter((order) => order.status !== 'expired');
+  const deleted = before - store.data.orders.length;
+  if (deleted > 0) store.save();
+  res.json({ ok: true, deleted, message: `${deleted} order expired dihapus.` });
+});
+
+app.get('/api/admin/orders/export.csv', requireSession, requireAdminScope('orders'), (_req, res) => {
+  expirePendingOrders(store);
+  const headers = ['Invoice', 'Member', 'Email', 'Produk', 'Total', 'Status', 'Tanggal'];
+  const rows = store.data.orders.map((order) => {
+    const row = publicOrder(order);
+    return [
+      row.invoiceNumber ?? row.id,
+      row.memberName ?? '',
+      row.memberEmail ?? '',
+      row.product?.name ?? row.productName ?? row.productId,
+      row.formattedTotalAmount,
+      row.status,
+      row.createdAt
+    ];
+  });
+  const csv = [headers, ...rows]
+    .map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(','))
+    .join('\n');
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition', 'attachment; filename="asistenq-orders.csv"');
+  res.send(`\ufeff${csv}`);
+});
+
 app.post('/api/checkout', requireSession, (req, res) => {
   if (req.user?.type !== 'member') {
     res.status(403).json({ message: 'member access required' });
@@ -1537,6 +1573,23 @@ app.get('/api/member/licenses', requireSession, (req, res) => {
   }
 
   res.json(memberLicenseDashboard(store, req.user.id));
+});
+
+app.post('/api/member/licenses/:id/reset-device', requireSession, (req, res) => {
+  if (req.user?.type !== 'member') {
+    res.status(403).json({ message: 'member access required' });
+    return;
+  }
+
+  const body = z.object({ newHwid: z.string().min(8).max(32) }).parse(req.body);
+  const member = store.data.members.find((item) => item.id === req.user?.id);
+  const license = store.data.licenses.find((item) => item.id === String(req.params.id));
+  if (!member || !license || license.email !== member.email) {
+    res.status(404).json({ message: 'Lisensi tidak ditemukan di akun member ini.' });
+    return;
+  }
+
+  res.json(resetLicenseDevice(store, { licenseId: license.id, newHwid: body.newHwid }));
 });
 
 app.use('/api', (error: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {

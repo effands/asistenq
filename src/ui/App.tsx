@@ -66,6 +66,10 @@ function browserIdentity(storage: Storage, key: string): string {
   return value;
 }
 
+function requiresMemberForAccess(product: PublicProduct): boolean {
+  return product.price === 0 || (product.accessMode ?? 'public') !== 'public';
+}
+
 function routeFromPath(pathname: string): Route {
   if (pathname.startsWith('/adminasistenq')) return 'admin';
   if (pathname.startsWith('/member')) return 'member';
@@ -127,7 +131,7 @@ export function App() {
       body: { visitorId, productSlug: product.slug, eventType: 'tool_open' }
     });
 
-    if ((product.accessMode ?? 'public') !== 'public' && !memberSession) {
+    if (requiresMemberForAccess(product) && !memberSession) {
       navigate('member');
       return;
     }
@@ -338,6 +342,33 @@ export function App() {
             await loadAdminMembers();
             setMessage('Data member diperbarui.');
           }}
+          onClearExpiredOrders={async () => {
+            if (!adminSession) throw new Error('Login admin dulu.');
+            const result = await apiRequest<{ ok: true; deleted: number; message: string }>('/admin/orders/expired', {
+              token: adminSession.token,
+              method: 'DELETE'
+            });
+            await loadAdminOrders(adminSession.token);
+            await loadAdminSummary(adminSession.token);
+            setMessage(result.message);
+          }}
+          onExportOrders={async () => {
+            if (!adminSession) throw new Error('Login admin dulu.');
+            const response = await fetch('/api/admin/orders/export.csv', {
+              headers: { Authorization: `Bearer ${adminSession.token}` }
+            });
+            if (!response.ok) throw new Error('Export order gagal.');
+            const blob = await response.blob();
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `asistenq-orders-${new Date().toISOString().slice(0, 10)}.csv`;
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+            URL.revokeObjectURL(url);
+            setMessage('File Excel/CSV order berhasil dibuat.');
+          }}
           onResetOperationalData={async () => {
             if (!adminSession) throw new Error('Login admin dulu.');
             const result = await apiRequest<{ ok: true; message: string }>('/admin/reset-operational-data', {
@@ -485,6 +516,16 @@ export function App() {
             await loadLicenses(memberSession.token);
             await loadMemberOrders(memberSession.token);
             return order;
+          }}
+          onResetLicense={async (licenseId, newHwid) => {
+            if (!memberSession) throw new Error('Login member dulu.');
+            await apiRequest(`/member/licenses/${licenseId}/reset-device`, {
+              token: memberSession.token,
+              method: 'POST',
+              body: { newHwid }
+            });
+            await loadLicenses(memberSession.token);
+            setMessage('Lisensi berhasil direset ke HWID baru.');
           }}
         />
       </PublicShell>
@@ -707,6 +748,8 @@ function AdminPanel({
   onUploadProductLogo,
   onRefreshLicenses,
   onRefreshMembers,
+  onClearExpiredOrders,
+  onExportOrders,
   onUpdateMember,
   onResetOperationalData,
   onGenerateLicense,
@@ -767,6 +810,8 @@ function AdminPanel({
   onUploadProductLogo: (productId: string, file: File) => Promise<void>;
   onRefreshLicenses: () => Promise<void>;
   onRefreshMembers: () => Promise<void>;
+  onClearExpiredOrders: () => Promise<void>;
+  onExportOrders: () => Promise<void>;
   onUpdateMember: (id: string, input: any) => Promise<void>;
   onResetOperationalData: () => Promise<void>;
   onGenerateLicense: (input: { productSlug: string; planCode: string; email: string; hwid: string }) => Promise<void>;
@@ -826,7 +871,7 @@ function AdminPanel({
   }
 
   if (activeSection === 'orders') {
-    return <AdminOrderPanel orders={orders} />;
+    return <AdminOrderPanel onClearExpired={onClearExpiredOrders} onExportOrders={onExportOrders} orders={orders} />;
   }
 
   if (activeSection === 'members') {
@@ -932,12 +977,35 @@ function formatRemaining(value?: string | null) {
   return hours > 0 ? `${hours}j ${minutes}m` : `${minutes}m`;
 }
 
-function AdminOrderPanel({ orders }: { orders: PublicOrder[] }) {
+function AdminOrderPanel({ orders, onClearExpired, onExportOrders }: {
+  orders: PublicOrder[];
+  onClearExpired: () => Promise<void>;
+  onExportOrders: () => Promise<void>;
+}) {
+  const [busy, setBusy] = useState('');
+  const [notice, setNotice] = useState('');
+  async function runOrderAction(name: string, action: () => Promise<void>) {
+    setBusy(name);
+    setNotice('');
+    try {
+      await action();
+      setNotice(name === 'export' ? 'Export order berhasil dibuat.' : 'Order expired berhasil dibersihkan.');
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : 'Aksi order gagal.');
+    } finally {
+      setBusy('');
+    }
+  }
+
   return (
     <section className="panel stack">
       <div className="panel-heading">
         <div><p className="section-kicker">Transaksi</p><h2>Daftar Order</h2></div>
-        <span className="soft-badge">{orders.length} order</span>
+        <div className="order-panel-actions">
+          <button className="ghost-button" disabled={!!busy} onClick={() => runOrderAction('export', onExportOrders)} type="button">Export Excel</button>
+          <button className="ghost-button danger-lite" disabled={!!busy} onClick={() => runOrderAction('clear', onClearExpired)} type="button">Clear Expired</button>
+          <span className="soft-badge">{orders.length} order</span>
+        </div>
       </div>
       <div className="order-admin-table-wrap">
         <div className="order-admin-row order-admin-head"><span>Invoice</span><span>Member</span><span>Produk</span><span>Total</span><span>Status</span><span>Tanggal</span></div>
@@ -956,6 +1024,7 @@ function AdminOrderPanel({ orders }: { orders: PublicOrder[] }) {
           </div>
         ))}
       </div>
+      {notice && <p className="form-notice">{notice}</p>}
     </section>
   );
 }
@@ -2467,7 +2536,7 @@ function Mixin9Landing({ product, onJoin }: { product: PublicProduct; onJoin: ()
   );
 }
 
-function MemberPanel({ session, products, dashboard, orders, onRegister, onLogin, onCheckout, onLogout }: {
+function MemberPanel({ session, products, dashboard, orders, onRegister, onLogin, onCheckout, onResetLicense, onLogout }: {
   session: LoginResult | null;
   products: PublicProduct[];
   dashboard: MemberLicenseDashboard | null;
@@ -2475,9 +2544,13 @@ function MemberPanel({ session, products, dashboard, orders, onRegister, onLogin
   onRegister: (name: string, email: string, password: string, whatsapp: string, telegramId: string) => Promise<void>;
   onLogin: (email: string, password: string) => Promise<void>;
   onCheckout: (productId: string) => Promise<PublicOrder | undefined>;
+  onResetLicense: (licenseId: string, newHwid: string) => Promise<void>;
   onLogout: () => void;
 }) {
   const [checkoutNotice, setCheckoutNotice] = useState('');
+  const [licenseNotice, setLicenseNotice] = useState('');
+  const [memberResetValues, setMemberResetValues] = useState<Record<string, string>>({});
+  const [memberResetBusy, setMemberResetBusy] = useState('');
   const [activeOrder, setActiveOrder] = useState<PublicOrder | null>(null);
   const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
   const [activeMemberTab, setActiveMemberTab] = useState<'licenses' | 'products' | 'orders' | 'course' | 'help'>('licenses');
@@ -2572,9 +2645,38 @@ function MemberPanel({ session, products, dashboard, orders, onRegister, onLogin
                     <code>{license.key}</code>
                     <button className="primary" onClick={() => navigator.clipboard.writeText(license.key)}>Copy Token</button>
                   </div>
+                  <div className="member-reset-box">
+                    <small>Reset lisensi ke device baru</small>
+                    <input
+                      value={memberResetValues[license.id] ?? ''}
+                      onChange={(event) => setMemberResetValues((current) => ({ ...current, [license.id]: event.target.value.toUpperCase() }))}
+                      maxLength={16}
+                      placeholder="HWID baru"
+                    />
+                    <button
+                      className="ghost-button"
+                      disabled={memberResetBusy === license.id || !memberResetValues[license.id]}
+                      onClick={async () => {
+                        setMemberResetBusy(license.id);
+                        setLicenseNotice('');
+                        try {
+                          await onResetLicense(license.id, memberResetValues[license.id]);
+                          setMemberResetValues((current) => ({ ...current, [license.id]: '' }));
+                          setLicenseNotice('Lisensi berhasil direset. Token baru sudah muncul di kartu ini.');
+                        } catch (error) {
+                          setLicenseNotice(error instanceof Error ? error.message : 'Reset lisensi gagal.');
+                        } finally {
+                          setMemberResetBusy('');
+                        }
+                      }}
+                    >
+                      Reset Lisensi
+                    </button>
+                  </div>
                 </article>
               ))}
             </div>
+            {licenseNotice && <p className="form-notice">{licenseNotice}</p>}
           </div>
         )}
 
