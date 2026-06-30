@@ -170,6 +170,11 @@ export interface Order {
   status: OrderStatus;
   qrisPayload: string;
   paymentQrUrl?: string;
+  paymentProvider?: 'manual' | 'dana';
+  paymentReferenceNo?: string;
+  paymentPartnerReferenceNo?: string;
+  paymentRedirectUrl?: string;
+  paymentPayload?: Record<string, unknown>;
   createdAt: string;
   expiresAt?: string;
   reminderSentAt?: string;

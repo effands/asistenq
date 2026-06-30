@@ -877,6 +877,87 @@ export function markOrderPaidByInvoice(store: Store, invoiceNumber: string, paid
   return markOrderPaid(store, order.id, paidAt);
 }
 
+type DanaSandboxFinishPayload = Record<string, unknown>;
+
+function danaStatusValue(payload: DanaSandboxFinishPayload): string {
+  const candidates = [
+    payload.latestTransactionStatus,
+    payload.transactionStatus,
+    payload.status
+  ];
+
+  const value = candidates.find((item) => typeof item === 'string');
+  return String(value ?? '').trim().toUpperCase();
+}
+
+function danaReferenceValue(payload: DanaSandboxFinishPayload, keys: string[]): string | undefined {
+  for (const key of keys) {
+    const value = payload[key];
+    if (typeof value === 'string' && value.trim()) return value.trim();
+  }
+  return undefined;
+}
+
+function findOrderByPaymentReference(store: Store, partnerReferenceNo: string) {
+  return store.data.orders.find((item) => (
+    item.invoiceNumber === partnerReferenceNo ||
+    item.id === partnerReferenceNo ||
+    item.paymentPartnerReferenceNo === partnerReferenceNo
+  ));
+}
+
+export function handleDanaSandboxFinishNotify(store: Store, payload: DanaSandboxFinishPayload, now = new Date()) {
+  const partnerReferenceNo = danaReferenceValue(payload, [
+    'originalPartnerReferenceNo',
+    'partnerReferenceNo',
+    'merchantTransId'
+  ]);
+
+  if (!partnerReferenceNo) {
+    throw new Error('partner reference not found');
+  }
+
+  const order = findOrderByPaymentReference(store, partnerReferenceNo);
+
+  if (!order) {
+    throw new Error('order not found');
+  }
+
+  const referenceNo = danaReferenceValue(payload, [
+    'originalReferenceNo',
+    'referenceNo'
+  ]);
+  const redirectUrl = danaReferenceValue(payload, [
+    'finishRedirectUrl',
+    'redirectUrl'
+  ]);
+  const status = danaStatusValue(payload);
+  const successStatuses = new Set(['SUCCESS', '00', 'PAID', 'COMPLETED']);
+
+  order.paymentProvider = 'dana';
+  order.paymentPartnerReferenceNo = partnerReferenceNo;
+  if (referenceNo) order.paymentReferenceNo = referenceNo;
+  if (redirectUrl) order.paymentRedirectUrl = redirectUrl;
+  order.paymentPayload = payload;
+
+  if (successStatuses.has(status)) {
+    const result = markOrderPaid(store, order.id, now);
+    result.order.paymentProvider = 'dana';
+    result.order.paymentPartnerReferenceNo = partnerReferenceNo;
+    if (referenceNo) result.order.paymentReferenceNo = referenceNo;
+    if (redirectUrl) result.order.paymentRedirectUrl = redirectUrl;
+    result.order.paymentPayload = payload;
+    store.save();
+    return result;
+  }
+
+  store.save();
+  return {
+    order,
+    subscription: undefined
+  };
+}
+
 export function generateLicenseForPaidOrder(store: Store, input: {
   invoiceNumber: string;
   hwid: string;

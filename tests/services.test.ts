@@ -5,6 +5,7 @@ import {
   createCheckout,
   createMember,
   createProductRecord,
+  handleDanaSandboxFinishNotify,
   formatInvoiceHtml,
   generateLicenseForPaidOrder,
   expirePendingOrders,
@@ -156,6 +157,53 @@ describe('server services', () => {
 
     expect(paid.order.status).toBe('paid');
     expect(store.data.subscriptions).toHaveLength(1);
+  });
+
+  it('marks an order paid from a DANA sandbox finish notify payload', async () => {
+    const member = await createMember(store, { name: 'Buyer', email: 'buyer@asistenq.com', password: 'secret123' });
+    const product = createProductRecord(store, {
+      name: 'Kelas YouTube Online',
+      slug: 'kelas-youtube-online',
+      type: 'course',
+      billingPeriod: 'annual',
+      price: 799000
+    });
+    const order = createCheckout(store, member.id, product.id);
+
+    const result = handleDanaSandboxFinishNotify(store, {
+      originalPartnerReferenceNo: order.invoiceNumber,
+      originalReferenceNo: 'DANA-REF-001',
+      latestTransactionStatus: 'SUCCESS'
+    }, new Date('2026-06-30T06:00:00.000Z'));
+
+    expect(result.order.status).toBe('paid');
+    expect(result.order.paymentProvider).toBe('dana');
+    expect(result.order.paymentPartnerReferenceNo).toBe(order.invoiceNumber);
+    expect(result.order.paymentReferenceNo).toBe('DANA-REF-001');
+    expect(store.data.subscriptions).toHaveLength(1);
+  });
+
+  it('stores DANA sandbox metadata without paying the order when status is still pending', async () => {
+    const member = await createMember(store, { name: 'Buyer', email: 'buyer@asistenq.com', password: 'secret123' });
+    const product = createProductRecord(store, {
+      name: 'Kelas YouTube Online',
+      slug: 'kelas-youtube-online',
+      type: 'course',
+      billingPeriod: 'annual',
+      price: 799000
+    });
+    const order = createCheckout(store, member.id, product.id);
+
+    const result = handleDanaSandboxFinishNotify(store, {
+      partnerReferenceNo: order.invoiceNumber,
+      referenceNo: 'DANA-REF-002',
+      latestTransactionStatus: 'PENDING'
+    }, new Date('2026-06-30T06:00:00.000Z'));
+
+    expect(result.order.status).toBe('pending');
+    expect(result.order.paymentProvider).toBe('dana');
+    expect(result.order.paymentReferenceNo).toBe('DANA-REF-002');
+    expect(store.data.subscriptions).toHaveLength(0);
   });
 
   it('generates a license from a paid invoice and HWID', async () => {

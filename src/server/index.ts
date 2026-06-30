@@ -23,6 +23,7 @@ import {
   createProductRecord,
   generateToolLicense,
   generateLicenseForPaidOrder,
+  handleDanaSandboxFinishNotify,
   listPendingOrders,
   markOrderPaid,
   markOrderPaidByInvoice,
@@ -1341,6 +1342,31 @@ app.post('/api/admin/deploy/update', requireSession, requireAdminScope('products
       detail
     });
   }
+});
+
+app.post('/api/payments/dana/finish-notify', (req, res) => {
+  try {
+    const result = handleDanaSandboxFinishNotify(store, req.body, new Date());
+    res.json({
+      responseCode: '2000000',
+      responseMessage: 'Successful',
+      invoiceNumber: result.order.invoiceNumber ?? result.order.id,
+      status: result.order.status
+    });
+  } catch (error) {
+    res.status(400).json({
+      responseCode: '4000001',
+      responseMessage: error instanceof Error ? error.message : 'Failed to process DANA callback.'
+    });
+  }
+});
+
+app.get('/api/payments/dana/redirect', (req, res) => {
+  const invoice = typeof req.query.invoice === 'string' ? req.query.invoice : '';
+  const params = new URLSearchParams();
+  params.set('payment', 'dana');
+  if (invoice) params.set('invoice', invoice);
+  res.redirect(`/member?${params.toString()}`);
 });
 
 app.post('/tools/jadwalinaja/api/youtube/upload-thumbnail', express.raw({ type: '*/*', limit: '15mb' }), async (req, res) => {
