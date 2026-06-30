@@ -1652,16 +1652,16 @@ function ProductForm({ onCreateProduct }: {
         description
       });
     }}>
-      <div className="panel-heading">
+      <div className="panel-heading product-create-heading">
         <div>
           <p className="section-kicker">Catalog control</p>
           <h2>Tambah Produk</h2>
-          <p className="form-intro">Isi data utama dulu. Pengaturan landing dan promo bisa dibuka bila diperlukan.</p>
+          <p className="form-intro">Isi data utama, atur akses, lalu lengkapi landing bila produk siap dipublikasikan.</p>
         </div>
         <span className="soft-badge">{type}</span>
       </div>
       <div className="product-form-section">
-        <div className="product-form-section-title"><span>01</span><div><strong>Informasi utama</strong><small>Identitas yang terlihat oleh member.</small></div></div>
+        <div className="product-form-section-title"><span>01</span><div><strong>Informasi utama</strong><small>Identitas utama yang tampil di katalog dan member area.</small></div></div>
         <div className="product-form-grid">
           <label className="col-3">Nama produk<input required value={name} onChange={(event) => setName(event.target.value)} placeholder="Contoh: MIXIN9" /></label>
           <label className="col-2">Slug / alamat<input required value={slug} onChange={(event) => setSlug(event.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '-'))} placeholder="mixin9" /><small>Huruf kecil, angka, dan tanda minus.</small></label>
@@ -1678,22 +1678,45 @@ function ProductForm({ onCreateProduct }: {
         </div>
       </div>
       <details className="product-advanced">
-        <summary>Pengaturan lanjutan <small>Landing, promo, logo, dan teks produk</small></summary>
+        <summary><span>Pengaturan lanjutan</span><small>Promo, landing, logo, dan teks produk.</small></summary>
         <div className="product-advanced-content">
-          <div className="product-form-grid">
-            <label className="col-2">Harga coret (Rp)<input min="0" value={compareAtPrice} onChange={(event) => setCompareAtPrice(Number(event.target.value))} type="number" placeholder="0" /></label>
-            <label className="col-2">Badge promo<input value={discountLabel} onChange={(event) => setDiscountLabel(event.target.value)} placeholder="Contoh: Free Beta" /></label>
-            <label className="col-2">Teks promo<input value={promoText} onChange={(event) => setPromoText(event.target.value)} placeholder="Promo singkat" /></label>
-            
-            <label className="col-3">URL logo<input value={logoUrl} onChange={(event) => setLogoUrl(event.target.value)} placeholder="https://.../logo.png" /></label>
-            <label className="col-1">Path halaman<input value={landingPath} onChange={(event) => setLandingPath(event.target.value)} placeholder="/mixin9" /></label>
-            <label className="col-2">Template<input value={landingTemplate} onChange={(event) => setLandingTemplate(event.target.value)} placeholder="mixin9 atau tool-app" /></label>
-            
-            <label className="col-2">Label tombol<input value={ctaLabel} onChange={(event) => setCtaLabel(event.target.value)} placeholder="Ambil sekarang" /></label>
-            <label className="col-4">Headline<input value={headline} onChange={(event) => setHeadline(event.target.value)} placeholder="Manfaat utama produk" /></label>
-            
-            <label className="col-3">Syarat akses<textarea value={accessRequirement} onChange={(event) => setAccessRequirement(event.target.value)} placeholder="Contoh: Daftar sebagai member" /></label>
-            <label className="col-3">Deskripsi<textarea value={description} onChange={(event) => setDescription(event.target.value)} placeholder="Jelaskan fungsi produk secara singkat" /></label>
+          <div className="product-advanced-grid">
+            <div className="product-advanced-group">
+              <div className="mini-section-title">
+                <strong>Promo</strong>
+                <small>Harga coret dan label penawaran.</small>
+              </div>
+              <div className="product-form-grid three">
+                <label>Harga coret (Rp)<input min="0" value={compareAtPrice} onChange={(event) => setCompareAtPrice(Number(event.target.value))} type="number" placeholder="0" /></label>
+                <label>Badge promo<input value={discountLabel} onChange={(event) => setDiscountLabel(event.target.value)} placeholder="Contoh: Free Beta" /></label>
+                <label>Teks promo<input value={promoText} onChange={(event) => setPromoText(event.target.value)} placeholder="Promo singkat" /></label>
+              </div>
+            </div>
+
+            <div className="product-advanced-group">
+              <div className="mini-section-title">
+                <strong>Landing</strong>
+                <small>Alamat publik, template, dan aset visual.</small>
+              </div>
+              <div className="product-form-grid six">
+                <label className="col-3">URL logo<input value={logoUrl} onChange={(event) => setLogoUrl(event.target.value)} placeholder="https://.../logo.png" /></label>
+                <label className="col-1">Path halaman<input value={landingPath} onChange={(event) => setLandingPath(event.target.value)} placeholder="/mixin9" /></label>
+                <label className="col-2">Template<input value={landingTemplate} onChange={(event) => setLandingTemplate(event.target.value)} placeholder="mixin9 atau tool-app" /></label>
+              </div>
+            </div>
+
+            <div className="product-advanced-group">
+              <div className="mini-section-title">
+                <strong>Copywriting</strong>
+                <small>Teks yang menjelaskan manfaat dan akses produk.</small>
+              </div>
+              <div className="product-form-grid six">
+                <label className="col-2">Label tombol<input value={ctaLabel} onChange={(event) => setCtaLabel(event.target.value)} placeholder="Ambil sekarang" /></label>
+                <label className="col-4">Headline<input value={headline} onChange={(event) => setHeadline(event.target.value)} placeholder="Manfaat utama produk" /></label>
+                <label className="col-3">Syarat akses<textarea value={accessRequirement} onChange={(event) => setAccessRequirement(event.target.value)} placeholder="Contoh: Daftar sebagai member" /></label>
+                <label className="col-3">Deskripsi<textarea value={description} onChange={(event) => setDescription(event.target.value)} placeholder="Jelaskan fungsi produk secara singkat" /></label>
+              </div>
+            </div>
           </div>
         </div>
       </details>
