@@ -1523,6 +1523,34 @@ app.get('/api/admin/orders/export.csv', requireSession, requireAdminScope('order
   res.send(`\ufeff${csv}`);
 });
 
+app.get('/api/admin/orders/export.xls', requireSession, requireAdminScope('orders'), (_req, res) => {
+  expirePendingOrders(store);
+  const headers = ['Invoice', 'Member', 'Email', 'Produk', 'Total', 'Status', 'Tanggal'];
+  const rows = store.data.orders.map((order) => {
+    const row = publicOrder(order);
+    return [
+      row.invoiceNumber ?? row.id,
+      row.memberName ?? '',
+      row.memberEmail ?? '',
+      row.product?.name ?? row.productName ?? row.productId,
+      row.formattedTotalAmount,
+      row.status,
+      row.createdAt
+    ];
+  });
+  const escapeCell = (value: unknown) => String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+  const tableRows = [headers, ...rows]
+    .map((row) => `<tr>${row.map((cell) => `<td>${escapeCell(cell)}</td>`).join('')}</tr>`)
+    .join('');
+  res.setHeader('Content-Type', 'application/vnd.ms-excel; charset=utf-8');
+  res.setHeader('Content-Disposition', 'attachment; filename="asistenq-orders.xls"');
+  res.send(`<!doctype html><html><head><meta charset="utf-8" /></head><body><table>${tableRows}</table></body></html>`);
+});
+
 app.post('/api/checkout', requireSession, (req, res) => {
   if (req.user?.type !== 'member') {
     res.status(403).json({ message: 'member access required' });

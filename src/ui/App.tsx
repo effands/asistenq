@@ -354,7 +354,7 @@ export function App() {
           }}
           onExportOrders={async () => {
             if (!adminSession) throw new Error('Login admin dulu.');
-            const response = await fetch('/api/admin/orders/export.csv', {
+            const response = await fetch('/api/admin/orders/export.xls', {
               headers: { Authorization: `Bearer ${adminSession.token}` }
             });
             if (!response.ok) throw new Error('Export order gagal.');
@@ -362,7 +362,7 @@ export function App() {
             const url = URL.createObjectURL(blob);
             const link = document.createElement('a');
             link.href = url;
-            link.download = `asistenq-orders-${new Date().toISOString().slice(0, 10)}.csv`;
+            link.download = `asistenq-orders-${new Date().toISOString().slice(0, 10)}.xls`;
             document.body.appendChild(link);
             link.click();
             link.remove();
