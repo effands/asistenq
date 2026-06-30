@@ -312,6 +312,24 @@ export function App() {
             await loadCatalog();
             setMessage('File HTML berhasil dijadikan tools internal.');
           }}
+          onUploadProductLogo={async (productId, file) => {
+            if (!adminSession) return;
+            const response = await fetch(`/api/admin/products/${productId}/logo`, {
+              method: 'POST',
+              headers: {
+                Authorization: `Bearer ${adminSession.token}`,
+                'Content-Type': file.type || 'application/octet-stream'
+              },
+              body: await file.arrayBuffer()
+            });
+            if (!response.ok) {
+              const error = await response.json().catch(() => ({ message: 'Upload gambar gagal.' }));
+              throw new Error(error.message ?? 'Upload gambar gagal.');
+            }
+            await loadProducts();
+            await loadCatalog();
+            setMessage('Gambar produk berhasil diupload.');
+          }}
           onRefreshLicenses={async () => {
             await loadAdminLicenses();
             setMessage('Data lisensi diperbarui.');
@@ -686,6 +704,7 @@ function AdminPanel({
   onUpdateProduct,
   onImportLandingZip,
   onImportLandingHtml,
+  onUploadProductLogo,
   onRefreshLicenses,
   onRefreshMembers,
   onUpdateMember,
@@ -745,6 +764,7 @@ function AdminPanel({
   onUpdateProduct: (productId: string, input: Partial<PublicProduct>) => Promise<void>;
   onImportLandingZip: (productId: string, file: File) => Promise<void>;
   onImportLandingHtml: (productId: string, file: File) => Promise<void>;
+  onUploadProductLogo: (productId: string, file: File) => Promise<void>;
   onRefreshLicenses: () => Promise<void>;
   onRefreshMembers: () => Promise<void>;
   onUpdateMember: (id: string, input: any) => Promise<void>;
@@ -786,7 +806,7 @@ function AdminPanel({
     return (
       <section className="admin-content-grid">
         <ProductForm onCreateProduct={onCreateProduct} />
-        <ProductTable onImportLandingHtml={onImportLandingHtml} onImportLandingZip={onImportLandingZip} onUpdateProduct={onUpdateProduct} products={products} />
+        <ProductTable onImportLandingHtml={onImportLandingHtml} onImportLandingZip={onImportLandingZip} onUploadProductLogo={onUploadProductLogo} onUpdateProduct={onUpdateProduct} products={products} />
       </section>
     );
   }
@@ -1944,11 +1964,12 @@ function Metric({ icon, label, value, onClick }: { icon: ReactNode; label: strin
   );
 }
 
-function ProductTable({ products, onUpdateProduct, onImportLandingZip, onImportLandingHtml }: {
+function ProductTable({ products, onUpdateProduct, onImportLandingZip, onImportLandingHtml, onUploadProductLogo }: {
   products: PublicProduct[];
   onUpdateProduct: (productId: string, input: Partial<PublicProduct>) => Promise<void>;
   onImportLandingZip: (productId: string, file: File) => Promise<void>;
   onImportLandingHtml: (productId: string, file: File) => Promise<void>;
+  onUploadProductLogo: (productId: string, file: File) => Promise<void>;
 }) {
   const [editingId, setEditingId] = useState('');
   const [draft, setDraft] = useState<Partial<PublicProduct>>({});
@@ -2072,6 +2093,16 @@ function ProductTable({ products, onUpdateProduct, onImportLandingZip, onImportL
                       event.target.value = '';
                     }} />
                   </label>
+                  <label className="zip-upload-button image-upload-button">
+                    Upload image 1:1
+                    <input type="file" accept="image/png,image/jpeg,image/webp" onChange={async (event) => {
+                      const file = event.target.files?.[0];
+                      if (!file) return;
+                      await onUploadProductLogo(product.id, file);
+                      setNotice(`Gambar ${product.name} berhasil diupload.`);
+                      event.target.value = '';
+                    }} />
+                  </label>
                 </div>
               </div>
             )}
@@ -2136,7 +2167,7 @@ function CreatorToolCard({ product, onOpen }: { product: PublicProduct; onOpen: 
       <span className="creator-tool-meta">
         <b className={premium ? 'premium' : 'free'}>{premium ? product.formattedPrice : 'Gratis'}</b>
         {product.discountPercent > 0 && <i>Hemat {product.discountPercent}%</i>}
-        {owned && (product.analytics?.onlineUsers ?? 0) > 0 && <em><span /> {product.analytics?.onlineUsers} online</em>}
+        {owned && (product.analytics?.onlineUsers ?? 0) > 0 && <em><span /> {product.analytics?.onlineUsers} Online</em>}
       </span>
       <ArrowRight size={17} />
     </button>
@@ -2148,10 +2179,26 @@ function Marketplace({ catalog, onJoin, onProductOpen }: {
   onJoin: () => void;
   onProductOpen: (slug: string) => void;
 }) {
+  const [activeCategory, setActiveCategory] = useState('all');
   const primaryProduct = catalog.featured[0] ?? catalog.paid[0];
   const allTools = catalog.all.length > 0
     ? catalog.all
     : [...catalog.featured, ...catalog.paid, ...catalog.free].filter((product, index, products) => products.findIndex((item) => item.id === product.id) === index);
+  const categoryItems = [
+    { key: 'all', label: 'Creator Tools' },
+    { key: 'free', label: 'Free Tools' },
+    { key: 'audio', label: 'Audio Tools' },
+    { key: 'youtube', label: 'YouTube Workflow' },
+    { key: 'learning', label: 'E-Learning' }
+  ];
+  const filteredTools = allTools.filter((product) => {
+    const haystack = `${product.name} ${product.category ?? ''} ${product.headline ?? ''} ${product.description ?? ''} ${product.promoText ?? ''}`.toLowerCase();
+    if (activeCategory === 'free') return product.price === 0 || product.accessMode === 'free_member' || product.type === 'free';
+    if (activeCategory === 'audio') return haystack.includes('audio') || haystack.includes('mixing') || haystack.includes('mixin');
+    if (activeCategory === 'youtube') return haystack.includes('youtube') || haystack.includes('video') || haystack.includes('creator');
+    if (activeCategory === 'learning') return product.type === 'course' || product.type === 'class' || haystack.includes('course') || haystack.includes('kelas') || haystack.includes('learning');
+    return true;
+  });
 
   return (
     <main className="landing">
@@ -2196,12 +2243,12 @@ function Marketplace({ catalog, onJoin, onProductOpen }: {
         </aside>
       </section>
 
-      <section className="brand-strip">
-        <span>Creator tools</span>
-        <span>Free tools</span>
-        <span>Audio tools</span>
-        <span>YouTube workflow</span>
-        <span>E-learning</span>
+      <section className="brand-strip category-strip" aria-label="Filter kategori produk">
+        {categoryItems.map((item) => (
+          <button className={activeCategory === item.key ? 'active' : ''} key={item.key} onClick={() => setActiveCategory(item.key)} type="button">
+            {item.label}
+          </button>
+        ))}
       </section>
 
       <section className="landing-section" id="produk">
@@ -2210,10 +2257,10 @@ function Marketplace({ catalog, onJoin, onProductOpen }: {
             <p className="section-kicker">Creator Tools</p>
             <h2>Semua tools dalam satu tempat</h2>
           </div>
-          <p className="creator-tools-intro"><span className="live-dot" /> {catalog.onlineUsers} pengguna sedang online. Pilih tools gratis atau premium, lalu buka detailnya.</p>
+          <p className="creator-tools-intro"><span className="live-dot" /> {catalog.onlineUsers} Online</p>
         </div>
         <div className="creator-tools-grid">
-          {allTools.map((product) => (
+          {filteredTools.map((product) => (
             <CreatorToolCard key={product.id} product={product} onOpen={onProductOpen} />
           ))}
         </div>

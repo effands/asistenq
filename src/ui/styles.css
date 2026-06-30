@@ -534,12 +534,29 @@ p {
   padding: 16px 20px;
 }
 
-.brand-strip span {
+.brand-strip span,
+.brand-strip button {
   color: var(--forest);
   font-size: 13px;
   font-weight: 950;
   letter-spacing: .08em;
   text-transform: uppercase;
+}
+
+.brand-strip button {
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  cursor: pointer;
+  padding: 10px 16px;
+  transition: background .18s ease, color .18s ease, transform .18s ease;
+}
+
+.brand-strip button:hover,
+.brand-strip button.active {
+  background: #063a34;
+  color: #fff;
+  transform: translateY(-1px);
 }
 
 .landing-section {
@@ -3446,17 +3463,17 @@ textarea {
 
 .creator-tools-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 10px;
 }
 
 .creator-tool-card {
   display: grid;
-  grid-template-columns: 46px minmax(0, 1fr) auto 18px;
-  gap: 12px;
+  grid-template-columns: 52px minmax(0, 1fr) 16px;
+  gap: 10px;
   align-items: center;
   min-width: 0;
-  padding: 13px;
+  padding: 11px;
   border: 1px solid rgba(9, 46, 43, .1);
   border-radius: 18px;
   background: linear-gradient(135deg, rgba(255, 255, 255, .88), rgba(233, 249, 244, .7));
@@ -3475,19 +3492,20 @@ textarea {
 
 .creator-tool-icon {
   display: grid;
-  width: 46px;
-  height: 46px;
+  width: 52px;
+  height: 52px;
   place-items: center;
   border-radius: 14px;
   background: linear-gradient(145deg, #d9f7ef, #effbf8);
   color: var(--forest);
+  overflow: hidden;
 }
 
 .creator-tool-icon img {
-  width: 30px;
-  height: 30px;
-  object-fit: contain;
-  border-radius: 8px;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 14px;
 }
 
 .creator-tool-copy {
@@ -3498,7 +3516,7 @@ textarea {
 
 .creator-tool-copy strong {
   overflow: hidden;
-  font-size: 14px;
+  font-size: 13px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -3507,24 +3525,26 @@ textarea {
   display: -webkit-box;
   overflow: hidden;
   color: var(--muted);
-  font-size: 11px;
+  font-size: 10.5px;
   line-height: 1.35;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
 }
 
 .creator-tool-meta {
-  display: grid;
-  justify-items: end;
-  gap: 4px;
+  display: flex;
+  grid-column: 2 / 4;
+  gap: 5px;
+  align-items: center;
+  min-width: 0;
 }
 
 .creator-tool-meta b,
 .creator-tool-meta i,
 .creator-tool-meta em {
   border-radius: 999px;
-  padding: 4px 7px;
-  font-size: 9px;
+  padding: 4px 6px;
+  font-size: 8.5px;
   font-style: normal;
   font-weight: 900;
   white-space: nowrap;

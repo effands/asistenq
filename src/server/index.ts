@@ -60,6 +60,7 @@ if (!isProduction) {
 app.use(express.json());
 
 const landingImportDir = path.resolve('data/landing-imports');
+const productAssetDir = path.resolve('data/product-assets');
 const bundledLandingDir = path.resolve('landings');
 const bundledToolDir = path.resolve('tools-dist');
 const ignoredLandingZipPaths = [
@@ -1027,6 +1028,42 @@ app.post(
   }
 );
 
+app.post(
+  '/api/admin/products/:id/logo',
+  requireSession,
+  requireAdminScope('products'),
+  express.raw({ type: ['image/png', 'image/jpeg', 'image/webp', 'application/octet-stream'], limit: '3mb' }),
+  (req, res) => {
+    const product = store.data.products.find((item) => item.id === String(req.params.id));
+    if (!product) {
+      res.status(404).json({ message: 'product not found' });
+      return;
+    }
+    if (!Buffer.isBuffer(req.body) || req.body.length === 0) {
+      res.status(400).json({ message: 'File gambar kosong atau tidak terbaca.' });
+      return;
+    }
+
+    const contentType = String(req.headers['content-type'] ?? '').split(';')[0];
+    const extension = contentType === 'image/jpeg' ? 'jpg' : contentType === 'image/webp' ? 'webp' : 'png';
+    if (!['image/png', 'image/jpeg', 'image/webp', 'application/octet-stream'].includes(contentType)) {
+      res.status(400).json({ message: 'Format gambar harus PNG, JPG, atau WEBP.' });
+      return;
+    }
+
+    fs.mkdirSync(productAssetDir, { recursive: true });
+    const safeSlug = product.slug.replace(/[^a-z0-9-]/g, '') || product.id;
+    const filename = `${safeSlug}-${Date.now()}.${extension}`;
+    fs.writeFileSync(path.join(productAssetDir, filename), req.body);
+
+    product.logoUrl = `/product-assets/${filename}`;
+    product.updatedAt = new Date().toISOString();
+    store.save();
+
+    res.json({ ok: true, logoUrl: product.logoUrl, message: `Gambar ${product.name} tersimpan.` });
+  }
+);
+
 function maskedSecret(value?: string): string {
   if (!value) return '';
   if (value.length <= 10) return '********';
@@ -1538,6 +1575,7 @@ function sendTrackedHtml(res: express.Response, indexPath: string, productSlug: 
 }
 
 if (shouldServeFrontend) {
+  app.use('/product-assets', express.static(productAssetDir));
   app.use('/landing-imports', express.static(landingImportDir));
   app.use('/landing-imports', express.static(bundledLandingDir));
   app.get('/tools/:slug', (req, res, next) => {
