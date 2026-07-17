@@ -341,6 +341,7 @@ export function createProductRecord(store: Store, input: {
   trackLiveUsers?: boolean;
   fulfillmentType?: ProductFulfillmentType;
   downloadSourceUrl?: string;
+  installerUrl?: string;
   active?: boolean;
   featured?: boolean;
   headline?: string;
@@ -432,6 +433,7 @@ export function updateProductRecord(store: Store, productId: string, input: Part
   trackLiveUsers: boolean;
   fulfillmentType: ProductFulfillmentType;
   downloadSourceUrl: string;
+  installerUrl: string;
   active: boolean;
   featured: boolean;
   headline: string;

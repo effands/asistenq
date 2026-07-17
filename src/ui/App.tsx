@@ -983,6 +983,7 @@ function AdminPanel({
     trackLiveUsers?: boolean;
     fulfillmentType?: ProductFulfillmentType;
     downloadSourceUrl?: string;
+    installerUrl?: string;
     ctaLabel?: string;
     accessRequirement?: string;
     headline: string;
@@ -2258,6 +2259,7 @@ function ProductForm({ onCreateProduct }: {
     trackLiveUsers?: boolean;
     fulfillmentType?: ProductFulfillmentType;
     downloadSourceUrl?: string;
+    installerUrl?: string;
     ctaLabel?: string;
     accessRequirement?: string;
     headline: string;
@@ -2284,6 +2286,7 @@ function ProductForm({ onCreateProduct }: {
   const [trackLiveUsers, setTrackLiveUsers] = useState(true);
   const [fulfillmentType, setFulfillmentType] = useState<ProductFulfillmentType>('license');
   const [downloadSourceUrl, setDownloadSourceUrl] = useState('');
+  const [installerUrl, setInstallerUrl] = useState('');
   const [ctaLabel, setCtaLabel] = useState('Daftar jadi member');
   const [accessRequirement, setAccessRequirement] = useState('Daftar jadi member untuk membuka akses.');
   const [headline, setHeadline] = useState('Bantu produksi video lebih cepat.');
@@ -2345,6 +2348,7 @@ function ProductForm({ onCreateProduct }: {
           openMode,
           trackLiveUsers: destinationType === 'external' ? false : trackLiveUsers,
           ...buildProductFulfillmentPatch(fulfillmentType, downloadSourceUrl),
+          installerUrl: installerUrl.trim() || undefined,
           ctaLabel: ctaLabel.trim() || undefined,
           accessRequirement: accessRequirement.trim() || undefined,
           headline,
@@ -2411,6 +2415,7 @@ function ProductForm({ onCreateProduct }: {
         <div className="product-form-grid two">
           <label>Jenis pemenuhan<select value={fulfillmentType} onChange={(event) => setFulfillmentType(event.target.value as ProductFulfillmentType)}><option value="license">Lisensi software</option><option value="download">Download digital</option></select></label>
           {fulfillmentType === 'download' && <label>URL sumber HTTPS<input required value={downloadSourceUrl} onChange={(event) => setDownloadSourceUrl(event.target.value)} type="url" placeholder="https://files.example.com/produk.zip" /></label>}
+          <label>Link installer publik (opsional)<input value={installerUrl} onChange={(event) => setInstallerUrl(event.target.value)} type="url" placeholder="https://drive.google.com/... atau https://.../setup.exe" /><small>Bisa diakses semua pengunjung melalui menu Download, termasuk sebelum membeli.</small></label>
         </div>
       </div>
       <details className="product-advanced">
@@ -2556,7 +2561,8 @@ function ProductTable({ products, onUpdateProduct, onDeleteProduct, onImportLand
       description: product.description,
       accessUrl: product.accessUrl,
       fulfillmentType: product.fulfillmentType ?? 'license',
-      downloadSourceUrl: ''
+      downloadSourceUrl: '',
+      installerUrl: ''
       ,marketplaceAccent: product.marketplaceAccent ?? '#075e4c'
       ,cardDescription: product.cardDescription ?? ''
       ,tags: product.tags ?? []
@@ -2624,8 +2630,10 @@ function ProductTable({ products, onUpdateProduct, onDeleteProduct, onImportLand
                   <input value={draft.ctaLabel ?? ''} onChange={(event) => setDraft({ ...draft, ctaLabel: event.target.value })} placeholder="CTA" />
                   <select value={draft.fulfillmentType ?? 'license'} onChange={(event) => setDraft({ ...draft, fulfillmentType: event.target.value as ProductFulfillmentType, downloadSourceUrl: '' })}><option value="license">Lisensi software</option><option value="download">Download digital</option><option value="url">Link URL</option><option value="course">Akses kelas</option></select>
                   {draft.fulfillmentType === 'download' && <input value={draft.downloadSourceUrl ?? ''} onChange={(event) => setDraft({ ...draft, downloadSourceUrl: event.target.value })} placeholder="URL HTTPS baru (kosong = pertahankan)" type="url" />}
+                  <input value={draft.installerUrl ?? ''} onChange={(event) => setDraft({ ...draft, installerUrl: event.target.value })} placeholder="Link installer publik baru (kosong = pertahankan)" type="url" />
                 </div>
                 {product.fulfillmentType === 'download' && product.downloadSourceConfigured && <p className="form-notice">File atau URL sumber digital sudah tersimpan (path privat disembunyikan).</p>}
+                {product.installerConfigured && <p className="form-notice">Link installer publik sudah tersimpan. Isi link baru hanya jika ingin menggantinya.</p>}
                 <textarea value={draft.headline ?? ''} onChange={(event) => setDraft({ ...draft, headline: event.target.value })} placeholder="Headline" />
                 <textarea value={draft.description ?? ''} onChange={(event) => setDraft({ ...draft, description: event.target.value })} placeholder="Deskripsi" />
                 <textarea value={draft.accessRequirement ?? ''} onChange={(event) => setDraft({ ...draft, accessRequirement: event.target.value })} placeholder="Syarat akses" />
@@ -2664,6 +2672,7 @@ function ProductTable({ products, onUpdateProduct, onDeleteProduct, onImportLand
                         ...draft,
                         ...fulfillmentPatch,
                         downloadSourceUrl: 'downloadSourceUrl' in fulfillmentPatch ? fulfillmentPatch.downloadSourceUrl : undefined,
+                        installerUrl: draft.installerUrl?.trim() || undefined,
                         discountLabel: draft.discountLabel?.trim() || undefined,
                         promoText: draft.promoText?.trim() || undefined,
                         logoUrl: draft.logoUrl?.trim() || undefined,
@@ -3180,6 +3189,7 @@ function MemberPanel({ session, products, dashboard, orders, onRegister, onLogin
     ...orders.filter((order) => order.status === 'paid').map((order) => order.productId)
   ]);
   const ownedProducts = paidProducts.filter((product) => ownedProductIds.has(product.id));
+  const installerProducts = paidProducts.filter((product) => product.installerConfigured);
   const pendingOrders = orders.filter((order) => order.status === 'pending').length;
   const filteredLicenses = ownedLicenses.filter((license) => {
     const matchesStatus = licenseStatusFilter === 'all' || license.status === licenseStatusFilter;
@@ -3315,14 +3325,15 @@ function MemberPanel({ session, products, dashboard, orders, onRegister, onLogin
                     <b>Aktif di akunmu</b>
                     <div className="member-product-actions">
                       <button className="ghost-button" type="button" onClick={() => {
-                        if (product.downloadSourceConfigured) window.location.href = `/api/member/products/${product.id}/download`;
+                        if (product.fulfillmentType === 'license') setActiveMemberTab('licenses');
+                        else if (product.downloadSourceConfigured) window.location.href = `/api/member/products/${product.id}/download`;
                         else if (product.accessUrl) window.location.href = product.accessUrl;
                         else {
                           window.history.pushState({}, '', product.landingPath ?? `/produk/${product.slug}`);
                           window.dispatchEvent(new PopStateEvent('popstate'));
                         }
                       }}>
-                        {product.courseMaterials?.length ? 'Buka Materi' : product.downloadSourceConfigured ? 'Download' : 'Buka Produk'} <ArrowRight size={15} />
+                        {product.fulfillmentType === 'license' ? 'Kelola Lisensi' : product.courseMaterials?.length ? 'Buka Materi' : product.downloadSourceConfigured ? 'Download' : 'Buka Produk'} <ArrowRight size={15} />
                       </button>
                     </div>
                   </div>
@@ -3488,7 +3499,8 @@ function MemberPanel({ session, products, dashboard, orders, onRegister, onLogin
         {activeMemberTab === 'download' && (
           <div className="panel stack member-download-panel">
             <p className="section-kicker">Download Center</p><h2>Download Aplikasi</h2><p className="muted">Aplikasi dapat diunduh sebelum membeli lisensi agar Anda bisa melihat HWID perangkat terlebih dahulu.</p>
-            <article className="download-tool-card"><div><Download /><span><strong>VJ Studio Pro</strong><small>Windows 10/11 · 64-bit</small></span></div><p>Download aplikasi, jalankan di komputer yang akan digunakan, lalu salin HWID yang tampil pada halaman aktivasi.</p><a className="primary" href="/api/downloads/vjstudio" target="_blank" rel="noreferrer"><Download /> Download VJ Studio</a></article>
+            {installerProducts.length === 0 && <div className="empty-state">Link download belum disiapkan oleh admin.</div>}
+            {installerProducts.map((product) => <article className="download-tool-card" key={product.id}><div><Download /><span><strong>{product.name}</strong><small>Installer aplikasi</small></span></div><p>Download aplikasi, jalankan di komputer yang akan digunakan, lalu salin HWID yang tampil pada halaman aktivasi.</p><a className="primary" href={`/api/downloads/${product.slug}`} target="_blank" rel="noreferrer"><Download /> Download {product.name}</a></article>)}
             <div className="download-steps"><span><b>1</b>Download dan ekstrak aplikasi.</span><span><b>2</b>Jalankan VJ Studio di perangkat tujuan.</span><span><b>3</b>Salin 16 karakter HWID yang tampil.</span><span><b>4</b>Lanjutkan pembelian tanpa memasukkan HWID saat checkout.</span></div>
           </div>
         )}

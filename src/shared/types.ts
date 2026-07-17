@@ -98,6 +98,7 @@ export interface Product {
   openMode?: ProductOpenMode;
   fulfillmentType?: ProductFulfillmentType;
   downloadSourceUrl?: string;
+  installerUrl?: string;
   marketplaceCoverUrl?: string;
   marketplaceAccent?: string;
   cardDescription?: string;

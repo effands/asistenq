@@ -203,6 +203,7 @@ const productSchema = z.object({
   trackLiveUsers: z.boolean().optional(),
   fulfillmentType: z.enum(['license', 'download', 'url', 'course']).optional(),
   downloadSourceUrl: z.string().url().refine((value) => value.startsWith('https://'), 'URL download harus HTTPS.').optional(),
+  installerUrl: z.string().url().refine((value) => value.startsWith('https://'), 'URL installer harus HTTPS.').optional(),
   headline: z.string().optional(),
   description: z.string().optional(),
   coverUrl: z.string().optional(),
@@ -339,10 +340,11 @@ function publicProduct(product: typeof store.data.products[number]) {
   const discountPercent = product.compareAtPrice && product.compareAtPrice > product.price
     ? Math.round((1 - product.price / product.compareAtPrice) * 100)
     : 0;
-  const { downloadSourceUrl: _privateDownloadSource, ...safeProduct } = product;
+  const { downloadSourceUrl: _privateDownloadSource, installerUrl: _installerUrl, ...safeProduct } = product;
   return {
     ...safeProduct,
     downloadSourceConfigured: Boolean(_privateDownloadSource),
+    installerConfigured: Boolean(_installerUrl),
     destinationType: product.destinationType ?? 'internal',
     openMode: product.openMode ?? (product.destinationType === 'external' ? 'new_tab' : 'same_tab'),
     trackLiveUsers: product.trackLiveUsers ?? product.destinationType !== 'external',
@@ -1275,8 +1277,13 @@ app.get('/api/profile-avatar/:memberFolder/:fileName', (req, res) => {
   res.sendFile(path.join(productMediaRoot, memberFolder, fileName), (error) => { if (error && !res.headersSent) res.status(404).end(); });
 });
 
-app.get('/api/downloads/vjstudio', (_req, res) => {
-  res.redirect('https://drive.google.com/drive/folders/1MeZbmNSC0HoIFsYaOKmCZ1AWG-751Jsm?usp=sharing');
+app.get('/api/downloads/:slug', (req, res) => {
+  const product = store.data.products.find((item) => item.slug === req.params.slug && item.active && item.visibility === 'public');
+  if (!product?.installerUrl) {
+    res.status(404).send('link download belum diatur oleh admin');
+    return;
+  }
+  res.redirect(product.installerUrl);
 });
 
 app.put('/api/admin/products/:id', requireSession, requireAdminScope('products'), (req, res) => {

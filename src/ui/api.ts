@@ -78,6 +78,7 @@ export type PublicProduct = Product & {
   discountPercent: number;
   plans?: ProductPlan[];
   downloadSourceConfigured?: boolean;
+  installerConfigured?: boolean;
   analytics?: ToolAnalyticsRow;
   landingConfig?: LandingConfig;
 };

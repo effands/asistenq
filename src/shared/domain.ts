@@ -40,6 +40,7 @@ type ProductInput = {
   trackLiveUsers?: boolean;
   fulfillmentType?: ProductFulfillmentType;
   downloadSourceUrl?: string;
+  installerUrl?: string;
   active?: boolean;
   featured?: boolean;
   headline?: string;
@@ -101,6 +102,7 @@ export function createProduct(input: ProductInput): Product {
     openMode: input.openMode ?? (destinationType === 'external' ? 'new_tab' : 'same_tab'),
     fulfillmentType: input.fulfillmentType,
     downloadSourceUrl: input.downloadSourceUrl,
+    installerUrl: input.installerUrl,
     trackLiveUsers: input.trackLiveUsers ?? destinationType !== 'external',
     active: input.active ?? true,
     featured: input.featured ?? false,

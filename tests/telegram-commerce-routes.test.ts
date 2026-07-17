@@ -43,6 +43,19 @@ beforeEach(() => {
 });
 
 describe('Telegram commerce API boundaries', () => {
+  it('redirects a public installer download from the admin-configured product link', async () => {
+    store.data.products.push({
+      id: 'installer-product', name: 'VJ Studio Pro', slug: 'vjstudio', type: 'tool',
+      visibility: 'public', fulfillmentType: 'license', installerUrl: 'https://downloads.example.com/vjstudio.exe',
+      billingPeriod: 'monthly', price: 49900, active: true, headline: '', description: '', coverUrl: '', accessUrl: '',
+      createdAt: '', updatedAt: ''
+    });
+
+    const response = await request(app).get('/api/downloads/vjstudio');
+
+    expect(response.status).toBe(302);
+    expect(response.headers.location).toBe('https://downloads.example.com/vjstudio.exe');
+  });
   it('creates one authenticated invoice for multiple cart items', async () => {
     await seedInitialData(store);
     store.data.products.push({ id: 'extra', name: 'Extra', slug: 'extra', type: 'tool', visibility: 'public', fulfillmentType: 'license', billingPeriod: 'one_time', price: 10000, active: true, headline: '', description: '', coverUrl: '', accessUrl: '', createdAt: '', updatedAt: '' });
