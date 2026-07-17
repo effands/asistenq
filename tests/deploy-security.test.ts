@@ -36,7 +36,7 @@ describe('deployment security helpers', () => {
 });
 
 it('autostashes server-only edits during deployment pulls', () => {
-  expect(deploymentPullArgs('origin', 'master')).toEqual(['pull', '--autostash', 'origin', 'master']);
+    expect(deploymentPullArgs('origin', 'master')).toEqual(['pull', '--no-rebase', '--autostash', 'origin', 'master']);
 });
 
   it('runs an explicit low-level audit after installing dependencies', () => {
