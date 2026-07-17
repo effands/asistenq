@@ -822,6 +822,18 @@ export function markOrderPaid(store: Store, orderId: string, paidAt = new Date()
     throw new Error('product not found');
   }
 
+  if (order.status === 'paid') {
+    const subscription = store.data.subscriptions.find((item) => (
+      item.memberId === order.memberId && item.productId === order.productId
+    ));
+    if (!subscription) throw new Error('paid order subscription not found');
+    return { order, subscription };
+  }
+
+  if (order.status !== 'pending') {
+    throw new Error(`order ${order.status} cannot be marked paid`);
+  }
+
   order.status = 'paid';
   order.paidAt = paidAt.toISOString();
 

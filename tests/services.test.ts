@@ -188,6 +188,33 @@ describe('server services', () => {
     expect(store.data.subscriptions).toHaveLength(1);
   });
 
+  it('keeps manual payment verification idempotent', async () => {
+    const member = await createMember(store, { name: 'Buyer', email: 'idempotent@asistenq.com', password: 'secret123' });
+    const product = createProductRecord(store, {
+      name: 'Course', slug: 'course-idempotent', type: 'course', billingPeriod: 'annual', price: 799000
+    });
+    const order = await createCheckout(store, member.id, product.id);
+
+    const first = markOrderPaid(store, order.id, new Date('2026-06-28T00:00:00.000Z'));
+    const second = markOrderPaid(store, order.id, new Date('2026-06-28T01:00:00.000Z'));
+
+    expect(second.subscription.id).toBe(first.subscription.id);
+    expect(store.data.subscriptions).toHaveLength(1);
+    expect(second.order.paidAt).toBe('2026-06-28T00:00:00.000Z');
+  });
+
+  it('rejects manual verification for an expired order', async () => {
+    const member = await createMember(store, { name: 'Buyer', email: 'expired@asistenq.com', password: 'secret123' });
+    const product = createProductRecord(store, {
+      name: 'Expired Course', slug: 'expired-course', type: 'course', billingPeriod: 'annual', price: 799000
+    });
+    const order = await createCheckout(store, member.id, product.id, new Date('2026-06-28T00:00:00.000Z'));
+    expirePendingOrders(store, new Date('2026-06-29T00:00:01.000Z'));
+
+    expect(() => markOrderPaid(store, order.id)).toThrow('expired');
+    expect(store.data.subscriptions).toHaveLength(0);
+  });
+
   it('generates a license from a paid invoice and HWID', async () => {
     const member = await createMember(store, { name: 'Buyer', email: 'buyer@asistenq.com', password: 'secret123' });
     const product = createProductRecord(store, {

@@ -23,7 +23,6 @@ import {
   createProductRecord,
   generateToolLicense,
   generateLicenseForPaidOrder,
-  handleDanaSandboxFinishNotify,
   listPendingOrders,
   markOrderPaid,
   markOrderPaidByInvoice,
@@ -44,6 +43,7 @@ import {
 import { createFileStore } from './store';
 import { sendMail } from './mailer';
 import { analyticsOverview, heartbeatPresence, recordAnalyticsEvent } from './analytics';
+import { validateStaticQrisPayload } from './qris';
 
 const app = express();
 const store = createFileStore();
@@ -239,12 +239,7 @@ const deploymentSettingsSchema = z.object({
   smtpUser: z.string().optional(),
   smtpPass: z.string().optional(),
   mailFrom: z.string().optional(),
-  danaSandboxApiUrl: z.string().optional(),
-  danaMerchantId: z.string().optional(),
-  danaClientId: z.string().optional(),
-  danaClientSecret: z.string().optional(),
-  danaPublicKey: z.string().optional(),
-  danaPrivateKey: z.string().optional()
+  qrisStaticPayload: z.string().optional()
 });
 
 function publicProduct(product: typeof store.data.products[number]) {
@@ -1108,8 +1103,6 @@ app.get('/api/admin/deploy/settings', requireSession, requireAdminScope('product
   const token = settings.githubToken ?? process.env.GITHUB_TOKEN ?? '';
   const telegramToken = settings.telegramBotToken ?? process.env.TELEGRAM_BOT_TOKEN ?? '';
   const smtpPass = settings.smtpPass ?? process.env.SMTP_PASS ?? '';
-  const danaClientSecret = settings.danaClientSecret ?? '';
-  const danaPrivateKey = settings.danaPrivateKey ?? '';
   const botStatus = getTelegramBotStatus(store);
   res.json({
     githubRepo: settings.githubRepo ?? 'effands/asistenq',
@@ -1125,14 +1118,7 @@ app.get('/api/admin/deploy/settings', requireSession, requireAdminScope('product
     hasSmtpPass: Boolean(smtpPass),
     maskedSmtpPass: maskedSecret(smtpPass),
     mailFrom: settings.mailFrom ?? process.env.MAIL_FROM ?? 'AsistenQ <cs@asistenq.com>',
-    danaSandboxApiUrl: settings.danaSandboxApiUrl ?? 'https://api.sandbox.dana.id',
-    danaMerchantId: settings.danaMerchantId ?? '',
-    danaClientId: settings.danaClientId ?? '',
-    hasDanaClientSecret: Boolean(danaClientSecret),
-    maskedDanaClientSecret: maskedSecret(danaClientSecret),
-    danaPublicKey: settings.danaPublicKey ?? '',
-    hasDanaPrivateKey: Boolean(danaPrivateKey),
-    maskedDanaPrivateKey: maskedSecret(danaPrivateKey),
+    qrisStaticPayload: settings.qrisStaticPayload ?? '',
     botStatus,
     updatedAt: settings.updatedAt
   });
@@ -1156,33 +1142,17 @@ app.post('/api/admin/deploy/settings', requireSession, requireAdminScope('produc
   const nextSmtpPort = body.smtpPort?.trim() || current.smtpPort || process.env.SMTP_PORT || '465';
   const nextSmtpUser = body.smtpUser?.trim() || current.smtpUser || process.env.SMTP_USER || 'cs@asistenq.com';
   const nextMailFrom = body.mailFrom?.trim() || current.mailFrom || process.env.MAIL_FROM || 'AsistenQ <cs@asistenq.com>';
-  const nextDanaSandboxApiUrl = body.danaSandboxApiUrl?.trim() || current.danaSandboxApiUrl || 'https://api.sandbox.dana.id';
-  const nextDanaMerchantId = body.danaMerchantId?.trim() || current.danaMerchantId || '';
-  const nextDanaClientId = body.danaClientId?.trim() || current.danaClientId || '';
-  const nextDanaClientSecret = body.danaClientSecret?.trim() || current.danaClientSecret || '';
-  const nextDanaPublicKey = body.danaPublicKey?.trim() || current.danaPublicKey || '';
-  const nextDanaPrivateKey = body.danaPrivateKey?.trim() || current.danaPrivateKey || '';
   const isSmtpSave = Boolean(body.smtpHost || body.smtpPort || body.smtpUser || body.mailFrom || body.smtpPass !== undefined);
-  const isDanaSave = Boolean(
-    body.danaSandboxApiUrl ||
-    body.danaMerchantId ||
-    body.danaClientId ||
-    body.danaClientSecret !== undefined ||
-    body.danaPublicKey ||
-    body.danaPrivateKey !== undefined
-  );
 
   if (isSmtpSave && !nextSmtpPass) {
     res.status(400).json({ message: 'Password SMTP belum tersimpan. Isi kolom SMTP Password lalu klik Simpan SMTP lagi.' });
     return;
   }
 
-  if (isDanaSave && (!nextDanaMerchantId || !nextDanaClientId || !nextDanaClientSecret || !nextDanaPublicKey || !nextDanaPrivateKey)) {
-    res.status(400).json({ message: 'Credential DANA sandbox belum lengkap. Isi Merchant ID, Client ID, Client Secret, Public Key, dan Private Key.' });
-    return;
-  }
-
   try {
+    const nextQrisStaticPayload = body.qrisStaticPayload === undefined
+      ? current.qrisStaticPayload ?? ''
+      : validateStaticQrisPayload(body.qrisStaticPayload);
     const deploySettings = parseDeploymentSettings(body);
     store.data.deploymentSettings = {
       githubRepo: deploySettings.githubRepo,
@@ -1196,12 +1166,7 @@ app.post('/api/admin/deploy/settings', requireSession, requireAdminScope('produc
       smtpUser: nextSmtpUser,
       smtpPass: nextSmtpPass,
       mailFrom: nextMailFrom,
-      danaSandboxApiUrl: nextDanaSandboxApiUrl,
-      danaMerchantId: nextDanaMerchantId,
-      danaClientId: nextDanaClientId,
-      danaClientSecret: nextDanaClientSecret,
-      danaPublicKey: nextDanaPublicKey,
-      danaPrivateKey: nextDanaPrivateKey,
+      qrisStaticPayload: nextQrisStaticPayload,
       updatedAt: new Date().toISOString()
     };
     store.save();
@@ -1223,14 +1188,7 @@ app.post('/api/admin/deploy/settings', requireSession, requireAdminScope('produc
       hasSmtpPass: Boolean(nextSmtpPass),
       maskedSmtpPass: maskedSecret(nextSmtpPass),
       mailFrom: nextMailFrom,
-      danaSandboxApiUrl: nextDanaSandboxApiUrl,
-      danaMerchantId: nextDanaMerchantId,
-      danaClientId: nextDanaClientId,
-      hasDanaClientSecret: Boolean(nextDanaClientSecret),
-      maskedDanaClientSecret: maskedSecret(nextDanaClientSecret),
-      danaPublicKey: nextDanaPublicKey,
-      hasDanaPrivateKey: Boolean(nextDanaPrivateKey),
-      maskedDanaPrivateKey: maskedSecret(nextDanaPrivateKey),
+      qrisStaticPayload: nextQrisStaticPayload,
       botStatus,
       updatedAt: store.data.deploymentSettings.updatedAt
     });
@@ -1393,31 +1351,6 @@ app.post('/api/admin/deploy/update', requireSession, requireAdminScope('products
   }
 });
 
-app.post('/api/payments/dana/finish-notify', (req, res) => {
-  try {
-    const result = handleDanaSandboxFinishNotify(store, req.body, new Date());
-    res.json({
-      responseCode: '2000000',
-      responseMessage: 'Successful',
-      invoiceNumber: result.order.invoiceNumber ?? result.order.id,
-      status: result.order.status
-    });
-  } catch (error) {
-    res.status(400).json({
-      responseCode: '4000001',
-      responseMessage: error instanceof Error ? error.message : 'Failed to process DANA callback.'
-    });
-  }
-});
-
-app.get('/api/payments/dana/redirect', (req, res) => {
-  const invoice = typeof req.query.invoice === 'string' ? req.query.invoice : '';
-  const params = new URLSearchParams();
-  params.set('payment', 'dana');
-  if (invoice) params.set('invoice', invoice);
-  res.redirect(`/member?${params.toString()}`);
-});
-
 app.post('/tools/jadwalinaja/api/youtube/upload-thumbnail', express.raw({ type: '*/*', limit: '15mb' }), async (req, res) => {
   try {
     const videoId = String(req.query.videoId ?? '');
@@ -1572,7 +1505,12 @@ app.get('/api/admin/orders', requireSession, requireAdminScope('orders'), (_req,
 });
 
 app.post('/api/admin/orders/:id/paid', requireSession, requireAdminScope('orders'), (req, res) => {
-  res.json(markOrderPaid(store, String(req.params.id)));
+  try {
+    const result = markOrderPaid(store, String(req.params.id));
+    res.json({ ok: true, order: publicOrder(result.order), subscription: result.subscription });
+  } catch (error) {
+    res.status(400).json({ message: error instanceof Error ? error.message : 'Order gagal diverifikasi.' });
+  }
 });
 
 app.delete('/api/admin/orders/expired', requireSession, requireAdminScope('orders'), (_req, res) => {
@@ -1635,16 +1573,20 @@ app.get('/api/admin/orders/export.xls', requireSession, requireAdminScope('order
   res.send(`<!doctype html><html><head><meta charset="utf-8" /></head><body><table>${tableRows}</table></body></html>`);
 });
 
-app.post('/api/checkout', requireSession, (req, res) => {
+app.post('/api/checkout', requireSession, async (req, res) => {
   if (req.user?.type !== 'member') {
     res.status(403).json({ message: 'member access required' });
     return;
   }
 
-  const body = z.object({ productId: z.string() }).parse(req.body);
-  const order = createCheckout(store, req.user.id, body.productId);
-  void emailInvoice(order.id);
-  res.status(201).json(publicOrder(order));
+  try {
+    const body = z.object({ productId: z.string() }).parse(req.body);
+    const order = await createCheckout(store, req.user.id, body.productId);
+    void emailInvoice(order.id);
+    res.status(201).json(publicOrder(order));
+  } catch (error) {
+    res.status(400).json({ message: error instanceof Error ? error.message : 'Checkout gagal dibuat.' });
+  }
 });
 
 app.get('/api/member/orders', requireSession, (req, res) => {
