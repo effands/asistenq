@@ -15,7 +15,6 @@
     "reset:local-admin": "tsx src/server/scripts/reset-local-admin.ts"
   },
   "dependencies": {
-    "@google/genai": "^2.10.0",
     "adm-zip": "^0.5.17",
     "bcryptjs": "^2.4.3",
     "cors": "^2.8.5",

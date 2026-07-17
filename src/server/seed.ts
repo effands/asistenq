@@ -38,6 +38,26 @@ function ensureProduct(store: Store, input: SeedProduct): Product {
 }
 
 export async function seedInitialData(store: Store): Promise<void> {
+  const retiredProductIds = new Set(
+    store.data.products.filter((product) => product.slug === 'jadwalinaja').map((product) => product.id)
+  );
+  if (retiredProductIds.size > 0) {
+    store.data.products = store.data.products.filter((product) => !retiredProductIds.has(product.id));
+    store.data.plans = store.data.plans.filter((item) => !retiredProductIds.has(item.productId));
+    store.data.orders = store.data.orders.filter((item) => !retiredProductIds.has(item.productId));
+    store.data.subscriptions = store.data.subscriptions.filter((item) => !retiredProductIds.has(item.productId));
+    store.data.licenses = store.data.licenses.filter((item) => !retiredProductIds.has(item.productId));
+    store.data.vouchers = store.data.vouchers.filter(
+      (item) => item.productId === null || !retiredProductIds.has(item.productId)
+    );
+    store.data.announcements = store.data.announcements.filter(
+      (item) => item.productId === null || !retiredProductIds.has(item.productId)
+    );
+    store.data.bannedHwids = store.data.bannedHwids.filter((item) => !retiredProductIds.has(item.productId));
+    store.data.toolAnalyticsEvents = store.data.toolAnalyticsEvents.filter((item) => !retiredProductIds.has(item.productId));
+    store.data.auditLogs = store.data.auditLogs.filter((item) => !retiredProductIds.has(item.targetId));
+  }
+
   if (!store.data.admins.some((admin) => admin.role === 'super_admin')) {
     store.data.admins.push({
       id: 'admin_super',
@@ -117,29 +137,6 @@ export async function seedInitialData(store: Store): Promise<void> {
     description: 'MIXIN9 membantu creator merapikan loudness, balance, dan proses mixing audio secara batch tanpa membuka file satu per satu.',
     coverUrl: '',
     accessUrl: '/landing-imports/mixin9/index.html'
-  });
-
-  ensureProduct(store, {
-    name: 'JadwalinAja',
-    slug: 'jadwalinaja',
-    type: 'tool',
-    category: 'YouTube Tools',
-    visibility: 'private',
-    accessMode: 'free_member',
-    billingPeriod: 'one_time',
-    price: 0,
-    discountLabel: 'Member Tool',
-    promoText: 'Tools privat untuk bantu jadwal dan metadata video YouTube.',
-    logoUrl: '',
-    landingPath: '/jadwalinaja',
-    landingTemplate: 'tool-app',
-    ctaLabel: 'Buka JadwalinAja',
-    accessRequirement: 'Login sebagai member untuk membuka JadwalinAja.',
-    featured: false,
-    headline: 'Atur jadwal dan metadata video YouTube lebih rapi.',
-    description: 'Tools member untuk membantu penjadwalan, optimasi metadata, thumbnail, dan workflow upload YouTube.',
-    coverUrl: '',
-    accessUrl: '/jadwalinaja'
   });
 
   ensureProduct(store, {

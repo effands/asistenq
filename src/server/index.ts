@@ -4,7 +4,6 @@ import AdmZip from 'adm-zip';
 import fs from 'node:fs';
 import path from 'node:path';
 import { z } from 'zod';
-import { GoogleGenAI, Type } from '@google/genai';
 import { createId, formatCurrency } from '../shared/domain';
 import { clearSessionCookie, readSession, sessionCookie, signSession, requireAdminScope, requireSession } from './auth';
 import { getTelegramBotStatus, startTelegramBot, stopTelegramBot } from './bot-control';
@@ -64,6 +63,7 @@ const landingImportDir = path.resolve('data/landing-imports');
 const productAssetDir = path.resolve('data/product-assets');
 const bundledLandingDir = path.resolve('landings');
 const bundledToolDir = path.resolve('tools-dist');
+const retiredLandingPaths = new Set(['/jadwalinaja']);
 const ignoredLandingZipPaths = [
   /^node_modules\//,
   /^src\//,
@@ -488,18 +488,6 @@ function sendProductAccessDenied(req: express.Request, res: express.Response, pr
     </main>
   </body>
 </html>`);
-}
-
-let genAiClient: GoogleGenAI | null = null;
-function getGenAiClient() {
-  if (!genAiClient) {
-    const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey) {
-      throw new Error('Konfigurasi AI belum aktif di server.');
-    }
-    genAiClient = new GoogleGenAI({ apiKey, httpOptions: { headers: { 'User-Agent': 'asistenq-tools' } } });
-  }
-  return genAiClient;
 }
 
 app.get('/api/health', (_req, res) => {
@@ -1355,153 +1343,6 @@ app.post('/api/admin/deploy/update', requireSession, requireAdminScope('products
   }
 });
 
-app.post('/tools/jadwalinaja/api/youtube/upload-thumbnail', express.raw({ type: '*/*', limit: '15mb' }), async (req, res) => {
-  try {
-    const videoId = String(req.query.videoId ?? '');
-    const authHeader = req.header('authorization');
-    const contentType = req.header('content-type') || 'image/jpeg';
-
-    if (!videoId) {
-      res.status(400).json({ error: 'videoId wajib diisi.' });
-      return;
-    }
-
-    if (!authHeader) {
-      res.status(401).json({ error: 'Login Google YouTube dibutuhkan.' });
-      return;
-    }
-
-    if (!Buffer.isBuffer(req.body) || req.body.length === 0) {
-      res.status(400).json({ error: 'Gambar thumbnail kosong.' });
-      return;
-    }
-
-    const response = await fetch(`https://www.googleapis.com/upload/youtube/v3/thumbnails/set?videoId=${encodeURIComponent(videoId)}`, {
-      method: 'POST',
-      headers: {
-        Authorization: authHeader,
-        'Content-Type': contentType
-      },
-      body: new Uint8Array(req.body)
-    });
-
-    const responseText = await response.text();
-    if (!response.ok) {
-      res.status(response.status).json({ error: `YouTube menolak upload thumbnail: ${response.status}`, detail: responseText });
-      return;
-    }
-
-    res.json({ success: true, data: responseText });
-  } catch (error) {
-    res.status(500).json({ error: error instanceof Error ? error.message : 'Gagal upload thumbnail.' });
-  }
-});
-
-app.post('/tools/jadwalinaja/api/gemini/generate', async (req, res) => {
-  try {
-    const body = z.object({
-      topic: z.string().min(1),
-      tone: z.string().optional(),
-      count: z.number().optional(),
-      language: z.string().optional(),
-      startNum: z.number().optional(),
-      includeEmojis: z.boolean().optional(),
-      customTags: z.string().optional(),
-      model: z.string().optional(),
-      descriptionInstruction: z.string().optional()
-    }).parse(req.body);
-
-    const videoCount = Math.min(Math.max(Number(body.count) || 1, 1), 50);
-    const startNumber = Number(body.startNum) || 1;
-    const targetLang = body.language || 'Indonesian';
-    const selectedTone = body.tone || 'Casual & Engaging';
-    const emojisPref = body.includeEmojis === undefined ? true : Boolean(body.includeEmojis);
-    const modelToUse = body.model || 'gemini-2.5-flash';
-    const tagInstruction = body.customTags?.trim()
-      ? `Prioritaskan keyword berikut: "${body.customTags.trim()}".`
-      : '';
-    const descPromoInstruction = body.descriptionInstruction?.trim()
-      ? `Tambahkan atau adaptasi instruksi deskripsi berikut: "${body.descriptionInstruction.trim()}".`
-      : '';
-
-    const response = await getGenAiClient().models.generateContent({
-      model: modelToUse,
-      contents: `Buat ${videoCount} draft metadata video YouTube mulai nomor ${startNumber}.
-Topik: "${body.topic}"
-Tone: "${selectedTone}"
-Bahasa: "${targetLang}"
-Emoji: ${emojisPref ? 'boleh 1-2 emoji relevan' : 'tanpa emoji'}
-${tagInstruction}
-${descPromoInstruction}
-
-Untuk setiap item berikan title 85-99 karakter, description 2-5 paragraf, tags 6-10 item, dan isAiGenerated boolean. Output JSON array saja.`,
-      config: {
-        responseMimeType: 'application/json',
-        responseSchema: {
-          type: Type.ARRAY,
-          items: {
-            type: Type.OBJECT,
-            properties: {
-              title: { type: Type.STRING },
-              description: { type: Type.STRING },
-              tags: { type: Type.ARRAY, items: { type: Type.STRING } },
-              isAiGenerated: { type: Type.BOOLEAN }
-            },
-            required: ['title', 'description', 'tags', 'isAiGenerated']
-          }
-        }
-      }
-    });
-
-    res.json({ videos: JSON.parse((response.text || '[]').trim().replace(/^```json\s*/i, '').replace(/```$/i, '').trim() || '[]') });
-  } catch (error) {
-    res.status(500).json({ error: error instanceof Error ? error.message : 'Gagal generate metadata.' });
-  }
-});
-
-app.post('/tools/jadwalinaja/api/gemini/optimize-single', async (req, res) => {
-  try {
-    const body = z.object({
-      title: z.string().optional(),
-      description: z.string().optional(),
-      tags: z.array(z.string()).optional(),
-      isAiGenerated: z.boolean().optional(),
-      instruction: z.string().optional(),
-      language: z.string().optional(),
-      model: z.string().optional()
-    }).parse(req.body);
-    const targetLang = body.language || 'Indonesian';
-
-    const response = await getGenAiClient().models.generateContent({
-      model: body.model || 'gemini-2.5-flash',
-      contents: `Optimasi metadata video YouTube berikut dalam bahasa ${targetLang}.
-Judul: "${body.title || ''}"
-Deskripsi: "${body.description || ''}"
-Tags: ${JSON.stringify(body.tags || [])}
-Flag konten AI: ${body.isAiGenerated ? 'ya' : 'tidak'}
-Instruksi: "${body.instruction || 'Buat judul menarik, deskripsi SEO lengkap, dan tag relevan.'}"
-Output JSON object dengan title, description, tags, isAiGenerated.`,
-      config: {
-        responseMimeType: 'application/json',
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            title: { type: Type.STRING },
-            description: { type: Type.STRING },
-            tags: { type: Type.ARRAY, items: { type: Type.STRING } },
-            isAiGenerated: { type: Type.BOOLEAN }
-          },
-          required: ['title', 'description', 'tags', 'isAiGenerated']
-        }
-      }
-    });
-
-    res.json({ video: JSON.parse((response.text || '{}').trim().replace(/^```json\s*/i, '').replace(/```$/i, '').trim() || '{}') });
-  } catch (error) {
-    res.status(500).json({ error: error instanceof Error ? error.message : 'Gagal optimasi metadata.' });
-  }
-});
-
 app.get('/api/admin/orders', requireSession, requireAdminScope('orders'), (_req, res) => {
   expirePendingOrders(store);
   void sendPendingOrderReminders();
@@ -1689,6 +1530,19 @@ if (shouldServeFrontend) {
   app.use('/product-assets', express.static(productAssetDir));
   app.use('/landing-imports', express.static(landingImportDir));
   app.use('/landing-imports', express.static(bundledLandingDir));
+  app.use((req, res, next) => {
+    if (retiredLandingPaths.has(req.path)) {
+      res.status(404).type('text/plain').send('Not Found');
+      return;
+    }
+    for (const retiredPath of retiredLandingPaths) {
+      if (req.path.startsWith(`${retiredPath}/`) || req.path === `/tools${retiredPath}` || req.path.startsWith(`/tools${retiredPath}/`)) {
+        res.status(404).type('text/plain').send('Not Found');
+        return;
+      }
+    }
+    next();
+  });
   app.get('/tools/:slug', (req, res, next) => {
     const product = store.data.products.find((item) => item.slug === req.params.slug);
     if (product && !canOpenProduct(req, product)) {
