@@ -464,6 +464,29 @@ export function createPlanRecord(store: Store, input: {
 export const invoiceLifetimeHours = 24;
 export const invoiceReminderHours = 3;
 
+type CheckoutOptions = {
+  planId?: string;
+  price?: number;
+  telegramId?: string;
+  lifetimeMinutes?: number;
+  reusePending?: boolean;
+};
+
+const checkoutQueues = new WeakMap<Store, Promise<void>>();
+
+async function serializeCheckout<T>(store: Store, operation: () => Promise<T>): Promise<T> {
+  const previous = checkoutQueues.get(store) ?? Promise.resolve();
+  const result = previous.then(operation);
+  const tail = result.then(() => undefined, () => undefined);
+  checkoutQueues.set(store, tail);
+
+  try {
+    return await result;
+  } finally {
+    if (checkoutQueues.get(store) === tail) checkoutQueues.delete(store);
+  }
+}
+
 function allocateUniquePaymentCode(store: Store, now: Date): number {
   const usedCodes = new Set(store.data.orders
     .filter((order) => {
@@ -489,7 +512,17 @@ export async function createCheckout(
   memberId: string,
   productId: string,
   now = new Date(),
-  options: { planId?: string; price?: number; telegramId?: string; lifetimeMinutes?: number } = {}
+  options: CheckoutOptions = {}
+): Promise<Order> {
+  return serializeCheckout(store, () => createCheckoutLocked(store, memberId, productId, now, options));
+}
+
+async function createCheckoutLocked(
+  store: Store,
+  memberId: string,
+  productId: string,
+  now: Date,
+  options: CheckoutOptions
 ): Promise<Order> {
   const member = store.data.members.find((item) => item.id === memberId);
   const product = store.data.products.find((item) => item.id === productId && item.active);
@@ -500,6 +533,18 @@ export async function createCheckout(
 
   if (!product) {
     throw new Error('product not found');
+  }
+
+  if (options.reusePending) {
+    expirePendingOrders(store, now);
+    const reusable = store.data.orders.find((order) => (
+      order.memberId === memberId &&
+      order.productId === productId &&
+      order.planId === options.planId &&
+      order.status === 'pending' &&
+      Boolean(order.expiresAt && new Date(order.expiresAt) > now)
+    ));
+    if (reusable) return reusable;
   }
 
   const amount = options.price ?? product.price;

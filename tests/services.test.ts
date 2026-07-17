@@ -225,6 +225,28 @@ describe('server services', () => {
     expect(store.data.orders).toHaveLength(900);
   });
 
+  it('serializes direct concurrent checkouts with distinct invoices and payment codes', async () => {
+    const member = await createMember(store, { name: 'Buyer', email: 'direct-parallel@asistenq.com', password: 'secret123' });
+    const product = createProductRecord(store, {
+      name: 'Direct Product', slug: 'direct-product', type: 'tool', billingPeriod: 'monthly', price: 99000
+    });
+    const random = vi.spyOn(Math, 'random').mockReturnValue(0);
+
+    try {
+      const [first, second] = await Promise.all([
+        createCheckout(store, member.id, product.id, new Date('2026-07-17T08:00:00.000Z')),
+        createCheckout(store, member.id, product.id, new Date('2026-07-17T08:00:00.000Z'))
+      ]);
+
+      expect(first.invoiceNumber).not.toBe(second.invoiceNumber);
+      expect(first.uniqueCode).toBe(100);
+      expect(second.uniqueCode).toBe(101);
+      expect(store.data.orders).toHaveLength(2);
+    } finally {
+      random.mockRestore();
+    }
+  });
+
   it('lists pending orders and marks an invoice paid for Telegram approval', async () => {
     const member = await createMember(store, { name: 'Buyer', email: 'buyer@asistenq.com', password: 'secret123' });
     const product = createProductRecord(store, {
