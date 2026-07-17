@@ -95,7 +95,7 @@ describe('Telegram commerce API boundaries', () => {
     fs.writeFileSync(path.join(paymentProofDirectory, names[1]), Buffer.from('test'));
     store.data.orders.push({
       id: `order-cleanup-${suffix}`, memberId: 'member-buyer-1', productId: 'product-x',
-      amount: 1, totalAmount: 1, status: 'pending', createdAt: new Date().toISOString(),
+      amount: 1, totalAmount: 1, status: 'pending', qrisPayload: '', createdAt: new Date().toISOString(),
       paymentProofFileId: names[0], paymentProofStatus: 'submitted', paymentProofSubmittedAt: new Date().toISOString()
     });
     const existingOrderCount = store.data.orders.length;

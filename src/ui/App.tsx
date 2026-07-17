@@ -26,6 +26,7 @@ import {
 } from 'lucide-react';
 import { useEffect, useState, type ReactNode } from 'react';
 import type { BillingPeriod, ProductAccessMode, ProductDestinationType, ProductFulfillmentType, ProductOpenMode, ProductType, ProductVisibility } from '../shared/types';
+import { paymentProofCleanupMessage, type PaymentProofCleanupResult } from './payment-proof-cleanup';
 import { buildProductFulfillmentPatch } from './product-form';
 import {
   apiRequest,
@@ -382,6 +383,26 @@ export function App() {
             await loadAdminLicenses(adminSession.token);
             await loadAdminSummary(adminSession.token);
             setMessage(result.message);
+          }}
+          onClearPaymentProofs={async () => {
+            if (!adminSession) throw new Error('Login admin dulu.');
+            const result = await apiRequest<PaymentProofCleanupResult>('/admin/payment-proofs', {
+              token: adminSession.token,
+              method: 'DELETE'
+            });
+            await loadAdminOrders(adminSession.token);
+            setMessage(paymentProofCleanupMessage(result));
+            return result;
+          }}
+          onDeletePaymentProof={async (orderId) => {
+            if (!adminSession) throw new Error('Login admin dulu.');
+            const result = await apiRequest<PaymentProofCleanupResult>(`/admin/orders/${orderId}/payment-proof`, {
+              token: adminSession.token,
+              method: 'DELETE'
+            });
+            await loadAdminOrders(adminSession.token);
+            setMessage(paymentProofCleanupMessage(result));
+            return result;
           }}
           onMarkOrderPaid={async (orderId) => {
             if (!adminSession) throw new Error('Login admin dulu.');
@@ -792,6 +813,8 @@ function AdminPanel({
   onRefreshLicenses,
   onRefreshMembers,
   onClearExpiredOrders,
+  onClearPaymentProofs,
+  onDeletePaymentProof,
   onMarkOrderPaid,
   onExportOrders,
   onUpdateMember,
@@ -858,6 +881,8 @@ function AdminPanel({
   onRefreshLicenses: () => Promise<void>;
   onRefreshMembers: () => Promise<void>;
   onClearExpiredOrders: () => Promise<void>;
+  onClearPaymentProofs: () => Promise<PaymentProofCleanupResult>;
+  onDeletePaymentProof: (orderId: string) => Promise<PaymentProofCleanupResult>;
   onMarkOrderPaid: (orderId: string) => Promise<void>;
   onExportOrders: () => Promise<void>;
   onUpdateMember: (id: string, input: any) => Promise<void>;
@@ -920,7 +945,7 @@ function AdminPanel({
   }
 
   if (activeSection === 'orders') {
-    return <AdminOrderPanel onClearExpired={onClearExpiredOrders} onExportOrders={onExportOrders} onMarkPaid={onMarkOrderPaid} orders={orders} />;
+    return <AdminOrderPanel onClearExpired={onClearExpiredOrders} onClearPaymentProofs={onClearPaymentProofs} onDeletePaymentProof={onDeletePaymentProof} onExportOrders={onExportOrders} onMarkPaid={onMarkOrderPaid} orders={orders} />;
   }
 
   if (activeSection === 'members') {
@@ -1030,24 +1055,26 @@ function formatRemaining(value?: string | null) {
   return hours > 0 ? `${hours}j ${minutes}m` : `${minutes}m`;
 }
 
-function AdminOrderPanel({ orders, onClearExpired, onExportOrders, onMarkPaid }: {
+function AdminOrderPanel({ orders, onClearExpired, onClearPaymentProofs, onDeletePaymentProof, onExportOrders, onMarkPaid }: {
   orders: PublicOrder[];
   onClearExpired: () => Promise<void>;
+  onClearPaymentProofs: () => Promise<PaymentProofCleanupResult>;
+  onDeletePaymentProof: (orderId: string) => Promise<PaymentProofCleanupResult>;
   onExportOrders: () => Promise<void>;
   onMarkPaid: (orderId: string) => Promise<void>;
 }) {
   const [busy, setBusy] = useState('');
   const [notice, setNotice] = useState('');
-  async function runOrderAction(name: string, action: () => Promise<void>) {
+  async function runOrderAction(name: string, action: () => Promise<void | string>) {
     setBusy(name);
     setNotice('');
     try {
-      await action();
-      setNotice(name === 'export'
+      const result = await action();
+      setNotice(result || (name === 'export'
         ? 'Export order berhasil dibuat.'
         : name.startsWith('paid-')
           ? 'Pembayaran berhasil diverifikasi.'
-          : 'Order expired berhasil dibersihkan.');
+          : 'Order expired berhasil dibersihkan.'));
     } catch (error) {
       setNotice(error instanceof Error ? error.message : 'Aksi order gagal.');
     } finally {
@@ -1061,6 +1088,10 @@ function AdminOrderPanel({ orders, onClearExpired, onExportOrders, onMarkPaid }:
         <div><p className="section-kicker">Transaksi</p><h2>Daftar Order</h2></div>
         <div className="order-panel-actions">
           <button className="ghost-button" disabled={!!busy} onClick={() => runOrderAction('export', onExportOrders)} type="button">Export Excel</button>
+          <button className="ghost-button danger-lite" disabled={!!busy} onClick={() => {
+            if (!window.confirm('Hapus seluruh file bukti pembayaran? Riwayat order tetap disimpan.')) return;
+            void runOrderAction('clear-proofs', async () => paymentProofCleanupMessage(await onClearPaymentProofs()));
+          }} type="button">Bersihkan Semua Bukti Upload</button>
           <button className="ghost-button danger-lite" disabled={!!busy} onClick={() => runOrderAction('clear', onClearExpired)} type="button">Clear Expired</button>
           <span className="soft-badge">{orders.length} order</span>
         </div>
@@ -1086,6 +1117,20 @@ function AdminOrderPanel({ orders, onClearExpired, onExportOrders, onMarkPaid }:
             <span className={`status-dot status-${order.status}`}>{order.status}</span>
             <span>{formatDate(order.createdAt)}</span>
             <div className="order-admin-actions">
+              {order.paymentProofFileId && (
+                <button
+                  className="ghost-button danger-lite"
+                  disabled={!!busy}
+                  onClick={() => {
+                    const invoice = order.invoiceNumber ?? order.id;
+                    if (!window.confirm(`Hapus file bukti pembayaran ${invoice}?`)) return;
+                    void runOrderAction(`delete-proof-${order.id}`, async () => paymentProofCleanupMessage(await onDeletePaymentProof(order.id)));
+                  }}
+                  type="button"
+                >
+                  {busy === `delete-proof-${order.id}` ? 'Menghapus...' : 'Hapus Bukti'}
+                </button>
+              )}
               {order.status === 'pending' && formatRemaining(order.expiresAt) !== 'Kedaluwarsa' ? (
                 <button
                   className="ghost-button verify-payment-button"
