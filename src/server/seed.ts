@@ -2,6 +2,7 @@ import { createPlanRecord, createProductRecord } from './services';
 import type { Store } from './store';
 import bcrypt from 'bcryptjs';
 import type { BillingPeriod, Product, ProductAccessMode, ProductType, ProductVisibility } from '../shared/types';
+import { seedSiteContent } from './site-content';
 
 type SeedProduct = {
   name: string;
@@ -38,6 +39,7 @@ function ensureProduct(store: Store, input: SeedProduct): Product {
 }
 
 export async function seedInitialData(store: Store): Promise<void> {
+  seedSiteContent(store);
   const retiredProductIds = new Set(
     store.data.products.filter((product) => product.slug === 'jadwalinaja').map((product) => product.id)
   );
@@ -85,6 +87,22 @@ export async function seedInitialData(store: Store): Promise<void> {
     coverUrl: 'https://images.unsplash.com/photo-1574717024653-61fd2cf4d44d?auto=format&fit=crop&w=800&q=80',
     accessUrl: '/member/licenses'
   });
+  vjStudio.cardDescription ??= 'Aplikasi workflow video YouTube lengkap dan ringan untuk creator.';
+  vjStudio.marketplaceAccent ??= '#056128';
+  vjStudio.tags ??= ['Windows', 'Video Creator', 'Lisensi'];
+  vjStudio.badge ??= 'PRO';
+  vjStudio.fulfillmentType ??= 'license';
+  vjStudio.benefits ??= [
+    { title: 'Workflow Otomatis', description: 'Membantu proses produksi video lebih cepat dan konsisten.' },
+    { title: 'Ringan & Cepat', description: 'Dirancang untuk workflow creator pada perangkat Windows.' },
+    { title: 'Update Berkala', description: 'Pembaruan fitur dan perbaikan tersedia selama lisensi aktif.' }
+  ];
+  vjStudio.features ??= vjStudio.benefits;
+  vjStudio.targetUsers ??= ['YouTuber', 'Content Creator', 'Digital Agency', 'Freelancer'];
+  vjStudio.developer ??= 'AsistenQ Team';
+  vjStudio.compatibility ??= 'Windows 10/11 (64-bit)';
+  vjStudio.language ??= 'Indonesia';
+  vjStudio.sku ??= 'AQ-VJSP-PRO';
 
   [
     { code: 'TRIAL', name: 'Trial 1 Hari', price: 0, billingPeriod: 'trial' as const, durationDays: 1, isFree: true, isActive: false },
@@ -192,6 +210,12 @@ export async function seedInitialData(store: Store): Promise<void> {
       coverUrl: '',
       accessUrl: '/member/licenses'
     });
+  }
+
+  for (const product of store.data.products.filter((row) => row.active && row.visibility === 'public')) {
+    if (!store.data.plans.some((plan) => plan.productId === product.id)) {
+      createPlanRecord(store, { productId: product.id, code: 'DEFAULT', name: product.price === 0 ? 'Akses Gratis' : 'Paket Produk', price: product.price, billingPeriod: product.billingPeriod, durationDays: product.billingPeriod === 'annual' ? 365 : product.billingPeriod === 'monthly' ? 30 : null, isFree: product.price === 0, isActive: true, sortOrder: 10 });
+    }
   }
 
   store.save();

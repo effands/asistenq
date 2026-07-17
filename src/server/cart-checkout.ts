@@ -4,6 +4,7 @@ import type { Store } from './store';
 export interface CartInput {
   items: Array<{ productId: string; planId: string }>;
   voucherCode?: string;
+  customerHwid?: string;
 }
 
 export interface ValidatedCart {

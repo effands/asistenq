@@ -71,6 +71,9 @@ import {
 import { consumeDownloadGrant, issueDownloadGrant, listBuyerDownloadGrants, reissueDownloadGrant } from './digital-downloads';
 import { createMemoryStore } from './store';
 import { fulfillPaidOrder } from './order-fulfillment';
+import { publishedContent, updateContentPage } from './site-content';
+import { subscribeProductUpdates, subscribersCsv } from './subscribers';
+import { productMediaRoot, removeProductMedia, saveProductMedia } from './product-media-storage';
 
 export const app = express();
 const isTest = process.env.VITEST === 'true' || process.env.NODE_ENV === 'test';
@@ -172,6 +175,7 @@ const productSchema = z.object({
   name: z.string().min(2),
   slug: z.string().min(2).regex(/^[a-z0-9-]+$/),
   type: z.enum(['tool', 'course', 'ebook', 'video', 'bundle', 'free', 'class']),
+  category: z.string().max(80).optional(),
   visibility: z.enum(['public', 'private', 'draft']).optional(),
   accessMode: z.enum(['public', 'free_member', 'trial', 'paid', 'admin']).optional(),
   billingPeriod: z.enum(['trial', 'monthly', 'annual', 'lifetime', 'one_time']),
@@ -195,12 +199,33 @@ const productSchema = z.object({
   externalUrl: z.string().url().optional(),
   openMode: z.enum(['same_tab', 'new_tab', 'wrapper']).optional(),
   trackLiveUsers: z.boolean().optional(),
-  fulfillmentType: z.enum(['license', 'download']).optional(),
+  fulfillmentType: z.enum(['license', 'download', 'url', 'course']).optional(),
   downloadSourceUrl: z.string().url().refine((value) => value.startsWith('https://'), 'URL download harus HTTPS.').optional(),
   headline: z.string().optional(),
   description: z.string().optional(),
   coverUrl: z.string().optional(),
   accessUrl: z.string().optional(),
+  marketplaceCoverUrl: z.string().optional(),
+  marketplaceAccent: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
+  cardDescription: z.string().max(240).optional(),
+  tags: z.array(z.string().trim().min(1).max(40)).max(12).optional(),
+  badge: z.string().max(30).optional(),
+  gallery: z.array(z.object({ id: z.string(), type: z.enum(['image', 'video']), url: z.string(), alt: z.string().optional(), sortOrder: z.number().int() })).optional(),
+  benefits: z.array(z.object({ title: z.string(), description: z.string(), icon: z.string().optional() })).optional(),
+  features: z.array(z.object({ title: z.string(), description: z.string(), icon: z.string().optional() })).optional(),
+  specifications: z.record(z.string(), z.string()).optional(),
+  changelog: z.string().optional(),
+  productFaqs: z.array(z.object({ question: z.string(), answer: z.string() })).optional(),
+  targetUsers: z.array(z.string().trim().min(1)).max(20).optional(),
+  developer: z.string().optional(),
+  version: z.string().optional(),
+  fileSize: z.string().optional(),
+  compatibility: z.string().optional(),
+  language: z.string().optional(),
+  latestUpdate: z.string().optional(),
+  sku: z.string().optional(),
+  demoUrl: z.string().url().optional(),
+  documentationUrl: z.string().url().optional(),
   plans: z.array(z.object({
     code: z.string().min(1),
     name: z.string().min(1),
@@ -675,6 +700,7 @@ const desktopPaymentProofUpload = multer({
   limits: { fileSize: 5 * 1024 * 1024, files: 1 },
   fileFilter: (_req, file, callback) => callback(null, ['image/jpeg', 'image/png', 'image/webp'].includes(file.mimetype))
 });
+const productMediaUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 40 * 1024 * 1024, files: 1 } });
 
 app.post('/api/license/orders', async (req, res) => {
   try {
@@ -844,7 +870,7 @@ app.post('/api/auth/reset-password', async (req, res) => {
 });
 
 app.get('/api/products', (_req, res) => {
-  res.json(store.data.products.filter((product) => product.active && product.visibility === 'public').map(publicProduct));
+  res.json(store.data.products.filter((product) => product.active && product.visibility === 'public').map((product) => ({ ...publicProduct(product), plans: store.data.plans.filter((plan) => plan.productId === product.id && plan.isActive) })));
 });
 
 app.get('/api/catalog', (_req, res) => {
@@ -852,11 +878,58 @@ app.get('/api/catalog', (_req, res) => {
   res.json({
     all: [...catalog.featured, ...catalog.paid, ...catalog.free]
       .filter((product, index, products) => products.findIndex((item) => item.id === product.id) === index)
-      .map(publicProduct),
-    featured: catalog.featured.map(publicProduct),
-    paid: catalog.paid.map(publicProduct),
-    free: catalog.free.map(publicProduct),
+      .map((product) => ({ ...publicProduct(product), plans: store.data.plans.filter((plan) => plan.productId === product.id && plan.isActive) })),
+    featured: catalog.featured.map((product) => ({ ...publicProduct(product), plans: store.data.plans.filter((plan) => plan.productId === product.id && plan.isActive) })),
+    paid: catalog.paid.map((product) => ({ ...publicProduct(product), plans: store.data.plans.filter((plan) => plan.productId === product.id && plan.isActive) })),
+    free: catalog.free.map((product) => ({ ...publicProduct(product), plans: store.data.plans.filter((plan) => plan.productId === product.id && plan.isActive) })),
     onlineUsers: analyticsOverview(store).onlineUsers
+  });
+});
+
+app.get('/api/content/:slug', (req, res) => {
+  try { res.json(publishedContent(store, String(req.params.slug))); }
+  catch { res.status(404).json({ message: 'Halaman tidak ditemukan.' }); }
+});
+
+app.get('/api/admin/content', requireSession, requireAdminScope('content'), (_req, res) => res.json(store.data.contentPages));
+app.put('/api/admin/content/:id', requireSession, requireAdminScope('content'), (req, res) => {
+  try {
+    const body = z.object({ title: z.string().min(2).optional(), summary: z.string().optional(), body: z.string().min(1), published: z.boolean() }).parse(req.body);
+    res.json(updateContentPage(store, String(req.params.id), body));
+  } catch (error) { res.status(400).json({ message: error instanceof Error ? error.message : 'Konten gagal disimpan.' }); }
+});
+
+app.post('/api/subscribers', (req, res) => {
+  try {
+    const body = z.object({ email: z.string().email(), source: z.string().max(40).optional() }).parse(req.body);
+    subscribeProductUpdates(store, body.email, body.source);
+    res.status(201).json({ ok: true, message: 'Terima kasih. Update produk akan dikirim ke email Anda.' });
+  } catch (error) { res.status(400).json({ message: error instanceof Error ? error.message : 'Email gagal disimpan.' }); }
+});
+
+app.get('/api/admin/subscribers', requireSession, requireAdminScope('content'), (_req, res) => res.json(store.data.subscribers));
+app.get('/api/admin/subscribers/export.csv', requireSession, requireAdminScope('content'), (_req, res) => {
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition', 'attachment; filename="asistenq-subscribers.csv"');
+  res.send(subscribersCsv(store));
+});
+
+app.get('/api/product-media/:productId/:fileName', (req, res) => {
+  const productId = String(req.params.productId);
+  const fileName = String(req.params.fileName);
+  if (!/^[A-Za-z0-9_-]+$/.test(productId) || !/^[A-Za-z0-9._-]+$/.test(fileName)) {
+    res.status(404).end();
+    return;
+  }
+  const url = `/api/product-media/${productId}/${fileName}`;
+  const product = store.data.products.find((row) => row.id === productId && row.active && row.visibility === 'public');
+  const referenced = product && (product.marketplaceCoverUrl === url || product.gallery?.some((item) => item.url === url));
+  if (!referenced) {
+    res.status(404).end();
+    return;
+  }
+  res.sendFile(path.join(productMediaRoot, productId, fileName), (error) => {
+    if (error && !res.headersSent) res.status(404).end();
   });
 });
 
@@ -1061,6 +1134,43 @@ app.get('/api/admin/products', requireSession, requireAdminScope('products'), (_
   res.json(store.data.products.map(publicProduct));
 });
 
+app.post('/api/admin/products/:id/media/cover', requireSession, requireAdminScope('products'), productMediaUpload.single('file'), (req, res) => {
+  try {
+    const product = store.data.products.find((row) => row.id === String(req.params.id));
+    if (!product || !req.file) throw new Error('produk atau file tidak ditemukan');
+    const saved = saveProductMedia({ productId: product.id, originalName: req.file.originalname, mimeType: req.file.mimetype, buffer: req.file.buffer });
+    const previous = product.marketplaceCoverUrl;
+    product.marketplaceCoverUrl = `/api/product-media/${saved.relativePath}`;
+    product.updatedAt = new Date().toISOString();
+    store.save();
+    if (previous?.startsWith('/api/product-media/')) removeProductMedia(previous.slice('/api/product-media/'.length));
+    res.status(201).json({ url: product.marketplaceCoverUrl });
+  } catch (error) { res.status(400).json({ message: error instanceof Error ? error.message : 'Upload cover gagal.' }); }
+});
+
+app.post('/api/admin/products/:id/media/gallery', requireSession, requireAdminScope('products'), productMediaUpload.single('file'), (req, res) => {
+  try {
+    const product = store.data.products.find((row) => row.id === String(req.params.id));
+    if (!product || !req.file) throw new Error('produk atau file tidak ditemukan');
+    const saved = saveProductMedia({ productId: product.id, originalName: req.file.originalname, mimeType: req.file.mimetype, buffer: req.file.buffer });
+    const item = { id: createId('media'), type: req.file.mimetype.startsWith('video/') ? 'video' as const : 'image' as const, url: `/api/product-media/${saved.relativePath}`, sortOrder: product.gallery?.length ?? 0 };
+    product.gallery = [...(product.gallery ?? []), item];
+    product.updatedAt = new Date().toISOString();
+    store.save();
+    res.status(201).json(item);
+  } catch (error) { res.status(400).json({ message: error instanceof Error ? error.message : 'Upload galeri gagal.' }); }
+});
+
+app.delete('/api/admin/products/:id/media/:mediaId', requireSession, requireAdminScope('products'), (req, res) => {
+  const product = store.data.products.find((row) => row.id === String(req.params.id));
+  const item = product?.gallery?.find((row) => row.id === String(req.params.mediaId));
+  if (!product || !item) { res.status(404).json({ message: 'Media tidak ditemukan.' }); return; }
+  product.gallery = product.gallery?.filter((row) => row.id !== item.id).map((row, index) => ({ ...row, sortOrder: index }));
+  store.save();
+  if (item.url.startsWith('/api/product-media/')) removeProductMedia(item.url.slice('/api/product-media/'.length));
+  res.json({ ok: true });
+});
+
 
 app.put('/api/admin/members/:id', requireSession, requireAdminScope('members'), async (req, res) => {
   const schema = z.object({
@@ -1101,7 +1211,7 @@ app.put('/api/admin/products/:id', requireSession, requireAdminScope('products')
   const body = productSchema.partial().parse(req.body);
   const product = updateProductRecord(store, String(req.params.id), body);
 
-  res.json(publicProduct(product));
+  res.json({ ...publicProduct(product), plans: store.data.plans.filter((plan) => plan.productId === product.id && plan.isActive) });
 });
 
 app.patch('/api/admin/plans/:id', requireSession, requireAdminScope('products'), (req, res) => {
@@ -1540,7 +1650,7 @@ app.use('/api/bot/owner', requireBotSecret, requireTelegramIdentity, requireBotO
 
 const telegramProductSchema = z.object({
   name: z.string().trim().min(2), slug: z.string().regex(/^[a-z0-9-]+$/),
-  fulfillmentType: z.enum(['license', 'download']), description: z.string().trim(),
+  fulfillmentType: z.enum(['license', 'download', 'url', 'course']), description: z.string().trim(),
   status: z.enum(['public', 'private', 'draft']),
   downloadSourceUrl: z.string().url().refine((value) => value.startsWith('https://'), 'URL download harus HTTPS.').optional(),
   plan: z.object({
@@ -1969,7 +2079,8 @@ app.post('/api/checkout', requireSession, async (req, res) => {
       z.object({ productId: z.string().min(1) }),
       z.object({
         items: z.array(z.object({ productId: z.string().min(1), planId: z.string().min(1) })).min(1).max(25),
-        voucherCode: z.string().trim().max(40).optional()
+        voucherCode: z.string().trim().max(40).optional(),
+        customerHwid: z.string().trim().regex(/^[A-Za-z0-9]{16}$/).optional()
       })
     ]).parse(req.body);
     const order = 'items' in body

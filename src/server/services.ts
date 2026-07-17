@@ -15,6 +15,8 @@ import type {
   BannedHwid,
   BillingPeriod,
   CourseMaterial,
+  LandingFaq,
+  LandingFeature,
   LicenseStatus,
   MemberAccount,
   Order,
@@ -23,6 +25,7 @@ import type {
   ProductDestinationType,
   ProductFulfillmentType,
   ProductOpenMode,
+  ProductGalleryItem,
   ProductPlan,
   ProductType,
   ProductVisibility,
@@ -344,6 +347,27 @@ export function createProductRecord(store: Store, input: {
   description?: string;
   coverUrl?: string;
   accessUrl?: string;
+  marketplaceCoverUrl?: string;
+  marketplaceAccent?: string;
+  cardDescription?: string;
+  tags?: string[];
+  badge?: string;
+  gallery?: ProductGalleryItem[];
+  benefits?: LandingFeature[];
+  features?: LandingFeature[];
+  specifications?: Record<string, string>;
+  changelog?: string;
+  productFaqs?: LandingFaq[];
+  targetUsers?: string[];
+  developer?: string;
+  version?: string;
+  fileSize?: string;
+  compatibility?: string;
+  language?: string;
+  latestUpdate?: string;
+  sku?: string;
+  demoUrl?: string;
+  documentationUrl?: string;
   plans?: Array<{
     code: string;
     name: string;
@@ -408,6 +432,27 @@ export function updateProductRecord(store: Store, productId: string, input: Part
   description: string;
   coverUrl: string;
   accessUrl: string;
+  marketplaceCoverUrl: string;
+  marketplaceAccent: string;
+  cardDescription: string;
+  tags: string[];
+  badge: string;
+  gallery: ProductGalleryItem[];
+  benefits: LandingFeature[];
+  features: LandingFeature[];
+  specifications: Record<string, string>;
+  changelog: string;
+  productFaqs: LandingFaq[];
+  targetUsers: string[];
+  developer: string;
+  version: string;
+  fileSize: string;
+  compatibility: string;
+  language: string;
+  latestUpdate: string;
+  sku: string;
+  demoUrl: string;
+  documentationUrl: string;
 }>): Product {
   const product = store.data.products.find((item) => item.id === productId);
 
@@ -569,6 +614,8 @@ export async function createCartCheckout(
       productId: first.productId,
       planId: first.planId,
       productName: first.productName,
+      customerEmail: member.email,
+      customerHwid: input.customerHwid ? normalizeHwid(input.customerHwid) : undefined,
       orderItems: validated.items.map((item) => ({ ...item, id: createId('order_item') })),
       invoiceNumber,
       uniqueCode,

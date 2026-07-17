@@ -38,12 +38,13 @@ describe('cart checkout validation', () => {
     const store = cartStore();
     store.data.members.push({ id: 'm1', name: 'Buyer', email: 'buyer@example.com', passwordHash: 'x', active: true, createdAt: '' });
     store.data.deploymentSettings = { qrisStaticPayload: '00020101021126570011ID.DANA.WWW011893600915303265462802090326546280303UMI51440014ID.CO.QRIS.WWW0215ID10265329452210303UMI5204504553033605802ID5905ZIQVA6011Kab. Malang6105651676304F3F6' };
-    const order = await createCartCheckout(store, 'm1', { items: [{ productId: 'p1', planId: 'plan1' }, { productId: 'p2', planId: 'plan2' }] }, new Date('2026-07-17T00:00:00Z'));
+    const order = await createCartCheckout(store, 'm1', { items: [{ productId: 'p1', planId: 'plan1' }, { productId: 'p2', planId: 'plan2' }], customerHwid: 'ABCDEF1234567890' }, new Date('2026-07-17T00:00:00Z'));
     expect(order.orderItems).toHaveLength(2);
     expect(order.amount).toBe(79800);
     expect(order.uniqueCode).toBeGreaterThanOrEqual(100);
     expect(order.uniqueCode).toBeLessThanOrEqual(999);
     expect(order.totalAmount).toBe(order.amount + order.uniqueCode!);
     expect(store.data.orders).toHaveLength(1);
+    expect(order.customerHwid).toBe('ABCDEF1234567890');
   });
 });

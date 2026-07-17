@@ -25,9 +25,11 @@ import {
   WandSparkles
 } from 'lucide-react';
 import { useEffect, useState, type ReactNode } from 'react';
-import type { BillingPeriod, ProductAccessMode, ProductDestinationType, ProductFulfillmentType, ProductOpenMode, ProductType, ProductVisibility } from '../shared/types';
+import type { BillingPeriod, ContentPage, ProductAccessMode, ProductDestinationType, ProductFulfillmentType, ProductOpenMode, ProductPlan, ProductType, ProductVisibility } from '../shared/types';
 import { paymentProofCleanupMessage, type PaymentProofCleanupResult } from './payment-proof-cleanup';
 import { buildProductFulfillmentPatch } from './product-form';
+import { addCartItem, readCart, removeCartItem, writeCart, type MarketplaceCartItem } from './cart-store';
+import { ManagedContent, MarketplaceCart, MarketplaceHome, MarketplaceProductDetail } from './MarketplaceStorefront';
 import {
   apiRequest,
   updateAdminPlan,
@@ -47,8 +49,8 @@ import {
   type LandingConfig
 } from './api';
 
-type Route = 'home' | 'admin' | 'member' | 'product';
-type AdminSection = 'dashboard' | 'landing' | 'products' | 'orders' | 'licenses' | 'members' | 'course' | 'deploy';
+type Route = 'home' | 'admin' | 'member' | 'product' | 'content';
+type AdminSection = 'dashboard' | 'landing' | 'products' | 'orders' | 'licenses' | 'members' | 'course' | 'content' | 'deploy';
 type AdminTheme = 'light' | 'dark';
 type DeploymentSettingsInput = {
   githubRepo: string;
@@ -99,8 +101,13 @@ function routeFromPath(pathname: string): Route {
   if (pathname.startsWith('/adminasistenq')) return 'admin';
   if (pathname.startsWith('/member')) return 'member';
   if (pathname.startsWith('/produk/')) return 'product';
+  if (pathname.startsWith('/info/')) return 'content';
   if (/^\/[a-z0-9-]+$/.test(pathname)) return 'product';
   return 'home';
+}
+
+function contentSlugFromPath(pathname: string): string {
+  return pathname.startsWith('/info/') ? decodeURIComponent(pathname.replace('/info/', '').split('/')[0]) : '';
 }
 
 function productSlugFromPath(pathname: string): string {
@@ -128,13 +135,48 @@ export function App() {
     window.localStorage.getItem('asistenq-admin-theme') === 'dark' ? 'dark' : 'light'
   ));
   const [productSlug, setProductSlug] = useState(() => productSlugFromPath(window.location.pathname));
+  const [contentPage, setContentPage] = useState<ContentPage>();
+  const [contentLoading, setContentLoading] = useState(false);
+  const [cart, setCart] = useState<MarketplaceCartItem[]>(() => readCart(window.localStorage));
+  const [cartOpen, setCartOpen] = useState(false);
+  const [cartOrder, setCartOrder] = useState<PublicOrder | null>(null);
+  const [cartBusy, setCartBusy] = useState(false);
   const [visitorId] = useState(() => browserIdentity(window.localStorage, 'asistenq-visitor-id'));
   const [instanceId] = useState(() => browserIdentity(window.sessionStorage, 'asistenq-site-instance-id'));
 
   function navigate(nextRoute: Route) {
-    const path = nextRoute === 'home' ? '/' : nextRoute === 'admin' ? '/adminasistenq' : nextRoute === 'product' ? `/produk/${productSlug}` : `/${nextRoute}`;
+    const path = nextRoute === 'home' ? '/' : nextRoute === 'admin' ? '/adminasistenq' : nextRoute === 'product' ? `/produk/${productSlug}` : nextRoute === 'content' ? window.location.pathname : `/${nextRoute}`;
     window.history.pushState({}, '', path);
     setRoute(nextRoute);
+  }
+
+  function addProductToCart(product: PublicProduct, selectedPlan?: ProductPlan, open = false) {
+    const plan = selectedPlan ?? product.plans?.[0];
+    if (!plan) {
+      setMessage('Produk ini belum memiliki paket aktif.');
+      return;
+    }
+    setCart((current) => addCartItem(current, { productId: product.id, planId: plan.id, productName: product.name, planName: plan.name, price: plan.price, coverUrl: product.marketplaceCoverUrl, fulfillmentType: product.fulfillmentType }));
+    setCartOrder(null);
+    setCartOpen(open);
+    setMessage(`${product.name} ditambahkan ke keranjang.`);
+  }
+
+  async function checkoutCart(customerHwid?: string) {
+    if (!memberSession) {
+      setCartOpen(false);
+      setMessage('Keranjang tersimpan. Login member untuk melanjutkan checkout.');
+      navigate('member');
+      return;
+    }
+    setCartBusy(true);
+    try {
+      const order = await apiRequest<PublicOrder>('/checkout', { token: memberSession.token, method: 'POST', body: { items: cart.map((item) => ({ productId: item.productId, planId: item.planId })), customerHwid } });
+      setCartOrder(order);
+      setCart([]);
+      await loadMemberOrders(memberSession.token);
+      setMessage(`Invoice ${order.invoiceNumber} berhasil dibuat.`);
+    } finally { setCartBusy(false); }
   }
 
   function navigateProduct(slug: string) {
@@ -224,6 +266,15 @@ export function App() {
     window.addEventListener('popstate', onPopState);
     return () => window.removeEventListener('popstate', onPopState);
   }, []);
+
+  useEffect(() => { writeCart(window.localStorage, cart); }, [cart]);
+
+  useEffect(() => {
+    const slug = contentSlugFromPath(window.location.pathname);
+    if (route !== 'content' || !slug) return;
+    setContentLoading(true);
+    apiRequest<ContentPage>(`/content/${slug}`).then(setContentPage).catch(() => setContentPage(undefined)).finally(() => setContentLoading(false));
+  }, [route]);
 
   useEffect(() => {
     loadProducts().catch((error) => setMessage(error.message));
@@ -364,6 +415,21 @@ export function App() {
             await loadProducts();
             await loadCatalog();
             setMessage('Gambar produk berhasil diupload.');
+          }}
+          onUploadProductMedia={async (productId, kind, file) => {
+            if (!adminSession) return;
+            const form = new FormData();
+            form.append('file', file);
+            const response = await fetch(`/api/admin/products/${productId}/media/${kind}`, { method: 'POST', headers: { Authorization: `Bearer ${adminSession.token}` }, body: form });
+            if (!response.ok) throw new Error((await response.json().catch(() => ({}))).message ?? 'Upload media gagal.');
+            await loadProducts(); await loadCatalog();
+            setMessage(kind === 'cover' ? 'Thumbnail marketplace diperbarui.' : 'Media galeri ditambahkan.');
+          }}
+          onDeleteProductMedia={async (productId, mediaId) => {
+            if (!adminSession) return;
+            await apiRequest(`/admin/products/${productId}/media/${mediaId}`, { token: adminSession.token, method: 'DELETE' });
+            await loadProducts(); await loadCatalog();
+            setMessage('Media galeri dihapus.');
           }}
           onRefreshLicenses={async () => {
             await loadAdminLicenses();
@@ -533,6 +599,8 @@ export function App() {
           setMemberOrders([]);
           setMessage('Member logout.');
         }}
+        cartCount={cart.length}
+        onCart={() => setCartOpen(true)}
       >
         <MemberPanel
           session={memberSession}
@@ -590,17 +658,18 @@ export function App() {
             setMessage('Lisensi berhasil direset ke HWID baru.');
           }}
         />
+        <MarketplaceCart open={cartOpen} items={cart} order={cartOrder} busy={cartBusy} onClose={() => setCartOpen(false)} onRemove={(productId) => setCart((current) => removeCartItem(current, productId))} onCheckout={(hwid) => void checkoutCart(hwid)} />
       </PublicShell>
     );
   }
 
-  return (
-    <PublicShell navigate={navigate} activeRoute="home">
-      {route === 'product'
-        ? <ProductLanding isLoading={products.length === 0} product={products.find((item) => item.slug === productSlug || item.landingPath === `/${productSlug}`)} onAccess={openProductAccess} onJoin={() => navigate('member')} />
-        : <Marketplace catalog={catalog} onJoin={() => navigate('member')} onProductOpen={navigateProduct} />}
-    </PublicShell>
-  );
+  const selectedProduct = products.find((item) => item.slug === productSlug || item.landingPath === `/${productSlug}`);
+  return <PublicShell navigate={navigate} activeRoute="home" memberSession={memberSession} cartCount={cart.length} onCart={() => setCartOpen(true)}>
+    {route === 'content' ? <ManagedContent page={contentPage} loading={contentLoading} /> : route === 'product'
+      ? <MarketplaceProductDetail product={selectedProduct} onBack={() => navigate('home')} onAdd={(product, plan) => addProductToCart(product, plan)} onBuy={(product, plan) => addProductToCart(product, plan, true)} />
+      : <MarketplaceHome catalog={catalog} onOpen={navigateProduct} onAdd={(product) => addProductToCart(product, product.plans?.[0])} />}
+    <MarketplaceCart open={cartOpen} items={cart} order={cartOrder} busy={cartBusy} onClose={() => setCartOpen(false)} onRemove={(productId) => setCart((current) => removeCartItem(current, productId))} onCheckout={(hwid) => void checkoutCart(hwid)} />
+  </PublicShell>;
 }
 
 function Brand({ compact = false }: { compact?: boolean }) {
@@ -615,12 +684,14 @@ function Brand({ compact = false }: { compact?: boolean }) {
   );
 }
 
-function PublicShell({ children, navigate, activeRoute, memberSession, onMemberLogout }: {
+function PublicShell({ children, navigate, activeRoute, memberSession, onMemberLogout, cartCount = 0, onCart }: {
   children: ReactNode;
   navigate: (route: Route) => void;
   activeRoute: Route;
   memberSession?: LoginResult | null;
   onMemberLogout?: () => void;
+  cartCount?: number;
+  onCart?: () => void;
 }) {
   const ctaLabel = activeRoute === 'member'
     ? 'Area Member'
@@ -640,6 +711,7 @@ function PublicShell({ children, navigate, activeRoute, memberSession, onMemberL
           <button className={activeRoute === 'member' ? 'active' : ''} onClick={() => navigate('member')}>Member</button>
         </nav>
         <div className="nav-actions">
+          {onCart && <button className="nav-cart-button" type="button" onClick={onCart} aria-label={`Keranjang, ${cartCount} produk`}><ShoppingCart size={19} />{cartCount > 0 && <span>{cartCount}</span>}</button>}
           {memberSession ? (
             <>
               <button className="primary public-cta public-cta-logged" onClick={() => navigate('member')}>
@@ -686,6 +758,7 @@ function AdminShell({ activeSection, children, message, navigate, onSectionChang
           <button className={activeSection === 'licenses' ? 'active' : ''} onClick={() => onSectionChange('licenses')}><KeyRound size={18} /> Lisensi</button>
           <button className={activeSection === 'members' ? 'active' : ''} onClick={() => onSectionChange('members')}><Users size={18} /> Member</button>
           <button className={activeSection === 'course' ? 'active' : ''} onClick={() => onSectionChange('course')}><BookOpen size={18} /> Course</button>
+          <button className={activeSection === 'content' ? 'active' : ''} onClick={() => onSectionChange('content')}><FileText size={18} /> Konten & Footer</button>
           <button className={activeSection === 'deploy' ? 'active' : ''} onClick={() => onSectionChange('deploy')}><ShieldCheck size={18} /> Settings</button>
         </nav>
         <button className="admin-public-link" onClick={() => navigate('home')}><ArrowRight size={16} /> Lihat website</button>
@@ -810,6 +883,8 @@ function AdminPanel({
   onImportLandingZip,
   onImportLandingHtml,
   onUploadProductLogo,
+  onUploadProductMedia,
+  onDeleteProductMedia,
   onRefreshLicenses,
   onRefreshMembers,
   onClearExpiredOrders,
@@ -843,6 +918,7 @@ function AdminPanel({
     name: string;
     slug: string;
     type: ProductType;
+    category?: string;
     visibility?: ProductVisibility;
     accessMode?: ProductAccessMode;
     billingPeriod: BillingPeriod;
@@ -878,6 +954,8 @@ function AdminPanel({
   onImportLandingZip: (productId: string, file: File) => Promise<void>;
   onImportLandingHtml: (productId: string, file: File) => Promise<void>;
   onUploadProductLogo: (productId: string, file: File) => Promise<void>;
+  onUploadProductMedia: (productId: string, kind: 'cover' | 'gallery', file: File) => Promise<void>;
+  onDeleteProductMedia: (productId: string, mediaId: string) => Promise<void>;
   onRefreshLicenses: () => Promise<void>;
   onRefreshMembers: () => Promise<void>;
   onClearExpiredOrders: () => Promise<void>;
@@ -924,7 +1002,7 @@ function AdminPanel({
     return (
       <section className="admin-content-grid">
         <ProductForm onCreateProduct={onCreateProduct} />
-        <ProductTable onImportLandingHtml={onImportLandingHtml} onImportLandingZip={onImportLandingZip} onUploadProductLogo={onUploadProductLogo} onUpdateProduct={onUpdateProduct} products={products} />
+        <ProductTable onImportLandingHtml={onImportLandingHtml} onImportLandingZip={onImportLandingZip} onUploadProductLogo={onUploadProductLogo} onUploadProductMedia={onUploadProductMedia} onDeleteProductMedia={onDeleteProductMedia} onUpdateProduct={onUpdateProduct} products={products} />
       </section>
     );
   }
@@ -954,6 +1032,10 @@ function AdminPanel({
 
   if (activeSection === 'course') {
     return <CourseAdminPanel products={products} onUpdateProduct={onUpdateProduct} />;
+  }
+
+  if (activeSection === 'content') {
+    return <ContentAdminPanel token={session.token} />;
   }
 
   if (activeSection === 'deploy') {
@@ -2110,6 +2192,7 @@ function ProductForm({ onCreateProduct }: {
     name: string;
     slug: string;
     type: ProductType;
+    category?: string;
     visibility?: ProductVisibility;
     accessMode?: ProductAccessMode;
     billingPeriod: BillingPeriod;
@@ -2144,6 +2227,7 @@ function ProductForm({ onCreateProduct }: {
   const [name, setName] = useState('AsistenQ Video Helper');
   const [slug, setSlug] = useState('video-helper');
   const [type, setType] = useState<ProductType>('tool');
+  const [category, setCategory] = useState('Tools Creator');
   const [visibility, setVisibility] = useState<ProductVisibility>('public');
   const [accessMode, setAccessMode] = useState<ProductAccessMode>('free_member');
   const [planPrices, setPlanPrices] = useState<Record<string, number>>(() => Object.fromEntries(tieredPlanTemplates.map((plan) => [plan.code, plan.defaultPrice])));
@@ -2199,6 +2283,7 @@ function ProductForm({ onCreateProduct }: {
         name,
         slug,
         type,
+        category,
         visibility,
         accessMode,
         billingPeriod: primaryPlan?.billingPeriod ?? 'monthly',
@@ -2235,6 +2320,7 @@ function ProductForm({ onCreateProduct }: {
           <label className="col-3">Nama produk<input required value={name} onChange={(event) => setName(event.target.value)} placeholder="Contoh: MIXIN9" /></label>
           <label className="col-2">Slug / alamat<input required value={slug} onChange={(event) => setSlug(event.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '-'))} placeholder="mixin9" /><small>Huruf kecil, angka, dan tanda minus.</small></label>
           <label className="col-1">Jenis produk<select value={type} onChange={(event) => setType(event.target.value as ProductType)}>{productTypes.map((item) => <option key={item}>{item}</option>)}</select></label>
+          <label className="col-2">Kategori marketplace<input value={category} onChange={(event) => setCategory(event.target.value)} placeholder="Tools Creator" /></label>
         </div>
       </div>
       <div className="product-form-section access-section">
@@ -2344,6 +2430,24 @@ function ProductForm({ onCreateProduct }: {
   );
 }
 
+function ContentAdminPanel({ token }: { token: string }) {
+  const [pages, setPages] = useState<ContentPage[]>([]);
+  const [subscribers, setSubscribers] = useState<Array<{ id: string; email: string; status: string; source: string; consentedAt: string }>>([]);
+  const [notice, setNotice] = useState('');
+  const load = async () => {
+    const [loadedPages, loadedSubscribers] = await Promise.all([
+      apiRequest<ContentPage[]>('/admin/content', { token }),
+      apiRequest<Array<{ id: string; email: string; status: string; source: string; consentedAt: string }>>('/admin/subscribers', { token })
+    ]);
+    setPages(loadedPages); setSubscribers(loadedSubscribers);
+  };
+  useEffect(() => { void load(); }, [token]);
+  return <section className="admin-content-grid content-admin-grid">
+    <div className="panel wide"><div className="panel-heading"><div><p className="section-kicker">Website content</p><h2>Halaman Footer & Kebijakan</h2></div></div><div className="content-page-list">{pages.map((page) => <form key={page.id} onSubmit={async (event) => { event.preventDefault(); await apiRequest(`/admin/content/${page.id}`, { token, method: 'PUT', body: { title: page.title, summary: page.summary ?? '', body: page.body, published: page.published } }); setNotice(`${page.title} tersimpan.`); }}><div><input value={page.title} onChange={(event) => setPages((rows) => rows.map((row) => row.id === page.id ? { ...row, title: event.target.value } : row))} /><label><input checked={page.published} type="checkbox" onChange={(event) => setPages((rows) => rows.map((row) => row.id === page.id ? { ...row, published: event.target.checked } : row))} /> Tayang</label></div><input value={page.summary ?? ''} onChange={(event) => setPages((rows) => rows.map((row) => row.id === page.id ? { ...row, summary: event.target.value } : row))} placeholder="Ringkasan" /><textarea value={page.body} onChange={(event) => setPages((rows) => rows.map((row) => row.id === page.id ? { ...row, body: event.target.value } : row))} /><footer><a href={`/info/${page.slug}`} target="_blank">Lihat halaman</a><button className="primary">Simpan</button></footer></form>)}</div>{notice && <p className="form-notice">{notice}</p>}</div>
+    <div className="panel wide"><div className="panel-heading"><div><p className="section-kicker">Newsletter</p><h2>Subscriber Update Produk</h2></div><a className="ghost-button" href="/api/admin/subscribers/export.csv" onClick={async (event) => { event.preventDefault(); const response = await fetch('/api/admin/subscribers/export.csv', { headers: { Authorization: `Bearer ${token}` } }); const blob = await response.blob(); const url = URL.createObjectURL(blob); const anchor = document.createElement('a'); anchor.href = url; anchor.download = 'asistenq-subscribers.csv'; anchor.click(); URL.revokeObjectURL(url); }}>Export CSV</a></div><div className="subscriber-table">{subscribers.map((row) => <span key={row.id}><b>{row.email}</b><small>{row.source} · {new Date(row.consentedAt).toLocaleDateString('id-ID')}</small></span>)}{!subscribers.length && <p>Belum ada subscriber.</p>}</div></div>
+  </section>;
+}
+
 function Metric({ icon, label, value, onClick }: { icon: ReactNode; label: string; value: number; onClick: () => void }) {
   return (
     <button className="metric" type="button" onClick={onClick}>
@@ -2355,12 +2459,14 @@ function Metric({ icon, label, value, onClick }: { icon: ReactNode; label: strin
   );
 }
 
-function ProductTable({ products, onUpdateProduct, onImportLandingZip, onImportLandingHtml, onUploadProductLogo }: {
+function ProductTable({ products, onUpdateProduct, onImportLandingZip, onImportLandingHtml, onUploadProductLogo, onUploadProductMedia, onDeleteProductMedia }: {
   products: PublicProduct[];
   onUpdateProduct: (productId: string, input: Partial<PublicProduct>) => Promise<void>;
   onImportLandingZip: (productId: string, file: File) => Promise<void>;
   onImportLandingHtml: (productId: string, file: File) => Promise<void>;
   onUploadProductLogo: (productId: string, file: File) => Promise<void>;
+  onUploadProductMedia: (productId: string, kind: 'cover' | 'gallery', file: File) => Promise<void>;
+  onDeleteProductMedia: (productId: string, mediaId: string) => Promise<void>;
 }) {
   const [editingId, setEditingId] = useState('');
   const [draft, setDraft] = useState<Partial<PublicProduct>>({});
@@ -2376,6 +2482,7 @@ function ProductTable({ products, onUpdateProduct, onImportLandingZip, onImportL
     setDraft({
       name: product.name,
       slug: product.slug,
+      category: product.category,
       visibility: product.visibility,
       accessMode: product.accessMode,
       price: product.price,
@@ -2396,6 +2503,21 @@ function ProductTable({ products, onUpdateProduct, onImportLandingZip, onImportL
       accessUrl: product.accessUrl,
       fulfillmentType: product.fulfillmentType ?? 'license',
       downloadSourceUrl: ''
+      ,marketplaceAccent: product.marketplaceAccent ?? '#075e4c'
+      ,cardDescription: product.cardDescription ?? ''
+      ,tags: product.tags ?? []
+      ,badge: product.badge ?? ''
+      ,benefits: product.benefits ?? []
+      ,features: product.features ?? []
+      ,targetUsers: product.targetUsers ?? []
+      ,developer: product.developer ?? ''
+      ,version: product.version ?? ''
+      ,fileSize: product.fileSize ?? ''
+      ,compatibility: product.compatibility ?? ''
+      ,language: product.language ?? ''
+      ,sku: product.sku ?? ''
+      ,demoUrl: product.demoUrl ?? ''
+      ,documentationUrl: product.documentationUrl ?? ''
     });
   }
 
@@ -2428,6 +2550,7 @@ function ProductTable({ products, onUpdateProduct, onImportLandingZip, onImportL
                 <div className="form-grid">
                   <input value={draft.name ?? ''} onChange={(event) => setDraft({ ...draft, name: event.target.value })} placeholder="Nama" />
                   <input value={draft.slug ?? ''} onChange={(event) => setDraft({ ...draft, slug: event.target.value })} placeholder="slug" />
+                  <input value={draft.category ?? ''} onChange={(event) => setDraft({ ...draft, category: event.target.value })} placeholder="Kategori marketplace" />
                   <select value={draft.visibility ?? 'public'} onChange={(event) => setDraft({ ...draft, visibility: event.target.value as ProductVisibility })}>
                     {productVisibilities.map((item) => <option key={item} value={item}>{item === 'public' ? 'Public marketplace' : item === 'private' ? 'Private link' : 'Draft/admin only'}</option>)}
                   </select>
@@ -2445,13 +2568,36 @@ function ProductTable({ products, onUpdateProduct, onImportLandingZip, onImportL
                   <select value={draft.openMode ?? 'same_tab'} onChange={(event) => setDraft({ ...draft, openMode: event.target.value as ProductOpenMode })}><option value="same_tab">Tab yang sama</option><option value="new_tab">Tab baru</option><option value="wrapper">Wrapper</option></select>
                   <input value={draft.externalUrl ?? ''} onChange={(event) => setDraft({ ...draft, externalUrl: event.target.value })} placeholder="URL external" type="url" />
                   <input value={draft.ctaLabel ?? ''} onChange={(event) => setDraft({ ...draft, ctaLabel: event.target.value })} placeholder="CTA" />
-                  <select value={draft.fulfillmentType ?? 'license'} onChange={(event) => setDraft({ ...draft, fulfillmentType: event.target.value as ProductFulfillmentType, downloadSourceUrl: '' })}><option value="license">Lisensi software</option><option value="download">Download digital</option></select>
+                  <select value={draft.fulfillmentType ?? 'license'} onChange={(event) => setDraft({ ...draft, fulfillmentType: event.target.value as ProductFulfillmentType, downloadSourceUrl: '' })}><option value="license">Lisensi software</option><option value="download">Download digital</option><option value="url">Link URL</option><option value="course">Akses kelas</option></select>
                   {draft.fulfillmentType === 'download' && <input value={draft.downloadSourceUrl ?? ''} onChange={(event) => setDraft({ ...draft, downloadSourceUrl: event.target.value })} placeholder="URL HTTPS baru (kosong = pertahankan)" type="url" />}
                 </div>
                 {product.fulfillmentType === 'download' && product.downloadSourceConfigured && <p className="form-notice">File atau URL sumber digital sudah tersimpan (path privat disembunyikan).</p>}
                 <textarea value={draft.headline ?? ''} onChange={(event) => setDraft({ ...draft, headline: event.target.value })} placeholder="Headline" />
                 <textarea value={draft.description ?? ''} onChange={(event) => setDraft({ ...draft, description: event.target.value })} placeholder="Deskripsi" />
                 <textarea value={draft.accessRequirement ?? ''} onChange={(event) => setDraft({ ...draft, accessRequirement: event.target.value })} placeholder="Syarat akses" />
+                <div className="marketplace-admin-fields">
+                  <h3>Tampilan Marketplace</h3>
+                  <div className="form-grid">
+                    <input value={draft.cardDescription ?? ''} onChange={(event) => setDraft({ ...draft, cardDescription: event.target.value })} placeholder="Deskripsi singkat kartu produk" />
+                    <input value={draft.badge ?? ''} onChange={(event) => setDraft({ ...draft, badge: event.target.value })} placeholder="Badge: PRO / HOT / NEW" />
+                    <input type="color" value={draft.marketplaceAccent ?? '#075e4c'} onChange={(event) => setDraft({ ...draft, marketplaceAccent: event.target.value })} title="Warna cover fallback" />
+                    <input value={draft.tags?.join(', ') ?? ''} onChange={(event) => setDraft({ ...draft, tags: event.target.value.split(',').map((item) => item.trim()).filter(Boolean) })} placeholder="Tag, pisahkan dengan koma" />
+                    <input value={draft.developer ?? ''} onChange={(event) => setDraft({ ...draft, developer: event.target.value })} placeholder="Developer" />
+                    <input value={draft.version ?? ''} onChange={(event) => setDraft({ ...draft, version: event.target.value })} placeholder="Versi" />
+                    <input value={draft.fileSize ?? ''} onChange={(event) => setDraft({ ...draft, fileSize: event.target.value })} placeholder="Ukuran file" />
+                    <input value={draft.compatibility ?? ''} onChange={(event) => setDraft({ ...draft, compatibility: event.target.value })} placeholder="Kompatibilitas" />
+                    <input value={draft.language ?? ''} onChange={(event) => setDraft({ ...draft, language: event.target.value })} placeholder="Bahasa" />
+                    <input value={draft.sku ?? ''} onChange={(event) => setDraft({ ...draft, sku: event.target.value })} placeholder="SKU" />
+                    <input type="url" value={draft.demoUrl ?? ''} onChange={(event) => setDraft({ ...draft, demoUrl: event.target.value })} placeholder="URL demo" />
+                    <input type="url" value={draft.documentationUrl ?? ''} onChange={(event) => setDraft({ ...draft, documentationUrl: event.target.value })} placeholder="URL dokumentasi" />
+                  </div>
+                  <div className="marketplace-media-admin">
+                    <label>Upload thumbnail utama<input type="file" accept="image/jpeg,image/png,image/webp" onChange={async (event) => { const file = event.target.files?.[0]; if (file) await onUploadProductMedia(product.id, 'cover', file); event.target.value = ''; }} /></label>
+                    <label>Tambah gambar/video galeri<input type="file" accept="image/jpeg,image/png,image/webp,video/mp4,video/webm" onChange={async (event) => { const file = event.target.files?.[0]; if (file) await onUploadProductMedia(product.id, 'gallery', file); event.target.value = ''; }} /></label>
+                    {product.marketplaceCoverUrl && <img src={product.marketplaceCoverUrl} alt="Thumbnail marketplace" />}
+                    {product.gallery?.map((item) => <span key={item.id}>{item.type === 'image' ? <img src={item.url} alt="" /> : <video src={item.url} />}<button type="button" onClick={() => onDeleteProductMedia(product.id, item.id)}>Hapus</button></span>)}
+                  </div>
+                </div>
                 <div className="product-edit-actions">
                   <button className="primary" type="button" onClick={async () => {
                     const fulfillmentPatch = draft.fulfillmentType === 'download' && !draft.downloadSourceUrl?.trim()
