@@ -3403,7 +3403,8 @@ textarea {
   gap: 10px;
 }
 
-.member-metrics article {
+.member-metrics article,
+.member-metrics button {
   display: grid;
   min-width: 0;
   min-height: 154px;
@@ -3618,6 +3619,73 @@ textarea {
   color: var(--muted);
 }
 
+/* Compact member workspace */
+.member-sidebar-user > span img,
+.profile-photo-preview img {
+  width: 100%; height: 100%; object-fit: cover; border-radius: inherit;
+}
+
+.license-list-tools { display: grid; grid-template-columns: minmax(240px, 1fr) 190px auto; gap: 10px; align-items: center; }
+.license-list-tools input, .license-list-tools select { min-height: 42px; border: 1px solid var(--line); border-radius: 12px; background: #fff; padding: 0 13px; }
+.license-list-tools > span { color: var(--muted); font-size: 13px; text-align: right; }
+.member-license-compact-list { display: grid; gap: 8px; }
+.member-license-compact { overflow: hidden; border: 1px solid var(--line); border-radius: 15px; background: rgba(255,255,255,.8); }
+.license-compact-summary { display: grid; width: 100%; grid-template-columns: minmax(180px,1.4fr) minmax(150px,1fr) minmax(120px,.7fr) auto 64px; gap: 14px; align-items: center; border: 0; background: transparent; padding: 12px 15px; text-align: left; }
+.license-compact-summary > span:first-child { display: grid; gap: 2px; }
+.license-compact-summary small { color: var(--muted); font-size: 12px; }
+.license-compact-summary code { overflow: hidden; text-overflow: ellipsis; font-size: 12px; }
+.license-compact-summary > span:nth-child(3) { display: grid; gap: 2px; }
+.license-compact-summary > b:last-child { color: #08735e; font-size: 13px; text-align: right; }
+.license-compact-detail { display: grid; grid-template-columns: 1fr 1.25fr; gap: 10px; border-top: 1px solid var(--line); padding: 12px; }
+.license-compact-detail .member-token-box, .license-compact-detail .member-reset-box { margin: 0; }
+.license-pagination { display: flex; justify-content: center; align-items: center; gap: 12px; }
+.license-pagination button { border: 1px solid var(--line); border-radius: 10px; background: #fff; padding: 8px 13px; }
+
+.member-profile-editor { display: grid; grid-template-columns: 190px 1fr; gap: 24px; border: 1px solid var(--line); border-radius: 18px; background: #f7fbf9; padding: 22px; }
+.profile-photo-column { display: grid; place-items: center; align-content: start; gap: 10px; text-align: center; }
+.profile-photo-preview { display: grid; width: 116px; height: 116px; place-items: center; overflow: hidden; border-radius: 28px; background: #067361; color: white; font-size: 42px; font-weight: 800; }
+.profile-upload-button { position: relative; gap: 7px; }
+.profile-upload-button input { position: absolute; width: 1px; height: 1px; opacity: 0; }
+.profile-photo-column > small { color: var(--muted); }
+.profile-form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.profile-form-grid label { display: grid; gap: 6px; font-weight: 700; }
+.profile-form-grid label small { color: var(--muted); font-weight: 500; }
+.profile-form-grid input { min-height: 46px; border: 1px solid var(--line); border-radius: 12px; background: white; padding: 0 13px; }
+.profile-save-button { grid-column: 1 / -1; justify-self: start; }
+
+.download-tool-card { display: grid; grid-template-columns: 1fr minmax(260px, .9fr) auto; gap: 20px; align-items: center; border: 1px solid var(--line); border-radius: 18px; background: linear-gradient(120deg,#f4fffb,#e8faf4); padding: 20px; }
+.download-tool-card > div { display: flex; gap: 12px; align-items: center; }
+.download-tool-card > div > svg { width: 42px; height: 42px; border-radius: 13px; background: #08735e; color: white; padding: 10px; }
+.download-tool-card span { display: grid; gap: 3px; }
+.download-tool-card p { margin: 0; color: var(--muted); }
+.download-tool-card > a { display: inline-flex; gap: 8px; align-items: center; text-decoration: none; }
+.download-steps { display: grid; grid-template-columns: repeat(4,1fr); gap: 10px; }
+.download-steps span { display: flex; gap: 9px; align-items: center; border: 1px solid var(--line); border-radius: 14px; background: white; padding: 13px; font-size: 13px; }
+.download-steps b { display: grid; min-width: 28px; height: 28px; place-items: center; border-radius: 9px; background: #dff8ef; color: #067361; }
+.member-metrics button { color: inherit; text-align: left; cursor: pointer; transition: transform .18s ease, background .18s ease, border-color .18s ease; }
+.member-metrics button:hover, .member-metrics button:focus-visible { transform: translateY(-3px); border-color: rgba(155,255,220,.55); background: rgba(255,255,255,.13); outline: none; }
+
+/* Densify dashboard, products, and order history */
+.member-owned-overview { min-height: 0; padding: 18px; }
+.member-owned-grid { grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; }
+.member-owned-card { display: grid; grid-template-columns: 92px 1fr auto; min-height: 110px; align-items: center; overflow: hidden; }
+.member-owned-cover { min-height: 110px; height: 100%; }
+.member-owned-card > div:nth-child(2) { padding: 12px; }
+.member-owned-card footer { align-self: stretch; flex-direction: column; justify-content: center; border-left: 1px solid var(--line); border-top: 0; }
+.member-product-list { grid-template-columns: repeat(auto-fill, minmax(280px, 360px)); gap: 14px; align-items: start; }
+.member-product-cover { min-height: 150px; max-height: 180px; }
+.order-history-list { gap: 8px; }
+.order-history-card { grid-template-columns: minmax(260px,1.5fr) minmax(140px,.5fr) auto; min-height: 0; padding: 12px 15px; border-radius: 15px; }
+.order-history-actions { display: flex; flex-direction: row; gap: 7px; }
+
+@media (max-width: 900px) {
+  .license-list-tools, .member-profile-editor, .download-tool-card, .license-compact-detail { grid-template-columns: 1fr; }
+  .license-compact-summary { grid-template-columns: 1fr auto; }
+  .license-compact-summary > code, .license-compact-summary > span:nth-child(3) { display: none; }
+  .profile-form-grid, .download-steps { grid-template-columns: 1fr; }
+  .order-history-card { grid-template-columns: 1fr; }
+}
+
 .member-coming-soon {
   display: grid;
   min-height: 420px;
@@ -3780,7 +3848,8 @@ textarea {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .member-metrics article {
+  .member-metrics article,
+  .member-metrics button {
     min-height: 125px;
     padding: 13px;
   }

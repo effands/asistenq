@@ -5,6 +5,7 @@ import {
   Boxes,
   CheckCircle2,
   CreditCard,
+  Download,
   ExternalLink,
   Film,
   FileText,
@@ -687,6 +688,12 @@ export function App() {
             await loadLicenses(memberSession.token);
             await loadMemberOrders(memberSession.token);
             setMessage('HWID tersimpan dan lisensi berhasil dibuat.');
+          }}
+          onProfileUpdated={(profile) => {
+            if (!memberSession) return;
+            const next = { ...memberSession, user: { ...memberSession.user, ...profile } };
+            setMemberSession(next);
+            writeMemberSession(window.localStorage, next);
           }}
         />
         <MarketplaceCart open={cartOpen} items={cart} order={cartOrder} busy={cartBusy} onClose={() => setCartOpen(false)} onRemove={(productId) => setCart((current) => removeCartItem(current, productId))} onCheckout={() => void checkoutCart()} />
@@ -3084,7 +3091,7 @@ function Mixin9Landing({ product, onJoin }: { product: PublicProduct; onJoin: ()
   );
 }
 
-function MemberPanel({ session, products, dashboard, orders, onRegister, onLogin, onCheckout, onResetLicense, onSubmitOrderHwid, onLogout }: {
+function MemberPanel({ session, products, dashboard, orders, onRegister, onLogin, onCheckout, onResetLicense, onSubmitOrderHwid, onProfileUpdated, onLogout }: {
   session: LoginResult | null;
   products: PublicProduct[];
   dashboard: MemberLicenseDashboard | null;
@@ -3094,6 +3101,7 @@ function MemberPanel({ session, products, dashboard, orders, onRegister, onLogin
   onCheckout: (productId: string) => Promise<PublicOrder | undefined>;
   onResetLicense: (licenseId: string, newHwid: string) => Promise<void>;
   onSubmitOrderHwid: (orderId: string, hwid: string) => Promise<void>;
+  onProfileUpdated: (profile: Partial<LoginResult['user']>) => void;
   onLogout: () => void;
 }) {
   const [checkoutNotice, setCheckoutNotice] = useState('');
@@ -3106,7 +3114,25 @@ function MemberPanel({ session, products, dashboard, orders, onRegister, onLogin
   const [cartBusy, setCartBusy] = useState(false);
   const [activeOrder, setActiveOrder] = useState<PublicOrder | null>(null);
   const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
-  const [activeMemberTab, setActiveMemberTab] = useState<'dashboard' | 'licenses' | 'products' | 'orders' | 'profile' | 'help' | 'affiliate'>('dashboard');
+  const [activeMemberTab, setActiveMemberTab] = useState<'dashboard' | 'licenses' | 'products' | 'download' | 'orders' | 'profile' | 'help' | 'affiliate'>('dashboard');
+  const [profileName, setProfileName] = useState(session?.user.name ?? '');
+  const [profileWhatsapp, setProfileWhatsapp] = useState(session?.user.whatsapp ?? '');
+  const [profileTelegram, setProfileTelegram] = useState(session?.user.telegramId ?? '');
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [profileBusy, setProfileBusy] = useState(false);
+  const [profileNotice, setProfileNotice] = useState('');
+  const [licenseSearch, setLicenseSearch] = useState('');
+  const [licenseStatusFilter, setLicenseStatusFilter] = useState('all');
+  const [licensePage, setLicensePage] = useState(1);
+  const [expandedLicense, setExpandedLicense] = useState('');
+
+  useEffect(() => {
+    if (!session) return;
+    setProfileName(session.user.name);
+    setProfileWhatsapp(session.user.whatsapp ?? '');
+    setProfileTelegram(session.user.telegramId ?? '');
+  }, [session?.user.id, session?.user.name, session?.user.whatsapp, session?.user.telegramId]);
 
   if (!session) {
     return (
@@ -3155,6 +3181,15 @@ function MemberPanel({ session, products, dashboard, orders, onRegister, onLogin
   ]);
   const ownedProducts = paidProducts.filter((product) => ownedProductIds.has(product.id));
   const pendingOrders = orders.filter((order) => order.status === 'pending').length;
+  const filteredLicenses = ownedLicenses.filter((license) => {
+    const matchesStatus = licenseStatusFilter === 'all' || license.status === licenseStatusFilter;
+    const query = licenseSearch.trim().toLowerCase();
+    const matchesSearch = !query || `${license.product?.name ?? ''} ${license.plan?.name ?? ''} ${license.hwid} ${license.key}`.toLowerCase().includes(query);
+    return matchesStatus && matchesSearch;
+  });
+  const licensePageSize = 10;
+  const licensePages = Math.max(1, Math.ceil(filteredLicenses.length / licensePageSize));
+  const visibleLicenses = filteredLicenses.slice((Math.min(licensePage, licensePages) - 1) * licensePageSize, Math.min(licensePage, licensePages) * licensePageSize);
 
   function toggleCart(productId: string) {
     setCartProductIds((current) => current.includes(productId)
@@ -3167,12 +3202,13 @@ function MemberPanel({ session, products, dashboard, orders, onRegister, onLogin
       <section className="member-workspace-shell">
         <aside className="member-sidebar" aria-label="Menu member">
           <div className="member-sidebar-user">
-            <span>{session.user.name.slice(0, 1).toUpperCase()}</span>
+            <span>{session.user.avatarUrl ? <img src={session.user.avatarUrl} alt="Foto profil" /> : session.user.name.slice(0, 1).toUpperCase()}</span>
             <div><strong>{session.user.name}</strong><small>{session.user.email}</small></div>
           </div>
           <nav>
             <button className={activeMemberTab === 'dashboard' ? 'active' : ''} onClick={() => setActiveMemberTab('dashboard')}><LayoutDashboard /> Dashboard</button>
             <button className={activeMemberTab === 'products' ? 'active' : ''} onClick={() => setActiveMemberTab('products')}><Boxes /> Produk Saya</button>
+            <button className={activeMemberTab === 'download' ? 'active' : ''} onClick={() => setActiveMemberTab('download')}><Download /> Download</button>
             <button className={activeMemberTab === 'licenses' ? 'active' : ''} onClick={() => setActiveMemberTab('licenses')}><KeyRound /> Lisensi</button>
             <button className={activeMemberTab === 'orders' ? 'active' : ''} onClick={() => setActiveMemberTab('orders')}><CreditCard /> Pesanan</button>
             <button className={activeMemberTab === 'profile' ? 'active' : ''} onClick={() => setActiveMemberTab('profile')}><Users /> Profil</button>
@@ -3191,10 +3227,10 @@ function MemberPanel({ session, products, dashboard, orders, onRegister, onLogin
               <div><button className="member-lime-button" onClick={() => setActiveMemberTab('products')}><Boxes /> Lihat Produk Saya</button><button className="member-outline-button" onClick={() => setActiveMemberTab('help')}><BookOpen /> Butuh Bantuan?</button></div>
             </div>
             <div className="member-metrics">
-              <article><Boxes /><span>Produk Dimiliki</span><strong>{ownedProducts.length}</strong><small>Produk aktif</small></article>
-              <article><ShieldCheck /><span>Lisensi Aktif</span><strong>{ownedLicenses.filter((license) => license.status === 'active').length}</strong><small>Dari {ownedLicenses.length} lisensi</small></article>
-              <article><CreditCard /><span>Pesanan</span><strong>{orders.length}</strong><small>{pendingOrders} menunggu bayar</small></article>
-              <article><GraduationCap /><span>Course Aktif</span><strong>{accessibleCourseProducts.length}</strong><small>Kelas tersedia</small></article>
+              <button onClick={() => setActiveMemberTab('products')}><Boxes /><span>Produk Dimiliki</span><strong>{ownedProducts.length}</strong><small>Produk aktif · buka detail</small></button>
+              <button onClick={() => setActiveMemberTab('licenses')}><ShieldCheck /><span>Lisensi Aktif</span><strong>{ownedLicenses.filter((license) => license.status === 'active').length}</strong><small>Dari {ownedLicenses.length} lisensi · buka vault</small></button>
+              <button onClick={() => setActiveMemberTab('orders')}><CreditCard /><span>Pesanan</span><strong>{orders.length}</strong><small>{pendingOrders} menunggu bayar · lihat invoice</small></button>
+              <button onClick={() => setActiveMemberTab('products')}><GraduationCap /><span>Course Aktif</span><strong>{accessibleCourseProducts.length}</strong><small>Kelas tersedia · buka materi</small></button>
             </div>
           </section>}
 
@@ -3229,55 +3265,32 @@ function MemberPanel({ session, products, dashboard, orders, onRegister, onLogin
                 Belum ada lisensi aktif untuk akun anda, silahkan order tools sesuai kebutuhan.
               </div>
             )}
-            <div className="member-license-grid">
-              {ownedLicenses.map((license) => (
-                <article className="member-license-card" key={license.id}>
-                  <div className="license-card-head">
+            {ownedLicenses.length > 0 && <div className="license-list-tools">
+              <input value={licenseSearch} onChange={(event) => { setLicenseSearch(event.target.value); setLicensePage(1); }} placeholder="Cari produk, HWID, atau token..." />
+              <select value={licenseStatusFilter} onChange={(event) => { setLicenseStatusFilter(event.target.value); setLicensePage(1); }}>
+                <option value="all">Semua status</option><option value="generated">Belum diaktivasi</option><option value="active">Aktif</option><option value="expired">Expired</option><option value="suspended">Ditangguhkan</option>
+              </select>
+              <span>{filteredLicenses.length} ditemukan</span>
+            </div>}
+            <div className="member-license-compact-list">
+              {visibleLicenses.map((license) => {
+                const open = expandedLicense === license.id;
+                return <article className={`member-license-compact ${open ? 'open' : ''}`} key={license.id}>
+                  <button className="license-compact-summary" onClick={() => setExpandedLicense(open ? '' : license.id)}>
+                    <span><strong>{license.product?.name ?? license.productId}</strong><small>{license.plan?.name ?? license.planId}</small></span>
+                    <code>{license.hwid}</code>
+                    <span><small>Berakhir</small><b>{formatDate(license.expiresAt)}</b></span>
                     <span className={`status-dot status-${license.status}`}>{licenseStatusLabel(license)}</span>
-                    <strong>{license.product?.name ?? license.productId}</strong>
-                  </div>
-                  <div className="license-detail-grid">
-                    <span>Plan<b>{license.plan?.name ?? license.planId}</b></span>
-                    <span>Expired<b>{formatDate(license.expiresAt)}</b></span>
-                    <span>Device HWID<b>{license.hwid}</b></span>
-                    <span>Aktivasi<b>{license.activatedAt ? formatDate(license.activatedAt) : 'Belum dipakai'}</b></span>
-                  </div>
-                  <div className="member-token-box">
-                    <small>Token Lisensi</small>
-                    <code>{license.key}</code>
-                    <button className="primary" onClick={() => navigator.clipboard.writeText(license.key)}>Copy Token</button>
-                  </div>
-                  <div className="member-reset-box">
-                    <small>Reset lisensi ke device baru</small>
-                    <input
-                      value={memberResetValues[license.id] ?? ''}
-                      onChange={(event) => setMemberResetValues((current) => ({ ...current, [license.id]: event.target.value.toUpperCase() }))}
-                      maxLength={16}
-                      placeholder="HWID baru"
-                    />
-                    <button
-                      className="ghost-button"
-                      disabled={memberResetBusy === license.id || !memberResetValues[license.id]}
-                      onClick={async () => {
-                        setMemberResetBusy(license.id);
-                        setLicenseNotice('');
-                        try {
-                          await onResetLicense(license.id, memberResetValues[license.id]);
-                          setMemberResetValues((current) => ({ ...current, [license.id]: '' }));
-                          setLicenseNotice('Lisensi berhasil direset. Token baru sudah muncul di kartu ini.');
-                        } catch (error) {
-                          setLicenseNotice(error instanceof Error ? error.message : 'Reset lisensi gagal.');
-                        } finally {
-                          setMemberResetBusy('');
-                        }
-                      }}
-                    >
-                      Reset Lisensi
-                    </button>
-                  </div>
-                </article>
-              ))}
+                    <b>{open ? 'Tutup' : 'Detail'}</b>
+                  </button>
+                  {open && <div className="license-compact-detail">
+                    <div className="member-token-box"><small>Token Lisensi</small><code>{license.key}</code><button className="primary" onClick={() => navigator.clipboard.writeText(license.key)}>Copy Token</button></div>
+                    <div className="member-reset-box"><small>Reset lisensi ke device baru</small><input value={memberResetValues[license.id] ?? ''} onChange={(event) => setMemberResetValues((current) => ({ ...current, [license.id]: event.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '') }))} maxLength={16} placeholder="16 karakter HWID baru" /><button className="ghost-button" disabled={memberResetBusy === license.id || (memberResetValues[license.id]?.length ?? 0) !== 16} onClick={async () => { setMemberResetBusy(license.id); setLicenseNotice(''); try { await onResetLicense(license.id, memberResetValues[license.id]); setMemberResetValues((current) => ({ ...current, [license.id]: '' })); setLicenseNotice('Lisensi berhasil direset.'); } catch (error) { setLicenseNotice(error instanceof Error ? error.message : 'Reset lisensi gagal.'); } finally { setMemberResetBusy(''); } }}>Reset Lisensi</button></div>
+                  </div>}
+                </article>;
+              })}
             </div>
+            {filteredLicenses.length > licensePageSize && <div className="license-pagination"><button disabled={licensePage <= 1} onClick={() => setLicensePage((page) => page - 1)}>Sebelumnya</button><span>Halaman {Math.min(licensePage, licensePages)} dari {licensePages}</span><button disabled={licensePage >= licensePages} onClick={() => setLicensePage((page) => page + 1)}>Berikutnya</button></div>}
             {licenseNotice && <p className="form-notice">{licenseNotice}</p>}
           </div>
         )}
@@ -3452,11 +3465,31 @@ function MemberPanel({ session, products, dashboard, orders, onRegister, onLogin
           <div className="panel stack member-profile-panel">
             <p className="section-kicker">Akun Member</p>
             <h2>Profil Saya</h2>
-            <div className="member-profile-card">
-              <span>{session.user.name.slice(0, 1).toUpperCase()}</span>
-              <div><small>Nama lengkap</small><strong>{session.user.name}</strong><small>Email</small><strong>{session.user.email}</strong></div>
+            <div className="member-profile-editor">
+              <div className="profile-photo-column">
+                <span className="profile-photo-preview">{session.user.avatarUrl ? <img src={session.user.avatarUrl} alt="Foto profil" /> : session.user.name.slice(0, 1).toUpperCase()}</span>
+                <label className="ghost-button profile-upload-button"><UploadCloud /> Ganti Foto<input type="file" accept="image/jpeg,image/png,image/webp" onChange={async (event) => { const file = event.target.files?.[0]; if (!file) return; setProfileBusy(true); setProfileNotice(''); try { const form = new FormData(); form.append('file', file); const response = await fetch('/api/member/profile/avatar', { method: 'POST', headers: { Authorization: `Bearer ${session.token}` }, body: form }); const result = await response.json(); if (!response.ok) throw new Error(result.message); onProfileUpdated({ avatarUrl: result.avatarUrl }); setProfileNotice('Foto profil berhasil diperbarui.'); } catch (error) { setProfileNotice(error instanceof Error ? error.message : 'Upload foto gagal.'); } finally { setProfileBusy(false); event.target.value = ''; } }} /></label>
+                <small>JPG, PNG, atau WebP · maks. 5 MB</small>
+              </div>
+              <div className="profile-form-grid">
+                <label>Nama lengkap<input value={profileName} onChange={(event) => setProfileName(event.target.value)} /></label>
+                <label>Email<input value={session.user.email} disabled /></label>
+                <label>WhatsApp <small>Opsional</small><input value={profileWhatsapp} onChange={(event) => setProfileWhatsapp(event.target.value)} placeholder="62812..." inputMode="tel" /></label>
+                <label>ID Telegram <small>Opsional</small><input value={profileTelegram} onChange={(event) => setProfileTelegram(event.target.value)} placeholder="@username atau user ID" /></label>
+                <label>Password saat ini<input type="password" value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} placeholder="Isi jika ingin ganti password" /></label>
+                <label>Password baru<input type="password" value={newPassword} onChange={(event) => setNewPassword(event.target.value)} placeholder="Minimal 8 karakter" /></label>
+                <button className="primary profile-save-button" disabled={profileBusy || profileName.trim().length < 2} onClick={async () => { setProfileBusy(true); setProfileNotice(''); try { const profile = await apiRequest<LoginResult['user']>('/member/profile', { token: session.token, method: 'PUT', body: { name: profileName, whatsapp: profileWhatsapp, telegramId: profileTelegram, ...(newPassword ? { currentPassword, newPassword } : {}) } }); onProfileUpdated(profile); setCurrentPassword(''); setNewPassword(''); setProfileNotice('Profil berhasil diperbarui.'); } catch (error) { setProfileNotice(error instanceof Error ? error.message : 'Profil gagal diperbarui.'); } finally { setProfileBusy(false); } }}>{profileBusy ? 'Menyimpan...' : 'Simpan Perubahan'}</button>
+              </div>
             </div>
-            <p className="muted">Perubahan data akun dapat dibantu melalui Customer Service AsistenQ.</p>
+            {profileNotice && <p className="form-notice">{profileNotice}</p>}
+          </div>
+        )}
+
+        {activeMemberTab === 'download' && (
+          <div className="panel stack member-download-panel">
+            <p className="section-kicker">Download Center</p><h2>Download Aplikasi</h2><p className="muted">Aplikasi dapat diunduh sebelum membeli lisensi agar Anda bisa melihat HWID perangkat terlebih dahulu.</p>
+            <article className="download-tool-card"><div><Download /><span><strong>VJ Studio Pro</strong><small>Windows 10/11 · 64-bit</small></span></div><p>Download aplikasi, jalankan di komputer yang akan digunakan, lalu salin HWID yang tampil pada halaman aktivasi.</p><a className="primary" href="/api/downloads/vjstudio" target="_blank" rel="noreferrer"><Download /> Download VJ Studio</a></article>
+            <div className="download-steps"><span><b>1</b>Download dan ekstrak aplikasi.</span><span><b>2</b>Jalankan VJ Studio di perangkat tujuan.</span><span><b>3</b>Salin 16 karakter HWID yang tampil.</span><span><b>4</b>Lanjutkan pembelian tanpa memasukkan HWID saat checkout.</span></div>
           </div>
         )}
 
@@ -3476,27 +3509,35 @@ function MemberPanel({ session, products, dashboard, orders, onRegister, onLogin
             <h2>Tata cara order, aktivasi lisensi, dan akses materi.</h2>
             <div className="help-guide-grid">
               <article className="help-guide-card">
-                <strong>Cara order tools</strong>
-                <span>1. Buka tab `Beli Produk`.</span>
-                <span>2. Klik `Selengkapnya` bila ingin lihat detail landing.</span>
-                <span>3. Klik ikon keranjang untuk memasukkan produk yang ingin dibeli.</span>
-                <span>4. Klik tombol `Keranjang` untuk membuat invoice QRIS.</span>
-                <span>5. Setelah bayar, cek tab `History` untuk buka invoice lagi.</span>
+                <strong>Download dan mendapatkan HWID</strong>
+                <span>1. Buka menu Download — tidak perlu membeli lisensi lebih dahulu.</span>
+                <span>2. Download VJ Studio dari folder resmi AsistenQ.</span>
+                <span>3. Ekstrak file bila masih berbentuk ZIP, lalu jalankan `vjstudio.exe`.</span>
+                <span>4. Pada halaman aktivasi aplikasi, cari Device ID / HWID.</span>
+                <span>5. Salin tepat 16 karakter HWID dan simpan. HWID berbeda untuk setiap perangkat.</span>
               </article>
               <article className="help-guide-card">
-                <strong>Cara aktivasi lisensi</strong>
-                <span>1. Buka aplikasi tools di device pembeli.</span>
-                <span>2. Salin Device ID / HWID dari aplikasi.</span>
-                <span>3. Admin membuat token lisensi berdasarkan HWID tersebut.</span>
-                <span>4. Token akan muncul di tab `Lisensi` akun member.</span>
-                <span>5. Salin token dan aktivasi di aplikasi.</span>
+                <strong>Order dan mendapatkan lisensi</strong>
+                <span>1. Pilih produk dan paket, lalu checkout tanpa mengisi HWID.</span>
+                <span>2. Bayar QRIS sesuai total dan kode unik pada invoice.</span>
+                <span>3. Setelah pembayaran disetujui, buka menu Pesanan.</span>
+                <span>4. Masukkan HWID 16 karakter pada order berstatus paid.</span>
+                <span>5. Token lisensi langsung tersedia di menu Lisensi.</span>
               </article>
               <article className="help-guide-card">
-                <strong>Cara akses course</strong>
-                <span>1. Selesaikan order course terlebih dahulu.</span>
-                <span>2. Masuk ke tab `Course` di member area.</span>
-                <span>3. Video YouTube, ebook, dan resource akan tampil sesuai produk yang sudah aktif.</span>
-                <span>4. Bila materi belum muncul, refresh halaman atau hubungi CS.</span>
+                <strong>Aktivasi di aplikasi</strong>
+                <span>1. Buka menu Lisensi dan cari nama produk atau HWID.</span>
+                <span>2. Buka Detail lalu klik Copy Token.</span>
+                <span>3. Kembali ke VJ Studio dan tempel token pada kolom aktivasi.</span>
+                <span>4. Pastikan HWID aplikasi sama dengan HWID pada lisensi.</span>
+                <span>5. Jika berpindah komputer, gunakan Reset Lisensi pada detail lisensi.</span>
+              </article>
+              <article className="help-guide-card">
+                <strong>Catatan keamanan</strong>
+                <span>Jangan membagikan token lisensi kepada orang lain.</span>
+                <span>Gunakan link download resmi dari menu Download.</span>
+                <span>WhatsApp dan Telegram pada Profil bersifat opsional untuk memudahkan bantuan.</span>
+                <span>Hubungi Customer Service bila HWID tidak tampil atau aktivasi gagal.</span>
               </article>
             </div>
             <div className="help-contact-box">

@@ -1404,17 +1404,46 @@ export async function updateMemberAccount(store: Store, memberId: string, input:
   name?: string;
   active?: boolean;
   password?: string;
+  whatsapp?: string;
+  telegramId?: string;
+  avatarUrl?: string;
 }): Promise<MemberAccount> {
   const member = store.data.members.find((m) => m.id === memberId);
   if (!member) throw new Error('Member tidak ditemukan.');
 
   if (input.name !== undefined) member.name = input.name;
+  if (input.whatsapp !== undefined) member.whatsapp = input.whatsapp.trim();
+  if (input.telegramId !== undefined) member.telegramId = input.telegramId.trim();
+  if (input.avatarUrl !== undefined) member.avatarUrl = input.avatarUrl;
   if (input.active !== undefined) member.active = input.active;
   if (input.password) {
     const bcrypt = require('bcryptjs');
     member.passwordHash = await bcrypt.hash(input.password, 12);
   }
 
+  store.save();
+  return member;
+}
+
+export async function updateOwnMemberProfile(store: Store, memberId: string, input: {
+  name?: string;
+  whatsapp?: string;
+  telegramId?: string;
+  currentPassword?: string;
+  newPassword?: string;
+}): Promise<MemberAccount> {
+  const member = store.data.members.find((item) => item.id === memberId);
+  if (!member) throw new Error('Member tidak ditemukan.');
+
+  if (input.newPassword) {
+    if (!input.currentPassword || !(await bcrypt.compare(input.currentPassword, member.passwordHash))) {
+      throw new Error('Password saat ini salah.');
+    }
+    member.passwordHash = await bcrypt.hash(input.newPassword, 12);
+  }
+  if (input.name !== undefined) member.name = input.name.trim();
+  if (input.whatsapp !== undefined) member.whatsapp = input.whatsapp.trim();
+  if (input.telegramId !== undefined) member.telegramId = input.telegramId.trim();
   store.save();
   return member;
 }

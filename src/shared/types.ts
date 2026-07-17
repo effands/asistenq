@@ -30,6 +30,7 @@ export interface MemberAccount {
   email: string;
   whatsapp?: string;
   telegramId?: string;
+  avatarUrl?: string;
   passwordHash: string;
   active: boolean;
   createdAt: string;

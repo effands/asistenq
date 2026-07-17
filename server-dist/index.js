@@ -1372,11 +1372,29 @@ async function updateMemberAccount(store2, memberId, input) {
   const member = store2.data.members.find((m) => m.id === memberId);
   if (!member) throw new Error("Member tidak ditemukan.");
   if (input.name !== void 0) member.name = input.name;
+  if (input.whatsapp !== void 0) member.whatsapp = input.whatsapp.trim();
+  if (input.telegramId !== void 0) member.telegramId = input.telegramId.trim();
+  if (input.avatarUrl !== void 0) member.avatarUrl = input.avatarUrl;
   if (input.active !== void 0) member.active = input.active;
   if (input.password) {
     const bcrypt3 = __require("bcryptjs");
     member.passwordHash = await bcrypt3.hash(input.password, 12);
   }
+  store2.save();
+  return member;
+}
+async function updateOwnMemberProfile(store2, memberId, input) {
+  const member = store2.data.members.find((item) => item.id === memberId);
+  if (!member) throw new Error("Member tidak ditemukan.");
+  if (input.newPassword) {
+    if (!input.currentPassword || !await bcrypt.compare(input.currentPassword, member.passwordHash)) {
+      throw new Error("Password saat ini salah.");
+    }
+    member.passwordHash = await bcrypt.hash(input.newPassword, 12);
+  }
+  if (input.name !== void 0) member.name = input.name.trim();
+  if (input.whatsapp !== void 0) member.whatsapp = input.whatsapp.trim();
+  if (input.telegramId !== void 0) member.telegramId = input.telegramId.trim();
   store2.save();
   return member;
 }
@@ -2939,6 +2957,11 @@ var desktopPaymentProofUpload = multer({
   fileFilter: (_req, file, callback) => callback(null, ["image/jpeg", "image/png", "image/webp"].includes(file.mimetype))
 });
 var productMediaUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 40 * 1024 * 1024, files: 1 } });
+var profileAvatarUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024, files: 1 },
+  fileFilter: (_req, file, callback) => callback(null, ["image/jpeg", "image/png", "image/webp"].includes(file.mimetype))
+});
 app.post("/api/license/orders", async (req, res) => {
   try {
     const result = await createLicenseCheckout(store, desktopOrderSchema.parse(req.body));
@@ -3051,7 +3074,7 @@ app.post("/api/member/login", async (req, res) => {
     const member = await verifyMemberLogin(store, body.email, body.password);
     const token = signSession({ id: member.id, email: member.email, type: "member" });
     res.setHeader("Set-Cookie", sessionCookie(token, isProduction));
-    res.json({ token, user: { id: member.id, name: member.name, email: member.email } });
+    res.json({ token, user: { id: member.id, name: member.name, email: member.email, whatsapp: member.whatsapp, telegramId: member.telegramId, avatarUrl: member.avatarUrl } });
   } catch (error) {
     res.status(401).json({ message: error instanceof Error ? error.message : "login failed" });
   }
@@ -3372,6 +3395,72 @@ app.post("/api/admin/products", requireSession, requireAdminScope("products"), (
     const message2 = error instanceof z.ZodError ? error.issues.map((issue) => issue.message).join(", ") : error instanceof Error ? error.message : "Produk gagal ditambahkan.";
     res.status(400).json({ message: message2 });
   }
+});
+app.get("/api/member/profile", requireSession, (req, res) => {
+  const member = req.user?.type === "member" ? store.data.members.find((item) => item.id === req.user?.id) : void 0;
+  if (!member) {
+    res.status(403).json({ message: "member access required" });
+    return;
+  }
+  const { passwordHash: _passwordHash, ...profile } = member;
+  res.json(profile);
+});
+app.put("/api/member/profile", requireSession, async (req, res) => {
+  if (req.user?.type !== "member") {
+    res.status(403).json({ message: "member access required" });
+    return;
+  }
+  try {
+    const body = z.object({
+      name: z.string().trim().min(2).max(80).optional(),
+      whatsapp: z.string().trim().max(30).optional(),
+      telegramId: z.string().trim().max(80).optional(),
+      currentPassword: z.string().min(6).optional(),
+      newPassword: z.string().min(8).max(128).optional()
+    }).refine((value) => !value.newPassword || Boolean(value.currentPassword), { message: "Password saat ini wajib diisi.", path: ["currentPassword"] }).parse(req.body);
+    const member = await updateOwnMemberProfile(store, req.user.id, body);
+    const { passwordHash: _passwordHash, ...profile } = member;
+    res.json(profile);
+  } catch (error) {
+    const message2 = error instanceof z.ZodError ? error.issues.map((issue) => issue.message).join(", ") : error instanceof Error ? error.message : "Profil gagal diperbarui.";
+    res.status(400).json({ message: message2 });
+  }
+});
+app.post("/api/member/profile/avatar", requireSession, profileAvatarUpload.single("file"), (req, res) => {
+  if (req.user?.type !== "member") {
+    res.status(403).json({ message: "member access required" });
+    return;
+  }
+  try {
+    if (!req.file) throw new Error("Pilih foto JPG, PNG, atau WebP maksimal 5 MB.");
+    const member = store.data.members.find((item) => item.id === req.user?.id);
+    if (!member) throw new Error("Member tidak ditemukan.");
+    const folderId = `member_${member.id}`;
+    const saved = saveProductMedia({ productId: folderId, originalName: req.file.originalname, mimeType: req.file.mimetype, buffer: req.file.buffer });
+    if (member.avatarUrl?.startsWith(`/api/profile-avatar/${folderId}/`)) {
+      removeProductMedia(member.avatarUrl.slice("/api/profile-avatar/".length));
+    }
+    member.avatarUrl = `/api/profile-avatar/${saved.relativePath}`;
+    store.save();
+    res.status(201).json({ avatarUrl: member.avatarUrl });
+  } catch (error) {
+    res.status(400).json({ message: error instanceof Error ? error.message : "Foto profil gagal diupload." });
+  }
+});
+app.get("/api/profile-avatar/:memberFolder/:fileName", (req, res) => {
+  const memberFolder = String(req.params.memberFolder);
+  const fileName = String(req.params.fileName);
+  const url = `/api/profile-avatar/${memberFolder}/${fileName}`;
+  if (!/^member_[A-Za-z0-9_-]+$/.test(memberFolder) || !/^[A-Za-z0-9._-]+$/.test(fileName) || !store.data.members.some((item) => item.avatarUrl === url)) {
+    res.status(404).end();
+    return;
+  }
+  res.sendFile(path8.join(productMediaRoot, memberFolder, fileName), (error) => {
+    if (error && !res.headersSent) res.status(404).end();
+  });
+});
+app.get("/api/downloads/vjstudio", (_req, res) => {
+  res.redirect("https://drive.google.com/drive/folders/1MeZbmNSC0HoIFsYaOKmCZ1AWG-751Jsm?usp=sharing");
 });
 app.put("/api/admin/products/:id", requireSession, requireAdminScope("products"), (req, res) => {
   try {

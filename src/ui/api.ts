@@ -95,7 +95,7 @@ export type PublicCatalog = {
   free: PublicProduct[];
   onlineUsers: number;
 };
-export type LoginResult = { token: string; user: { id: string; name: string; email: string; role?: string; scopes?: string[] } };
+export type LoginResult = { token: string; user: { id: string; name: string; email: string; whatsapp?: string; telegramId?: string; avatarUrl?: string; role?: string; scopes?: string[] } };
 export type ToolAnalyticsRow = {
   productId: string;
   slug: string;

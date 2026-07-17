@@ -15,6 +15,7 @@ import {
   markOrderPaidByInvoice,
   requestPasswordReset,
   resetPassword,
+  updateOwnMemberProfile,
   verifyMemberLogin
 } from '../src/server/services';
 
@@ -131,6 +132,28 @@ describe('server services', () => {
       { code: 'TRIAL', price: 0, durationDays: 1, isFree: true, isActive: true },
       { code: '3M', price: 249000, durationDays: 90, isFree: false, isActive: true }
     ]);
+  });
+
+  it('lets a member update optional profile fields and password', async () => {
+    const member = await createMember(store, { name: 'Nama Lama', email: 'member@example.com', password: 'secret123' });
+
+    const updated = await updateOwnMemberProfile(store, member.id, {
+      name: 'Nama Baru',
+      whatsapp: '628123456789',
+      telegramId: '@namabaru',
+      currentPassword: 'secret123',
+      newPassword: 'password-baru'
+    });
+
+    expect(updated).toMatchObject({ name: 'Nama Baru', whatsapp: '628123456789', telegramId: '@namabaru' });
+    await expect(verifyMemberLogin(store, 'member@example.com', 'secret123')).rejects.toThrow('invalid credentials');
+    await expect(verifyMemberLogin(store, 'member@example.com', 'password-baru')).resolves.toMatchObject({ id: member.id });
+  });
+
+  it('requires the current password before changing a member password', async () => {
+    const member = await createMember(store, { name: 'Member', email: 'member@example.com', password: 'secret123' });
+    await expect(updateOwnMemberProfile(store, member.id, { currentPassword: 'salah', newPassword: 'password-baru' }))
+      .rejects.toThrow('Password saat ini salah.');
   });
 
   it('deletes an unreferenced product and its plans', () => {
