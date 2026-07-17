@@ -313,6 +313,25 @@ function publicTelegramBuyer(member: typeof store.data.members[number]) {
   return safeMember;
 }
 
+const publicTelegramErrors = new Set([
+  'email sudah terhubung ke akun Telegram lain',
+  'email sudah terdaftar; hubungkan Telegram melalui dashboard',
+  'profil pembeli belum lengkap',
+  'produk atau paket tidak tersedia',
+  'semua kode unik pembayaran sedang digunakan; coba lagi nanti'
+]);
+
+function publicTelegramError(error: unknown, fallback: string): string {
+  if (error instanceof z.ZodError) {
+    return error.issues.map((issue) => issue.message).join(', ');
+  }
+  if (error instanceof Error && publicTelegramErrors.has(error.message)) {
+    return error.message;
+  }
+  console.error(fallback, error);
+  return fallback;
+}
+
 async function runGitHubDeployUpdate(githubToken: string): Promise<{ stdout: string; stderr: string }> {
   const settings = store.data.deploymentSettings ?? {};
   const { githubRepo, githubBranch } = parseDeploymentSettings(settings);
@@ -1270,10 +1289,7 @@ app.post('/api/bot/buyer/register', requireBotSecret, requireTelegramIdentity, a
     const body = telegramBuyerSchema.parse({ ...req.body, telegramId: telegramUserId(req) });
     res.json(publicTelegramBuyer(await registerTelegramBuyer(store, body)));
   } catch (error) {
-    const message = error instanceof z.ZodError
-      ? error.issues.map((issue) => issue.message).join(', ')
-      : error instanceof Error ? error.message : 'Registrasi pembeli gagal.';
-    res.status(400).json({ message });
+    res.status(400).json({ message: publicTelegramError(error, 'Registrasi pembeli gagal.') });
   }
 });
 
@@ -1290,10 +1306,7 @@ app.post('/api/bot/buyer/checkout', requireBotSecret, requireTelegramIdentity, a
     });
     res.status(201).json(publicTelegramOrder(order));
   } catch (error) {
-    const message = error instanceof z.ZodError
-      ? error.issues.map((issue) => issue.message).join(', ')
-      : error instanceof Error ? error.message : 'Checkout gagal dibuat.';
-    res.status(400).json({ message });
+    res.status(400).json({ message: publicTelegramError(error, 'Checkout gagal dibuat.') });
   }
 });
 

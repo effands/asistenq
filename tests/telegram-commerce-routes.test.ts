@@ -79,6 +79,15 @@ describe('Telegram commerce API boundaries', () => {
     expect(response.body).not.toHaveProperty('passwordHash');
   });
 
+  it('does not let Telegram registration take over an existing email account', async () => {
+    const response = await botRequest('post', '/api/bot/buyer/register', 'attacker')
+      .send({ name: 'Attacker', email: 'buyer1@example.com', whatsapp: '0899999999' });
+
+    expect(response.status).toBe(400);
+    expect(response.body.message).toBe('email sudah terhubung ke akun Telegram lain');
+    expect(store.data.members[0].telegramId).toBe('buyer-1');
+  });
+
   it('returns only safe catalog fields without private download sources', async () => {
     const product = createProductRecord(store, {
       name: 'File Digital', slug: 'file-digital', type: 'tool', visibility: 'public',

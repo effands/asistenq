@@ -43,7 +43,7 @@ describe('Telegram buyer commerce', () => {
     })).rejects.toThrow('email sudah terhubung ke akun Telegram lain');
   });
 
-  it('links an existing unlinked member by normalized email', async () => {
+  it('rejects linking an existing unverified email account', async () => {
     const store = createMemoryStore({
       members: [{
         id: 'member_existing',
@@ -57,14 +57,11 @@ describe('Telegram buyer commerce', () => {
       }]
     });
 
-    const member = await registerTelegramBuyer(store, {
+    await expect(registerTelegramBuyer(store, {
       telegramId: '1001', name: 'Nama Baru', email: ' BUYER@example.com ', whatsapp: '0812'
-    });
-
-    expect(member).toMatchObject({
-      id: 'member_existing', telegramId: '1001', name: 'Nama Baru', whatsapp: '0812'
-    });
+    })).rejects.toThrow('email sudah terdaftar; hubungkan Telegram melalui dashboard');
     expect(store.data.members).toHaveLength(1);
+    expect(store.data.members[0].telegramId).toBe('');
   });
 
   it('lists only available products and plans without private download sources', () => {

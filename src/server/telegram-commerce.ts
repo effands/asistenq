@@ -19,16 +19,10 @@ export async function registerTelegramBuyer(store: Store, input: {
   }
 
   const byEmail = store.data.members.find((item) => item.email === email);
-  if (byEmail?.telegramId && byEmail.telegramId !== telegramId) {
-    throw new Error('email sudah terhubung ke akun Telegram lain');
-  }
-
   if (byEmail) {
-    byEmail.telegramId = telegramId;
-    byEmail.name = input.name.trim();
-    byEmail.whatsapp = input.whatsapp.trim();
-    store.save();
-    return byEmail;
+    throw new Error(byEmail.telegramId
+      ? 'email sudah terhubung ke akun Telegram lain'
+      : 'email sudah terdaftar; hubungkan Telegram melalui dashboard');
   }
 
   return createMember(store, {
