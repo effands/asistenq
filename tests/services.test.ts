@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createMemoryStore } from '../src/server/store';
 import {
   createAdmin,
@@ -180,6 +180,49 @@ describe('server services', () => {
       planId: 'plan_3m', telegramId: '1001', amount: 249000,
       expiresAt: '2026-07-17T08:30:00.000Z', paymentProofStatus: 'none'
     });
+  });
+
+  it('moves deterministically to the next unused code after a random collision', async () => {
+    const member = await createMember(store, { name: 'Buyer', email: 'collision@asistenq.com', password: 'secret123' });
+    const product = createProductRecord(store, {
+      name: 'Collision Product', slug: 'collision-product', type: 'tool', billingPeriod: 'monthly', price: 99000
+    });
+    store.data.orders.push({
+      id: 'existing_order', memberId: member.id, productId: product.id,
+      uniqueCode: 100, amount: 99000, status: 'pending', qrisPayload: '',
+      createdAt: '2026-07-17T07:00:00.000Z', expiresAt: '2026-07-18T07:00:00.000Z'
+    });
+    const random = vi.spyOn(Math, 'random').mockReturnValue(0);
+
+    try {
+      const order = await createCheckout(store, member.id, product.id, new Date('2026-07-17T08:00:00.000Z'));
+      expect(order.uniqueCode).toBe(101);
+    } finally {
+      random.mockRestore();
+    }
+  });
+
+  it('fails deterministically when every active payment code is in use', async () => {
+    const member = await createMember(store, { name: 'Buyer', email: 'exhausted@asistenq.com', password: 'secret123' });
+    const product = createProductRecord(store, {
+      name: 'Exhausted Product', slug: 'exhausted-product', type: 'tool', billingPeriod: 'monthly', price: 99000
+    });
+    store.data.orders = Array.from({ length: 900 }, (_, index) => ({
+      id: `pending_${index}`,
+      memberId: member.id,
+      productId: product.id,
+      uniqueCode: 100 + index,
+      amount: 99000,
+      status: 'pending' as const,
+      qrisPayload: '',
+      createdAt: '2026-07-17T07:00:00.000Z',
+      expiresAt: '2026-07-18T07:00:00.000Z'
+    }));
+
+    await expect(createCheckout(
+      store, member.id, product.id, new Date('2026-07-17T08:00:00.000Z')
+    )).rejects.toThrow('kode unik pembayaran tidak tersedia');
+    expect(store.data.orders).toHaveLength(900);
   });
 
   it('lists pending orders and marks an invoice paid for Telegram approval', async () => {

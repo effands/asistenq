@@ -4,6 +4,21 @@ import type { MemberAccount, Order } from '../shared/types';
 import type { Store } from './store';
 import { createCheckout, createMember, expirePendingOrders } from './services';
 
+const checkoutQueues = new WeakMap<Store, Promise<void>>();
+
+async function serializeCheckout<T>(store: Store, operation: () => Promise<T>): Promise<T> {
+  const previous = checkoutQueues.get(store) ?? Promise.resolve();
+  const result = previous.then(operation);
+  const tail = result.then(() => undefined, () => undefined);
+  checkoutQueues.set(store, tail);
+
+  try {
+    return await result;
+  } finally {
+    if (checkoutQueues.get(store) === tail) checkoutQueues.delete(store);
+  }
+}
+
 export async function registerTelegramBuyer(store: Store, input: {
   telegramId: string;
   name: string;
@@ -41,16 +56,31 @@ export async function registerTelegramBuyer(store: Store, input: {
 export function listTelegramCatalog(store: Store) {
   return store.data.products
     .filter((product) => product.active && product.visibility !== 'draft')
-    .map((product) => {
-      const { downloadSourceUrl: _privateSource, ...publicProduct } = product;
-
-      return {
-        ...publicProduct,
-        plans: store.data.plans
-          .filter((plan) => plan.productId === product.id && plan.isActive)
-          .map((plan) => ({ ...plan, formattedPrice: formatCurrency(plan.price) }))
-      };
-    })
+    .map((product) => ({
+      id: product.id,
+      name: product.name,
+      slug: product.slug,
+      type: product.type,
+      category: product.category,
+      fulfillmentType: product.fulfillmentType,
+      headline: product.headline,
+      description: product.description,
+      coverUrl: product.coverUrl,
+      logoUrl: product.logoUrl,
+      plans: store.data.plans
+        .filter((plan) => plan.productId === product.id && plan.isActive)
+        .map((plan) => ({
+          id: plan.id,
+          productId: plan.productId,
+          code: plan.code,
+          name: plan.name,
+          price: plan.price,
+          billingPeriod: plan.billingPeriod,
+          durationDays: plan.durationDays,
+          isFree: plan.isFree,
+          formattedPrice: formatCurrency(plan.price)
+        }))
+    }))
     .filter((product) => product.plans.length > 0);
 }
 
@@ -61,38 +91,40 @@ export async function createTelegramCheckout(store: Store, input: {
   productId: string;
   planId: string;
 }, now = new Date()): Promise<Order> {
-  expirePendingOrders(store, now);
+  return serializeCheckout(store, async () => {
+    expirePendingOrders(store, now);
 
-  const member = store.data.members.find((item) => item.telegramId === input.telegramId);
-  if (!member) {
-    throw new Error('profil pembeli belum lengkap');
-  }
+    const member = store.data.members.find((item) => item.telegramId === input.telegramId);
+    if (!member) {
+      throw new Error('profil pembeli belum lengkap');
+    }
 
-  const product = store.data.products.find((item) => item.id === input.productId && item.active);
-  const plan = store.data.plans.find((item) => (
-    item.id === input.planId &&
-    item.productId === input.productId &&
-    item.isActive
-  ));
-  if (!product || !plan) {
-    throw new Error('produk atau paket tidak tersedia');
-  }
+    const product = store.data.products.find((item) => item.id === input.productId && item.active);
+    const plan = store.data.plans.find((item) => (
+      item.id === input.planId &&
+      item.productId === input.productId &&
+      item.isActive
+    ));
+    if (!product || !plan) {
+      throw new Error('produk atau paket tidak tersedia');
+    }
 
-  const reusable = store.data.orders.find((order) => (
-    order.memberId === member.id &&
-    order.productId === product.id &&
-    order.planId === plan.id &&
-    order.status === 'pending' &&
-    Boolean(order.expiresAt && new Date(order.expiresAt) > now)
-  ));
-  if (reusable) {
-    return reusable;
-  }
+    const reusable = store.data.orders.find((order) => (
+      order.memberId === member.id &&
+      order.productId === product.id &&
+      order.planId === plan.id &&
+      order.status === 'pending' &&
+      Boolean(order.expiresAt && new Date(order.expiresAt) > now)
+    ));
+    if (reusable) {
+      return reusable;
+    }
 
-  return createCheckout(store, member.id, product.id, now, {
-    planId: plan.id,
-    price: plan.price,
-    telegramId: input.telegramId,
-    lifetimeMinutes: telegramInvoiceLifetimeMinutes
+    return createCheckout(store, member.id, product.id, now, {
+      planId: plan.id,
+      price: plan.price,
+      telegramId: input.telegramId,
+      lifetimeMinutes: telegramInvoiceLifetimeMinutes
+    });
   });
 }

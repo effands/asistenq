@@ -464,6 +464,26 @@ export function createPlanRecord(store: Store, input: {
 export const invoiceLifetimeHours = 24;
 export const invoiceReminderHours = 3;
 
+function allocateUniquePaymentCode(store: Store, now: Date): number {
+  const usedCodes = new Set(store.data.orders
+    .filter((order) => {
+      if (order.status !== 'pending' || order.uniqueCode === undefined) return false;
+      const expiresAt = order.expiresAt
+        ? new Date(order.expiresAt)
+        : new Date(new Date(order.createdAt).getTime() + invoiceLifetimeHours * 60 * 60 * 1000);
+      return expiresAt > now;
+    })
+    .map((order) => order.uniqueCode));
+  const firstCode = Math.floor(Math.random() * 900) + 100;
+
+  for (let offset = 0; offset < 900; offset += 1) {
+    const candidate = 100 + ((firstCode - 100 + offset) % 900);
+    if (!usedCodes.has(candidate)) return candidate;
+  }
+
+  throw new Error('kode unik pembayaran tidak tersedia');
+}
+
 export async function createCheckout(
   store: Store,
   memberId: string,
@@ -483,7 +503,7 @@ export async function createCheckout(
   }
 
   const amount = options.price ?? product.price;
-  const uniqueCode = amount > 0 ? Math.floor(Math.random() * 900) + 100 : 0;
+  const uniqueCode = amount > 0 ? allocateUniquePaymentCode(store, now) : 0;
   const totalAmount = amount + uniqueCode;
   const invoiceNumber = `INV-${now.toISOString().slice(0, 10).replace(/-/g, '')}-${String(store.data.orders.length + 1).padStart(4, '0')}`;
   const lifetimeMs = options.lifetimeMinutes === undefined

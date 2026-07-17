@@ -83,6 +83,11 @@ describe('Telegram buyer commerce', () => {
       }]
     });
     visible.downloadSourceUrl = 'https://private.example/file.zip';
+    visible.courseMaterials = [{
+      id: 'secret_material', type: 'ebook', title: 'Materi Privat', url: 'https://private.example/material.pdf'
+    }];
+    visible.accessUrl = 'https://private.example/member-access';
+    visible.externalUrl = 'https://private.example/external-app';
     createProductRecord(store, {
       name: 'Draft', slug: 'draft', type: 'tool', visibility: 'draft',
       billingPeriod: 'one_time', price: 1000,
@@ -100,7 +105,11 @@ describe('Telegram buyer commerce', () => {
     const catalog = listTelegramCatalog(store);
 
     expect(catalog).toHaveLength(1);
-    expect(catalog[0]).not.toHaveProperty('downloadSourceUrl');
+    expect(Object.keys(catalog[0]).sort()).toEqual([
+      'category', 'coverUrl', 'description', 'fulfillmentType', 'headline',
+      'id', 'logoUrl', 'name', 'plans', 'slug', 'type'
+    ]);
+    expect(JSON.stringify(catalog)).not.toContain('https://private.example');
     expect(catalog[0].plans).toEqual([
       expect.objectContaining({ code: 'FULL', formattedPrice: 'Rp150.000' })
     ]);
@@ -139,5 +148,32 @@ describe('Telegram buyer commerce', () => {
       telegramId: '1001',
       paymentProofStatus: 'none'
     });
+  });
+
+  it('serializes concurrent checkout attempts into one pending invoice', async () => {
+    const store = createMemoryStore();
+    await registerTelegramBuyer(store, {
+      telegramId: '1001', name: 'Budi', email: 'parallel@example.com', whatsapp: '0812'
+    });
+    const product = createProductRecord(store, {
+      name: 'VJ Studio Pro', slug: 'vjstudio-parallel', type: 'tool',
+      visibility: 'public', billingPeriod: 'monthly', price: 99000,
+      plans: [{
+        code: '3M', name: 'Lisensi 3 Bulan', price: 249000,
+        billingPeriod: 'monthly', durationDays: 90, isActive: true
+      }]
+    });
+    const plan = store.data.plans.find((item) => item.productId === product.id)!;
+    const input = { telegramId: '1001', productId: product.id, planId: plan.id };
+    const now = new Date('2026-07-17T08:00:00.000Z');
+
+    const [first, second] = await Promise.all([
+      createTelegramCheckout(store, input, now),
+      createTelegramCheckout(store, input, now)
+    ]);
+
+    expect(second.id).toBe(first.id);
+    expect(store.data.orders).toHaveLength(1);
+    expect(new Set(store.data.orders.map((order) => order.invoiceNumber)).size).toBe(1);
   });
 });
