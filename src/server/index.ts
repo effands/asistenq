@@ -2134,6 +2134,49 @@ app.get('/api/member/orders', requireSession, (req, res) => {
     .map(publicOrder));
 });
 
+app.post('/api/member/orders/:id/hwid', requireSession, (req, res) => {
+  if (req.user?.type !== 'member') {
+    res.status(403).json({ message: 'member access required' });
+    return;
+  }
+
+  try {
+    const { hwid } = hwidOnlySchema.parse(req.body);
+    const order = store.data.orders.find((item) => item.id === String(req.params.id) && item.memberId === req.user?.id);
+    if (!order) throw new Error('Order tidak ditemukan.');
+    if (order.status !== 'paid') throw new Error('HWID dapat dimasukkan setelah pembayaran disetujui.');
+    if (!order.orderItems?.some((item) => item.fulfillmentType === 'license' && item.fulfillmentStatus !== 'fulfilled')) {
+      throw new Error('Pesanan ini tidak menunggu HWID lisensi.');
+    }
+    order.customerHwid = hwid.toUpperCase();
+    fulfillPaidOrder(store, order.id);
+    res.status(201).json(publicOrder(order));
+  } catch (error) {
+    const message = error instanceof z.ZodError
+      ? error.issues.map((issue) => issue.message).join(', ')
+      : error instanceof Error ? error.message : 'HWID gagal disimpan.';
+    res.status(400).json({ message });
+  }
+});
+
+app.get('/api/member/products/:id/download', requireSession, (req, res) => {
+  if (req.user?.type !== 'member') {
+    res.status(403).send('member access required');
+    return;
+  }
+  const product = store.data.products.find((item) => item.id === String(req.params.id));
+  const hasPaidOrder = store.data.orders.some((order) => (
+    order.memberId === req.user?.id &&
+    order.status === 'paid' &&
+    (order.productId === product?.id || order.orderItems?.some((item) => item.productId === product?.id))
+  ));
+  if (!product?.downloadSourceUrl || !hasPaidOrder) {
+    res.status(404).send('download tidak tersedia');
+    return;
+  }
+  res.redirect(product.downloadSourceUrl);
+});
+
 app.get('/api/member/orders/:id/invoice.html', requireSession, (req, res) => {
   if (req.user?.type !== 'member') {
     res.status(403).send('member access required');

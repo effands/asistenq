@@ -22,4 +22,22 @@ describe('paid cart fulfillment', () => {
     expect(store.data.downloadGrants).toHaveLength(1);
     expect(store.data.accessGrants).toHaveLength(2);
   });
+
+  it('waits for HWID before fulfilling a paid license item', () => {
+    const store = createMemoryStore({
+      members: [{ id: 'm', name: 'Member', email: 'member@example.com', passwordHash: 'x', active: true, createdAt: '' }],
+      products: [{ id: 'license', name: 'License', slug: 'license', type: 'tool', visibility: 'public', fulfillmentType: 'license', billingPeriod: 'one_time', price: 1, active: true, headline: '', description: '', coverUrl: '', accessUrl: '', createdAt: '', updatedAt: '' }],
+      plans: [{ id: 'plan-license', productId: 'license', code: 'ONE', name: 'One', price: 1, billingPeriod: 'one_time', durationDays: 30, isFree: false, isActive: true }],
+      orders: [{ id: 'o', memberId: 'm', productId: 'license', planId: 'plan-license', customerEmail: 'member@example.com', amount: 1, totalAmount: 101, status: 'paid', qrisPayload: '', createdAt: '', orderItems: [{ id: 'item-license', productId: 'license', planId: 'plan-license', productName: 'License', planName: 'One', unitAmount: 1, fulfillmentType: 'license', fulfillmentStatus: 'pending' }] }]
+    });
+
+    fulfillPaidOrder(store, 'o');
+    expect(store.data.orders[0].orderItems?.[0]).toMatchObject({ fulfillmentStatus: 'pending' });
+    expect(store.data.licenses).toHaveLength(0);
+
+    store.data.orders[0].customerHwid = 'ABCDEF1234567890';
+    fulfillPaidOrder(store, 'o');
+    expect(store.data.orders[0].orderItems?.[0]).toMatchObject({ fulfillmentStatus: 'fulfilled' });
+    expect(store.data.licenses[0]).toMatchObject({ hwid: 'ABCDEF1234567890', orderId: 'o' });
+  });
 });

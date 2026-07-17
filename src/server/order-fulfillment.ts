@@ -26,8 +26,13 @@ export function fulfillPaidOrder(store: Store, orderId: string, now = new Date()
     try {
       if (!product || !plan) throw new Error('produk atau paket fulfillment tidak ditemukan');
       if (item.fulfillmentType === 'license') {
+        if (!order.customerHwid) {
+          item.fulfillmentStatus = 'pending';
+          delete item.fulfillmentError;
+          continue;
+        }
         const existing = store.data.licenses.find((row) => row.orderId === order.id && row.productId === product.id && row.planId === plan.id);
-        const license = existing ?? generateToolLicense(store, { productSlug: product.slug, planCode: plan.code, email: order.customerEmail ?? member.email, hwid: order.customerHwid ?? '', now });
+        const license = existing ?? generateToolLicense(store, { productSlug: product.slug, planCode: plan.code, email: order.customerEmail ?? member.email, hwid: order.customerHwid, now });
         license.orderId = order.id;
         item.fulfillmentReference = license.id;
       } else if (item.fulfillmentType === 'download') {

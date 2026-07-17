@@ -122,6 +122,7 @@ export async function seedInitialData(store: Store): Promise<void> {
     coverUrl: 'https://images.unsplash.com/photo-1574717024653-61fd2cf4d44d?auto=format&fit=crop&w=800&q=80',
     accessUrl: '/member/licenses'
   });
+  vjStudio.downloadSourceUrl = 'https://drive.google.com/drive/folders/1MeZbmNSC0HoIFsYaOKmCZ1AWG-751Jsm?usp=sharing';
   vjStudio.cardDescription ??= 'Aplikasi workflow video YouTube lengkap dan ringan untuk creator.';
   vjStudio.marketplaceAccent ??= '#056128';
   vjStudio.tags ??= ['Windows', 'Video Creator', 'Lisensi'];

@@ -163,7 +163,7 @@ export function App() {
     setMessage(`${product.name} ditambahkan ke keranjang.`);
   }
 
-  async function checkoutCart(customerHwid?: string) {
+  async function checkoutCart() {
     if (!memberSession) {
       setCartOpen(false);
       setMessage('Keranjang tersimpan. Login member untuk melanjutkan checkout.');
@@ -172,7 +172,7 @@ export function App() {
     }
     setCartBusy(true);
     try {
-      const order = await apiRequest<PublicOrder>('/checkout', { token: memberSession.token, method: 'POST', body: { items: cart.map((item) => ({ productId: item.productId, planId: item.planId })), customerHwid } });
+      const order = await apiRequest<PublicOrder>('/checkout', { token: memberSession.token, method: 'POST', body: { items: cart.map((item) => ({ productId: item.productId, planId: item.planId })) } });
       setCartOrder(order);
       setCart([]);
       await loadMemberOrders(memberSession.token);
@@ -677,8 +677,19 @@ export function App() {
             await loadLicenses(memberSession.token);
             setMessage('Lisensi berhasil direset ke HWID baru.');
           }}
+          onSubmitOrderHwid={async (orderId, hwid) => {
+            if (!memberSession) throw new Error('Login member dulu.');
+            await apiRequest(`/member/orders/${orderId}/hwid`, {
+              token: memberSession.token,
+              method: 'POST',
+              body: { hwid }
+            });
+            await loadLicenses(memberSession.token);
+            await loadMemberOrders(memberSession.token);
+            setMessage('HWID tersimpan dan lisensi berhasil dibuat.');
+          }}
         />
-        <MarketplaceCart open={cartOpen} items={cart} order={cartOrder} busy={cartBusy} onClose={() => setCartOpen(false)} onRemove={(productId) => setCart((current) => removeCartItem(current, productId))} onCheckout={(hwid) => void checkoutCart(hwid)} />
+        <MarketplaceCart open={cartOpen} items={cart} order={cartOrder} busy={cartBusy} onClose={() => setCartOpen(false)} onRemove={(productId) => setCart((current) => removeCartItem(current, productId))} onCheckout={() => void checkoutCart()} />
       </PublicShell>
     );
   }
@@ -688,7 +699,7 @@ export function App() {
     {route === 'content' ? <ManagedContent page={contentPage} loading={contentLoading} /> : route === 'product'
       ? <MarketplaceProductDetail product={selectedProduct} onBack={() => navigate('home')} onAdd={(product, plan) => addProductToCart(product, plan)} onBuy={(product, plan) => addProductToCart(product, plan, true)} />
       : <MarketplaceHome catalog={catalog} onOpen={navigateProduct} onAdd={(product) => addProductToCart(product, product.plans?.[0])} />}
-    <MarketplaceCart open={cartOpen} items={cart} order={cartOrder} busy={cartBusy} onClose={() => setCartOpen(false)} onRemove={(productId) => setCart((current) => removeCartItem(current, productId))} onCheckout={(hwid) => void checkoutCart(hwid)} />
+    <MarketplaceCart open={cartOpen} items={cart} order={cartOrder} busy={cartBusy} onClose={() => setCartOpen(false)} onRemove={(productId) => setCart((current) => removeCartItem(current, productId))} onCheckout={() => void checkoutCart()} />
   </PublicShell>;
 }
 
@@ -3073,7 +3084,7 @@ function Mixin9Landing({ product, onJoin }: { product: PublicProduct; onJoin: ()
   );
 }
 
-function MemberPanel({ session, products, dashboard, orders, onRegister, onLogin, onCheckout, onResetLicense, onLogout }: {
+function MemberPanel({ session, products, dashboard, orders, onRegister, onLogin, onCheckout, onResetLicense, onSubmitOrderHwid, onLogout }: {
   session: LoginResult | null;
   products: PublicProduct[];
   dashboard: MemberLicenseDashboard | null;
@@ -3082,12 +3093,15 @@ function MemberPanel({ session, products, dashboard, orders, onRegister, onLogin
   onLogin: (email: string, password: string) => Promise<void>;
   onCheckout: (productId: string) => Promise<PublicOrder | undefined>;
   onResetLicense: (licenseId: string, newHwid: string) => Promise<void>;
+  onSubmitOrderHwid: (orderId: string, hwid: string) => Promise<void>;
   onLogout: () => void;
 }) {
   const [checkoutNotice, setCheckoutNotice] = useState('');
   const [licenseNotice, setLicenseNotice] = useState('');
   const [memberResetValues, setMemberResetValues] = useState<Record<string, string>>({});
   const [memberResetBusy, setMemberResetBusy] = useState('');
+  const [orderHwidValues, setOrderHwidValues] = useState<Record<string, string>>({});
+  const [orderHwidBusy, setOrderHwidBusy] = useState('');
   const [cartProductIds, setCartProductIds] = useState<string[]>([]);
   const [cartBusy, setCartBusy] = useState(false);
   const [activeOrder, setActiveOrder] = useState<PublicOrder | null>(null);
@@ -3288,7 +3302,8 @@ function MemberPanel({ session, products, dashboard, orders, onRegister, onLogin
                     <b>Aktif di akunmu</b>
                     <div className="member-product-actions">
                       <button className="ghost-button" type="button" onClick={() => {
-                        if (product.accessUrl) window.location.href = product.accessUrl;
+                        if (product.downloadSourceConfigured) window.location.href = `/api/member/products/${product.id}/download`;
+                        else if (product.accessUrl) window.location.href = product.accessUrl;
                         else {
                           window.history.pushState({}, '', product.landingPath ?? `/produk/${product.slug}`);
                           window.dispatchEvent(new PopStateEvent('popstate'));
@@ -3333,6 +3348,32 @@ function MemberPanel({ session, products, dashboard, orders, onRegister, onLogin
                     <button className="ghost-button" onClick={() => setActiveOrder(order)}>QRIS</button>
                     <a className="ghost-button" href={`/api/member/orders/${order.id}/invoice.html`} target="_blank" rel="noreferrer">Invoice</a>
                   </div>
+                  {order.status === 'paid' && order.orderItems?.some((item) => item.fulfillmentType === 'license' && item.fulfillmentStatus !== 'fulfilled') && (
+                    <div className="member-reset-box">
+                      <small>Pembayaran sudah disetujui. Untuk mendapatkan lisensi, silakan masukkan HWID perangkat Anda.</small>
+                      <input
+                        value={orderHwidValues[order.id] ?? ''}
+                        onChange={(event) => setOrderHwidValues((current) => ({ ...current, [order.id]: event.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '') }))}
+                        maxLength={16}
+                        placeholder="16 karakter HWID"
+                      />
+                      <button
+                        className="primary"
+                        disabled={orderHwidBusy === order.id || (orderHwidValues[order.id]?.length ?? 0) !== 16}
+                        onClick={async () => {
+                          setOrderHwidBusy(order.id);
+                          try {
+                            await onSubmitOrderHwid(order.id, orderHwidValues[order.id]);
+                            setOrderHwidValues((current) => ({ ...current, [order.id]: '' }));
+                          } finally {
+                            setOrderHwidBusy('');
+                          }
+                        }}
+                      >
+                        {orderHwidBusy === order.id ? 'Membuat lisensi...' : 'Dapatkan Lisensi'}
+                      </button>
+                    </div>
+                  )}
                 </article>
               ))}
             </div>
