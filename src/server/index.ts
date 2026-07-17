@@ -18,6 +18,7 @@ import {
   banHwid,
   createAdmin,
   createCheckout,
+  createCartCheckout,
   createLicenseCheckout,
   canAccessLicenseOrder,
   createMember,
@@ -1962,8 +1963,16 @@ app.post('/api/checkout', requireSession, async (req, res) => {
   }
 
   try {
-    const body = z.object({ productId: z.string() }).parse(req.body);
-    const order = await createCheckout(store, req.user.id, body.productId);
+    const body = z.union([
+      z.object({ productId: z.string().min(1) }),
+      z.object({
+        items: z.array(z.object({ productId: z.string().min(1), planId: z.string().min(1) })).min(1).max(25),
+        voucherCode: z.string().trim().max(40).optional()
+      })
+    ]).parse(req.body);
+    const order = 'items' in body
+      ? await createCartCheckout(store, req.user.id, body)
+      : await createCheckout(store, req.user.id, body.productId);
     void emailInvoice(order.id);
     res.status(201).json(publicOrder(order));
   } catch (error) {
