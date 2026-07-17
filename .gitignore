@@ -12,3 +12,4 @@ __pycache__/
 *.env.bot
 telegram-bot.env
 data/telegram-bot-state.json
+.worktrees/
