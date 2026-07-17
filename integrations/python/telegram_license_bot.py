@@ -37,6 +37,13 @@ TELEGRAM_POLL_TIMEOUT_SECONDS = 25
 HTTP_TIMEOUT_SECONDS = 40
 DEPLOY_HTTP_TIMEOUT_SECONDS = 240
 DEPLOY_COMMANDS = {"/deploy", "/deployupdate"}
+LEGACY_REPLY_BUTTON_LABELS = {
+    "📋 Daftar Voucher",
+    "➕ Tambah/Edit Voucher",
+    "❌ Hapus Voucher",
+    "⬅️ Kembali ke Pengaturan",
+    "🔙 Kembali ke Pengaturan",
+}
 
 
 def request_json(url: str, method: str = "GET", body: Optional[Dict[str, Any]] = None,
@@ -83,6 +90,14 @@ def api(path: str, method: str = "GET", body: Optional[Dict[str, Any]] = None,
 
 def keyboard(rows: List[List[Dict[str, str]]]) -> Dict[str, Any]:
     return {"inline_keyboard": rows}
+
+
+def is_legacy_reply_button(text: str) -> bool:
+    return text.strip() in LEGACY_REPLY_BUTTON_LABELS
+
+
+def remove_legacy_keyboard() -> Dict[str, bool]:
+    return {"remove_keyboard": True}
 
 
 def main_menu() -> Dict[str, Any]:
@@ -439,9 +454,15 @@ def main() -> None:
                     continue
                 text = str(message.get("text", ""))
                 try:
+                    if is_legacy_reply_button(text):
+                        send(chat_id, "Keyboard lama sudah dihapus.", remove_legacy_keyboard())
+                        send(chat_id, "Pilih menu tombol baru:", main_menu())
+                        continue
                     if handle_pending_text(chat_id, text):
                         continue
                     command = text.strip().split(" ")[0].split("@")[0].lower()
+                    if command in {"/start", "/help"}:
+                        send(chat_id, "Mengaktifkan menu tombol baru.", remove_legacy_keyboard())
                     reply_markup = main_menu() if command in {"/start", "/help"} else None
                     reply = handle(text)
                     send(chat_id, reply, reply_markup)
