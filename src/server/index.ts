@@ -1193,6 +1193,10 @@ app.post('/api/admin/deploy/settings', requireSession, requireAdminScope('produc
       updatedAt: store.data.deploymentSettings.updatedAt
     });
   } catch (error) {
+    if (error instanceof Error && /QRIS|CRC|struktur/i.test(error.message)) {
+      res.status(400).json({ message: error.message });
+      return;
+    }
     res.status(500).json({
       message: 'Token gagal disimpan ke data server.',
       detail: error instanceof Error ? error.message : 'unknown save error'

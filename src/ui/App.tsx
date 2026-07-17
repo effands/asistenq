@@ -1881,7 +1881,7 @@ function DeployPanel({ settings, onDeployUpdate, onRefreshBotStatus, onSaveSetti
               className="qris-payload-input"
               name="qrisStaticPayload"
               value={qrisStaticPayload}
-              onChange={(event) => setQrisStaticPayload(event.target.value.replace(/\s/g, ''))}
+              onChange={(event) => setQrisStaticPayload(event.target.value)}
               placeholder="Tempel string QRIS statis merchant"
               rows={6}
             />
