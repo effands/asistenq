@@ -2,6 +2,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import type { DatabaseShape } from '../shared/types';
 
+export const defaultQrisStaticPayload = '00020101021126570011ID.DANA.WWW011893600915303265462802090326546280303UMI51440014ID.CO.QRIS.WWW0215ID10265329452210303UMI5204504553033605802ID5905ZIQVA6011Kab. Malang6105651676304F3F6';
+
 export interface Store {
   data: DatabaseShape;
   save(): void;
@@ -24,7 +26,8 @@ const emptyData = (): DatabaseShape => ({
   toolAnalyticsEvents: [],
   deploymentSettings: {
     githubRepo: 'effands/asistenq',
-    githubBranch: 'master'
+    githubBranch: 'master',
+    qrisStaticPayload: defaultQrisStaticPayload
   }
 });
 
@@ -48,6 +51,7 @@ function normalizeData(data: Partial<DatabaseShape>): DatabaseShape {
     deploymentSettings: {
       githubRepo: 'effands/asistenq',
       githubBranch: 'master',
+      qrisStaticPayload: defaultQrisStaticPayload,
       ...(data.deploymentSettings ?? {})
     }
   };

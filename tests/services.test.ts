@@ -5,7 +5,6 @@ import {
   createCheckout,
   createMember,
   createProductRecord,
-  handleDanaSandboxFinishNotify,
   formatInvoiceHtml,
   generateLicenseForPaidOrder,
   expirePendingOrders,
@@ -67,19 +66,49 @@ describe('server services', () => {
       price: 99000
     });
 
-    const order = createCheckout(store, member.id, product.id);
+    const order = await createCheckout(store, member.id, product.id);
     expect(order.status).toBe('pending');
     expect(order.invoiceNumber).toMatch(/^INV-/);
     expect(order.uniqueCode).toBeGreaterThanOrEqual(100);
-    expect(order.totalAmount).toBeGreaterThan(order.amount);
+    expect(order.uniqueCode).toBeLessThanOrEqual(999);
+    expect(order.totalAmount).toBe(order.amount + (order.uniqueCode ?? 0));
     expect(order.expiresAt).toBeTruthy();
-    expect(order.paymentQrUrl).toContain('blogger.googleusercontent.com');
-    expect(order.qrisPayload).toContain('ASISTENQ');
+    expect(order.paymentQrUrl).toMatch(/^data:image\/png;base64,/);
+    expect(order.qrisPayload).toContain(`54${String(order.totalAmount).length.toString().padStart(2, '0')}${order.totalAmount}`);
+    expect(order.qrisPayload).toContain('010212');
 
     const result = markOrderPaid(store, order.id, new Date('2026-06-28T00:00:00.000Z'));
 
     expect(result.order.status).toBe('paid');
     expect(result.subscription.endsAt).toBe('2026-07-28T00:00:00.000Z');
+  });
+
+  it('does not store a paid checkout when static QRIS is invalid', async () => {
+    const member = await createMember(store, { name: 'Buyer', email: 'buyer@asistenq.com', password: 'secret123' });
+    const product = createProductRecord(store, {
+      name: 'Paid', slug: 'paid', type: 'tool', billingPeriod: 'monthly', price: 49900
+    });
+    store.data.deploymentSettings = { ...store.data.deploymentSettings, qrisStaticPayload: 'invalid' };
+
+    await expect(createCheckout(store, member.id, product.id)).rejects.toThrow('QRIS');
+    expect(store.data.orders).toHaveLength(0);
+  });
+
+  it('creates a free checkout without QRIS configuration', async () => {
+    const member = await createMember(store, { name: 'Free Buyer', email: 'free@asistenq.com', password: 'secret123' });
+    const product = createProductRecord(store, {
+      name: 'Free Tool', slug: 'free-tool', type: 'tool', billingPeriod: 'one_time', price: 0
+    });
+    store.data.deploymentSettings = {
+      githubRepo: 'effands/asistenq',
+      githubBranch: 'master',
+      qrisStaticPayload: ''
+    };
+
+    const order = await createCheckout(store, member.id, product.id);
+
+    expect(order.totalAmount).toBe(0);
+    expect(order.paymentQrUrl).toBeUndefined();
   });
 
   it('creates license plans when a product is created with tiered pricing', () => {
@@ -126,7 +155,7 @@ describe('server services', () => {
       billingPeriod: 'monthly',
       price: 49900
     });
-    const order = createCheckout(store, member.id, product.id, new Date('2026-06-28T00:00:00.000Z'));
+    const order = await createCheckout(store, member.id, product.id, new Date('2026-06-28T00:00:00.000Z'));
 
     expect(order.expiresAt).toBe('2026-06-29T00:00:00.000Z');
 
@@ -145,7 +174,7 @@ describe('server services', () => {
       billingPeriod: 'monthly',
       price: 49900
     });
-    const order = createCheckout(store, member.id, product.id);
+    const order = await createCheckout(store, member.id, product.id);
 
     expect(listPendingOrders(store, 5)[0]).toMatchObject({
       invoiceNumber: order.invoiceNumber,
@@ -157,53 +186,6 @@ describe('server services', () => {
 
     expect(paid.order.status).toBe('paid');
     expect(store.data.subscriptions).toHaveLength(1);
-  });
-
-  it('marks an order paid from a DANA sandbox finish notify payload', async () => {
-    const member = await createMember(store, { name: 'Buyer', email: 'buyer@asistenq.com', password: 'secret123' });
-    const product = createProductRecord(store, {
-      name: 'Kelas YouTube Online',
-      slug: 'kelas-youtube-online',
-      type: 'course',
-      billingPeriod: 'annual',
-      price: 799000
-    });
-    const order = createCheckout(store, member.id, product.id);
-
-    const result = handleDanaSandboxFinishNotify(store, {
-      originalPartnerReferenceNo: order.invoiceNumber,
-      originalReferenceNo: 'DANA-REF-001',
-      latestTransactionStatus: 'SUCCESS'
-    }, new Date('2026-06-30T06:00:00.000Z'));
-
-    expect(result.order.status).toBe('paid');
-    expect(result.order.paymentProvider).toBe('dana');
-    expect(result.order.paymentPartnerReferenceNo).toBe(order.invoiceNumber);
-    expect(result.order.paymentReferenceNo).toBe('DANA-REF-001');
-    expect(store.data.subscriptions).toHaveLength(1);
-  });
-
-  it('stores DANA sandbox metadata without paying the order when status is still pending', async () => {
-    const member = await createMember(store, { name: 'Buyer', email: 'buyer@asistenq.com', password: 'secret123' });
-    const product = createProductRecord(store, {
-      name: 'Kelas YouTube Online',
-      slug: 'kelas-youtube-online',
-      type: 'course',
-      billingPeriod: 'annual',
-      price: 799000
-    });
-    const order = createCheckout(store, member.id, product.id);
-
-    const result = handleDanaSandboxFinishNotify(store, {
-      partnerReferenceNo: order.invoiceNumber,
-      referenceNo: 'DANA-REF-002',
-      latestTransactionStatus: 'PENDING'
-    }, new Date('2026-06-30T06:00:00.000Z'));
-
-    expect(result.order.status).toBe('pending');
-    expect(result.order.paymentProvider).toBe('dana');
-    expect(result.order.paymentReferenceNo).toBe('DANA-REF-002');
-    expect(store.data.subscriptions).toHaveLength(0);
   });
 
   it('generates a license from a paid invoice and HWID', async () => {
@@ -226,7 +208,7 @@ describe('server services', () => {
       isFree: false,
       isActive: true
     });
-    const order = createCheckout(store, member.id, product.id);
+    const order = await createCheckout(store, member.id, product.id);
     markOrderPaid(store, order.id, new Date('2026-06-28T00:00:00.000Z'));
 
     const license = generateLicenseForPaidOrder(store, {
@@ -253,7 +235,7 @@ describe('server services', () => {
       billingPeriod: 'monthly',
       price: 49900
     });
-    const order = createCheckout(store, member.id, product.id);
+    const order = await createCheckout(store, member.id, product.id);
 
     const html = formatInvoiceHtml(store, order.id, member.id);
 

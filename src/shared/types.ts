@@ -170,11 +170,6 @@ export interface Order {
   status: OrderStatus;
   qrisPayload: string;
   paymentQrUrl?: string;
-  paymentProvider?: 'manual' | 'dana';
-  paymentReferenceNo?: string;
-  paymentPartnerReferenceNo?: string;
-  paymentRedirectUrl?: string;
-  paymentPayload?: Record<string, unknown>;
   createdAt: string;
   expiresAt?: string;
   reminderSentAt?: string;
@@ -234,12 +229,7 @@ export interface DeploymentSettings {
   smtpUser?: string;
   smtpPass?: string;
   mailFrom?: string;
-  danaSandboxApiUrl?: string;
-  danaMerchantId?: string;
-  danaClientId?: string;
-  danaClientSecret?: string;
-  danaPublicKey?: string;
-  danaPrivateKey?: string;
+  qrisStaticPayload?: string;
   updatedAt?: string;
 }
 

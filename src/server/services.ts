@@ -30,6 +30,7 @@ import type {
   Voucher
 } from '../shared/types';
 import type { Store } from './store';
+import { generateDynamicQris } from './qris';
 
 type Actor = {
   role: 'super_admin' | 'admin';
@@ -463,7 +464,7 @@ export function createPlanRecord(store: Store, input: {
 export const invoiceLifetimeHours = 24;
 export const invoiceReminderHours = 3;
 
-export function createCheckout(store: Store, memberId: string, productId: string, now = new Date()): Order {
+export async function createCheckout(store: Store, memberId: string, productId: string, now = new Date()): Promise<Order> {
   const member = store.data.members.find((item) => item.id === memberId);
   const product = store.data.products.find((item) => item.id === productId && item.active);
 
@@ -479,6 +480,9 @@ export function createCheckout(store: Store, memberId: string, productId: string
   const totalAmount = product.price + uniqueCode;
   const invoiceNumber = `INV-${now.toISOString().slice(0, 10).replace(/-/g, '')}-${String(store.data.orders.length + 1).padStart(4, '0')}`;
   const expiresAt = new Date(now.getTime() + invoiceLifetimeHours * 60 * 60 * 1000).toISOString();
+  const generatedQris = product.price > 0
+    ? await generateDynamicQris(store.data.deploymentSettings?.qrisStaticPayload ?? '', totalAmount)
+    : undefined;
 
   const order: Order = {
     id: createId('order'),
@@ -490,10 +494,8 @@ export function createCheckout(store: Store, memberId: string, productId: string
     amount: product.price,
     totalAmount,
     status: 'pending',
-    qrisPayload: product.price > 0
-      ? `ASISTENQ|${invoiceNumber}|${product.slug}|${totalAmount}|${member.email}`
-      : `ASISTENQ|${invoiceNumber}|${product.slug}|FREE|${member.email}`,
-    paymentQrUrl: 'https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEhut4hFJ1371v4Z-Xxd4_-ndcBaup55rpoiBgk066hJ-K1c5Lt9tgJIElFFdUL32KX7_2XRpZfgz8sAWNU8OEpr2dh_xYxkeL4I0ZQyTn76lBYAEdcfzp_WMQ9QkI8tYpagEqmJdGg9k8KzPMOBUgvqW_Ck9YR6RghxapNCkfcV7fUoAe_p3y_Ngg7BiWI/s735/photo_2026-06-16_07-23-26.jpg',
+    qrisPayload: generatedQris?.payload ?? '',
+    paymentQrUrl: generatedQris?.dataUrl,
     createdAt: now.toISOString(),
     expiresAt
   };
@@ -875,87 +877,6 @@ export function markOrderPaidByInvoice(store: Store, invoiceNumber: string, paid
   }
 
   return markOrderPaid(store, order.id, paidAt);
-}
-
-type DanaSandboxFinishPayload = Record<string, unknown>;
-
-function danaStatusValue(payload: DanaSandboxFinishPayload): string {
-  const candidates = [
-    payload.latestTransactionStatus,
-    payload.transactionStatus,
-    payload.status
-  ];
-
-  const value = candidates.find((item) => typeof item === 'string');
-  return String(value ?? '').trim().toUpperCase();
-}
-
-function danaReferenceValue(payload: DanaSandboxFinishPayload, keys: string[]): string | undefined {
-  for (const key of keys) {
-    const value = payload[key];
-    if (typeof value === 'string' && value.trim()) return value.trim();
-  }
-  return undefined;
-}
-
-function findOrderByPaymentReference(store: Store, partnerReferenceNo: string) {
-  return store.data.orders.find((item) => (
-    item.invoiceNumber === partnerReferenceNo ||
-    item.id === partnerReferenceNo ||
-    item.paymentPartnerReferenceNo === partnerReferenceNo
-  ));
-}
-
-export function handleDanaSandboxFinishNotify(store: Store, payload: DanaSandboxFinishPayload, now = new Date()) {
-  const partnerReferenceNo = danaReferenceValue(payload, [
-    'originalPartnerReferenceNo',
-    'partnerReferenceNo',
-    'merchantTransId'
-  ]);
-
-  if (!partnerReferenceNo) {
-    throw new Error('partner reference not found');
-  }
-
-  const order = findOrderByPaymentReference(store, partnerReferenceNo);
-
-  if (!order) {
-    throw new Error('order not found');
-  }
-
-  const referenceNo = danaReferenceValue(payload, [
-    'originalReferenceNo',
-    'referenceNo'
-  ]);
-  const redirectUrl = danaReferenceValue(payload, [
-    'finishRedirectUrl',
-    'redirectUrl'
-  ]);
-  const status = danaStatusValue(payload);
-  const successStatuses = new Set(['SUCCESS', '00', 'PAID', 'COMPLETED']);
-
-  order.paymentProvider = 'dana';
-  order.paymentPartnerReferenceNo = partnerReferenceNo;
-  if (referenceNo) order.paymentReferenceNo = referenceNo;
-  if (redirectUrl) order.paymentRedirectUrl = redirectUrl;
-  order.paymentPayload = payload;
-
-  if (successStatuses.has(status)) {
-    const result = markOrderPaid(store, order.id, now);
-    result.order.paymentProvider = 'dana';
-    result.order.paymentPartnerReferenceNo = partnerReferenceNo;
-    if (referenceNo) result.order.paymentReferenceNo = referenceNo;
-    if (redirectUrl) result.order.paymentRedirectUrl = redirectUrl;
-    result.order.paymentPayload = payload;
-    store.save();
-    return result;
-  }
-
-  store.save();
-  return {
-    order,
-    subscription: undefined
-  };
 }
 
 export function generateLicenseForPaidOrder(store: Store, input: {
