@@ -26,6 +26,7 @@ import {
   formatInvoiceHtml,
   invoiceReminderHours,
   createProductRecord,
+  deleteProductRecord,
   generateDirectToolLicense,
   generateToolLicense,
   generateLicenseForPaidOrder,
@@ -1201,17 +1202,43 @@ app.get('/api/admin/licenses', requireSession, requireAdminScope('products'), (_
 });
 
 app.post('/api/admin/products', requireSession, requireAdminScope('products'), (req, res) => {
-  const body = productSchema.parse(req.body);
-  const product = createProductRecord(store, body);
-
-  res.status(201).json(publicProduct(product));
+  try {
+    const body = productSchema.parse(req.body);
+    const product = createProductRecord(store, body);
+    res.status(201).json(publicProduct(product));
+  } catch (error) {
+    const message = error instanceof z.ZodError
+      ? error.issues.map((issue) => issue.message).join(', ')
+      : error instanceof Error ? error.message : 'Produk gagal ditambahkan.';
+    res.status(400).json({ message });
+  }
 });
 
 app.put('/api/admin/products/:id', requireSession, requireAdminScope('products'), (req, res) => {
-  const body = productSchema.partial().parse(req.body);
-  const product = updateProductRecord(store, String(req.params.id), body);
+  try {
+    const body = productSchema.partial().parse(req.body);
+    const product = updateProductRecord(store, String(req.params.id), body);
+    res.json({ ...publicProduct(product), plans: store.data.plans.filter((plan) => plan.productId === product.id && plan.isActive) });
+  } catch (error) {
+    const message = error instanceof z.ZodError
+      ? error.issues.map((issue) => issue.message).join(', ')
+      : error instanceof Error ? error.message : 'Produk gagal diperbarui.';
+    res.status(message === 'product not found' ? 404 : 400).json({ message });
+  }
+});
 
-  res.json({ ...publicProduct(product), plans: store.data.plans.filter((plan) => plan.productId === product.id && plan.isActive) });
+app.delete('/api/admin/products/:id', requireSession, requireAdminScope('products'), (req, res) => {
+  try {
+    const product = deleteProductRecord(store, String(req.params.id));
+    const mediaUrls = [product.marketplaceCoverUrl, ...(product.gallery ?? []).map((item) => item.url)];
+    for (const mediaUrl of mediaUrls) {
+      if (mediaUrl?.startsWith('/api/product-media/')) removeProductMedia(mediaUrl.slice('/api/product-media/'.length));
+    }
+    res.json({ ok: true, id: product.id });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Produk gagal dihapus.';
+    res.status(message === 'product not found' ? 404 : 400).json({ message });
+  }
 });
 
 app.patch('/api/admin/plans/:id', requireSession, requireAdminScope('products'), (req, res) => {

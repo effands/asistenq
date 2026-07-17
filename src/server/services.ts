@@ -472,6 +472,27 @@ export function updateProductRecord(store: Store, productId: string, input: Part
   return product;
 }
 
+export function deleteProductRecord(store: Store, productId: string): Product {
+  const product = store.data.products.find((item) => item.id === productId);
+  if (!product) throw new Error('product not found');
+
+  const hasCustomerData = store.data.orders.some((order) => order.productId === productId || order.orderItems?.some((item) => item.productId === productId))
+    || store.data.licenses.some((license) => license.productId === productId)
+    || store.data.subscriptions.some((subscription) => subscription.productId === productId)
+    || store.data.accessGrants.some((grant) => grant.productId === productId)
+    || store.data.downloadGrants.some((grant) => grant.productId === productId);
+  if (hasCustomerData) throw new Error('Produk sudah memiliki transaksi atau akses member. Ubah visibilitas menjadi Draft jika ingin menyembunyikannya.');
+
+  store.data.products = store.data.products.filter((item) => item.id !== productId);
+  store.data.plans = store.data.plans.filter((item) => item.productId !== productId);
+  store.data.vouchers = store.data.vouchers.filter((item) => item.productId !== productId);
+  store.data.announcements = store.data.announcements.filter((item) => item.productId !== productId);
+  store.data.bannedHwids = store.data.bannedHwids.filter((item) => item.productId !== productId);
+  store.data.toolAnalyticsEvents = store.data.toolAnalyticsEvents.filter((item) => item.productId !== productId);
+  store.save();
+  return product;
+}
+
 export function createPlanRecord(store: Store, input: {
   productId: string;
   code: string;

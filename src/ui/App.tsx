@@ -27,7 +27,7 @@ import {
 import { useEffect, useState, type ReactNode } from 'react';
 import type { BillingPeriod, ContentPage, ProductAccessMode, ProductDestinationType, ProductFulfillmentType, ProductOpenMode, ProductPlan, ProductType, ProductVisibility } from '../shared/types';
 import { paymentProofCleanupMessage, type PaymentProofCleanupResult } from './payment-proof-cleanup';
-import { buildProductFulfillmentPatch } from './product-form';
+import { buildProductFulfillmentPatch, cleanOptionalProductUrls } from './product-form';
 import { addCartItem, readCart, removeCartItem, writeCart, type MarketplaceCartItem } from './cart-store';
 import { clearMemberSession, readMemberSession, writeMemberSession } from './member-session';
 import { ManagedContent, MarketplaceCart, MarketplaceHome, MarketplaceProductDetail } from './MarketplaceStorefront';
@@ -367,6 +367,14 @@ export function App() {
             await loadCatalog();
             await loadAdminSummary();
             setMessage('Produk diperbarui.');
+          }}
+          onDeleteProduct={async (productId) => {
+            if (!adminSession) return;
+            await apiRequest(`/admin/products/${productId}`, { token: adminSession.token, method: 'DELETE' });
+            await loadProducts();
+            await loadCatalog();
+            await loadAdminSummary();
+            setMessage('Produk dihapus.');
           }}
           onUpdatePlan={async (planId, input) => {
             if (!adminSession) return;
@@ -891,6 +899,7 @@ function AdminPanel({
   onLogin,
   onCreateProduct,
   onUpdateProduct,
+  onDeleteProduct,
   onUpdatePlan,
   onImportLandingZip,
   onImportLandingHtml,
@@ -962,6 +971,7 @@ function AdminPanel({
     description: string;
   }) => Promise<void>;
   onUpdateProduct: (productId: string, input: Partial<PublicProduct>) => Promise<void>;
+  onDeleteProduct: (productId: string) => Promise<void>;
   onUpdatePlan: (planId: string, input: { name?: string; price?: number; durationDays?: number | null; isActive?: boolean; badge?: string; highlighted?: boolean; sortOrder?: number }) => Promise<void>;
   onImportLandingZip: (productId: string, file: File) => Promise<void>;
   onImportLandingHtml: (productId: string, file: File) => Promise<void>;
@@ -1014,7 +1024,7 @@ function AdminPanel({
     return (
       <section className="admin-content-grid">
         <ProductForm onCreateProduct={onCreateProduct} />
-        <ProductTable onImportLandingHtml={onImportLandingHtml} onImportLandingZip={onImportLandingZip} onUploadProductLogo={onUploadProductLogo} onUploadProductMedia={onUploadProductMedia} onDeleteProductMedia={onDeleteProductMedia} onUpdateProduct={onUpdateProduct} products={products} />
+        <ProductTable onImportLandingHtml={onImportLandingHtml} onImportLandingZip={onImportLandingZip} onUploadProductLogo={onUploadProductLogo} onUploadProductMedia={onUploadProductMedia} onDeleteProductMedia={onDeleteProductMedia} onUpdateProduct={onUpdateProduct} onDeleteProduct={onDeleteProduct} products={products} />
       </section>
     );
   }
@@ -2260,6 +2270,8 @@ function ProductForm({ onCreateProduct }: {
   const [accessRequirement, setAccessRequirement] = useState('Daftar jadi member untuk membuka akses.');
   const [headline, setHeadline] = useState('Bantu produksi video lebih cepat.');
   const [description, setDescription] = useState('Produk AsistenQ untuk workflow editing dan YouTube.');
+  const [createBusy, setCreateBusy] = useState(false);
+  const [createNotice, setCreateNotice] = useState('');
   const primaryPaidTemplate = tieredPlanTemplates.find((plan) => activePlans[plan.code] && !plan.isFree);
   const primarySalePrice = primaryPaidTemplate ? Number(planPrices[primaryPaidTemplate.code] ?? 0) : 0;
   const discountPercent = compareAtPrice > primarySalePrice && compareAtPrice > 0
@@ -2278,7 +2290,10 @@ function ProductForm({ onCreateProduct }: {
   return (
     <form className="panel stack wide product-create-form" onSubmit={async (event) => {
       event.preventDefault();
-      const selectedPlans = tieredPlanTemplates
+      setCreateBusy(true);
+      setCreateNotice('');
+      try {
+        const selectedPlans = tieredPlanTemplates
         .filter((plan) => activePlans[plan.code])
         .map((plan) => ({
           code: plan.code,
@@ -2289,34 +2304,40 @@ function ProductForm({ onCreateProduct }: {
           isFree: plan.isFree ?? Number(planPrices[plan.code] ?? 0) === 0,
           isActive: true
         }));
-      const primaryPlan = selectedPlans.find((plan) => !plan.isFree) ?? selectedPlans[0];
+        const primaryPlan = selectedPlans.find((plan) => !plan.isFree) ?? selectedPlans[0];
 
-      await onCreateProduct({
-        name,
-        slug,
-        type,
-        category,
-        visibility,
-        accessMode,
-        billingPeriod: primaryPlan?.billingPeriod ?? 'monthly',
-        price: primaryPlan?.price ?? 0,
-        plans: selectedPlans,
-        compareAtPrice: compareAtPrice || undefined,
-        discountLabel: discountLabel.trim() || undefined,
-        promoText: promoText.trim() || undefined,
-        logoUrl: logoUrl.trim() || undefined,
-        landingPath: landingPath.trim() || undefined,
-        landingTemplate: landingTemplate.trim() || undefined,
-        destinationType,
-        externalUrl: destinationType === 'external' ? externalUrl.trim() || undefined : undefined,
-        openMode,
-        trackLiveUsers: destinationType === 'external' ? false : trackLiveUsers,
-        ...buildProductFulfillmentPatch(fulfillmentType, downloadSourceUrl),
-        ctaLabel: ctaLabel.trim() || undefined,
-        accessRequirement: accessRequirement.trim() || undefined,
-        headline,
-        description
-      });
+        await onCreateProduct({
+          name,
+          slug,
+          type,
+          category,
+          visibility,
+          accessMode,
+          billingPeriod: primaryPlan?.billingPeriod ?? 'monthly',
+          price: primaryPlan?.price ?? 0,
+          plans: selectedPlans,
+          compareAtPrice: compareAtPrice || undefined,
+          discountLabel: discountLabel.trim() || undefined,
+          promoText: promoText.trim() || undefined,
+          logoUrl: logoUrl.trim() || undefined,
+          landingPath: landingPath.trim() || undefined,
+          landingTemplate: landingTemplate.trim() || undefined,
+          destinationType,
+          externalUrl: destinationType === 'external' ? externalUrl.trim() || undefined : undefined,
+          openMode,
+          trackLiveUsers: destinationType === 'external' ? false : trackLiveUsers,
+          ...buildProductFulfillmentPatch(fulfillmentType, downloadSourceUrl),
+          ctaLabel: ctaLabel.trim() || undefined,
+          accessRequirement: accessRequirement.trim() || undefined,
+          headline,
+          description
+        });
+        setCreateNotice('Produk baru berhasil ditambahkan.');
+      } catch (error) {
+        setCreateNotice(error instanceof Error ? error.message : 'Produk gagal ditambahkan.');
+      } finally {
+        setCreateBusy(false);
+      }
     }}>
       <div className="panel-heading product-create-heading">
         <div>
@@ -2437,7 +2458,8 @@ function ProductForm({ onCreateProduct }: {
           </div>
         </div>
       </details>
-      <div className="product-form-footer"><span>Produk bisa diedit kembali setelah disimpan.</span><button className="primary"><PackagePlus size={18} /> Simpan Produk</button></div>
+      <div className="product-form-footer"><span>Produk bisa diedit kembali setelah disimpan.</span><button className="primary" disabled={createBusy}><PackagePlus size={18} /> {createBusy ? 'Menyimpan...' : 'Simpan Produk'}</button></div>
+      {createNotice && <p className="form-notice">{createNotice}</p>}
     </form>
   );
 }
@@ -2471,9 +2493,10 @@ function Metric({ icon, label, value, onClick }: { icon: ReactNode; label: strin
   );
 }
 
-function ProductTable({ products, onUpdateProduct, onImportLandingZip, onImportLandingHtml, onUploadProductLogo, onUploadProductMedia, onDeleteProductMedia }: {
+function ProductTable({ products, onUpdateProduct, onDeleteProduct, onImportLandingZip, onImportLandingHtml, onUploadProductLogo, onUploadProductMedia, onDeleteProductMedia }: {
   products: PublicProduct[];
   onUpdateProduct: (productId: string, input: Partial<PublicProduct>) => Promise<void>;
+  onDeleteProduct: (productId: string) => Promise<void>;
   onImportLandingZip: (productId: string, file: File) => Promise<void>;
   onImportLandingHtml: (productId: string, file: File) => Promise<void>;
   onUploadProductLogo: (productId: string, file: File) => Promise<void>;
@@ -2483,6 +2506,7 @@ function ProductTable({ products, onUpdateProduct, onImportLandingZip, onImportL
   const [editingId, setEditingId] = useState('');
   const [draft, setDraft] = useState<Partial<PublicProduct>>({});
   const [notice, setNotice] = useState('');
+  const [busyId, setBusyId] = useState('');
   const [filter, setFilter] = useState<'all' | 'landing' | 'tool'>('all');
   const filteredProducts = products.filter((product) => {
     const isToolApp = product.landingTemplate === 'tool-app';
@@ -2612,26 +2636,49 @@ function ProductTable({ products, onUpdateProduct, onImportLandingZip, onImportL
                 </div>
                 <div className="product-edit-actions">
                   <button className="primary" type="button" onClick={async () => {
-                    const fulfillmentPatch = draft.fulfillmentType === 'download' && !draft.downloadSourceUrl?.trim()
-                      ? { fulfillmentType: 'download' as const }
-                      : buildProductFulfillmentPatch(draft.fulfillmentType ?? 'license', draft.downloadSourceUrl ?? '');
-                    await onUpdateProduct(product.id, {
-                      ...draft,
-                      ...fulfillmentPatch,
-                      downloadSourceUrl: 'downloadSourceUrl' in fulfillmentPatch ? fulfillmentPatch.downloadSourceUrl : undefined,
-                      discountLabel: draft.discountLabel?.trim() || undefined,
-                      promoText: draft.promoText?.trim() || undefined,
-                      logoUrl: draft.logoUrl?.trim() || undefined,
-                      landingPath: draft.landingPath?.trim() || undefined,
-                      landingTemplate: draft.landingTemplate?.trim() || undefined,
-                      externalUrl: draft.destinationType === 'external' ? draft.externalUrl?.trim() || undefined : undefined,
-                      trackLiveUsers: draft.destinationType === 'external' ? false : draft.trackLiveUsers !== false,
-                      ctaLabel: draft.ctaLabel?.trim() || undefined,
-                      accessRequirement: draft.accessRequirement?.trim() || undefined
-                    });
-                    setNotice(`${product.name} tersimpan.`);
-                    setEditingId('');
-                  }}>Simpan Perubahan</button>
+                    setBusyId(product.id);
+                    setNotice('');
+                    try {
+                      const fulfillmentPatch = draft.fulfillmentType === 'download' && !draft.downloadSourceUrl?.trim()
+                        ? { fulfillmentType: 'download' as const }
+                        : buildProductFulfillmentPatch(draft.fulfillmentType ?? 'license', draft.downloadSourceUrl ?? '');
+                      await onUpdateProduct(product.id, cleanOptionalProductUrls({
+                        ...draft,
+                        ...fulfillmentPatch,
+                        downloadSourceUrl: 'downloadSourceUrl' in fulfillmentPatch ? fulfillmentPatch.downloadSourceUrl : undefined,
+                        discountLabel: draft.discountLabel?.trim() || undefined,
+                        promoText: draft.promoText?.trim() || undefined,
+                        logoUrl: draft.logoUrl?.trim() || undefined,
+                        landingPath: draft.landingPath?.trim() || undefined,
+                        landingTemplate: draft.landingTemplate?.trim() || undefined,
+                        externalUrl: draft.destinationType === 'external' ? draft.externalUrl : undefined,
+                        trackLiveUsers: draft.destinationType === 'external' ? false : draft.trackLiveUsers !== false,
+                        ctaLabel: draft.ctaLabel?.trim() || undefined,
+                        accessRequirement: draft.accessRequirement?.trim() || undefined
+                      }));
+                      setNotice(`${product.name} tersimpan.`);
+                      setEditingId('');
+                    } catch (error) {
+                      setNotice(error instanceof Error ? error.message : 'Produk gagal disimpan.');
+                    } finally {
+                      setBusyId('');
+                    }
+                  }} disabled={busyId === product.id}>{busyId === product.id ? 'Menyimpan...' : 'Simpan Perubahan'}</button>
+                  <button className="ghost-button" type="button" disabled={busyId === product.id} onClick={() => setEditingId('')}>Batal</button>
+                  <button className="ghost-button" type="button" disabled={busyId === product.id} onClick={async () => {
+                    if (!window.confirm(`Hapus produk ${product.name}? Produk yang sudah memiliki transaksi tidak dapat dihapus.`)) return;
+                    setBusyId(product.id);
+                    setNotice('');
+                    try {
+                      await onDeleteProduct(product.id);
+                      setEditingId('');
+                      setNotice(`${product.name} dihapus.`);
+                    } catch (error) {
+                      setNotice(error instanceof Error ? error.message : 'Produk gagal dihapus.');
+                    } finally {
+                      setBusyId('');
+                    }
+                  }}>Hapus Produk</button>
                   <label className="zip-upload-button">
                     Import ZIP landing
                     <input type="file" accept=".zip,application/zip" onChange={async (event) => {

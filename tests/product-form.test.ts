@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest';
-import { buildProductFulfillmentPatch } from '../src/ui/product-form';
+import { buildProductFulfillmentPatch, cleanOptionalProductUrls } from '../src/ui/product-form';
 
 it('omits a download source for license products', () => {
   expect(buildProductFulfillmentPatch('license', 'https://files.example.com/tool.zip')).toEqual({
@@ -20,4 +20,12 @@ it('rejects a non-HTTPS download source', () => {
 it('does not require a download source for URL and course fulfillment', () => {
   expect(buildProductFulfillmentPatch('url', '')).toEqual({ fulfillmentType: 'url' });
   expect(buildProductFulfillmentPatch('course', '')).toEqual({ fulfillmentType: 'course' });
+});
+
+it('omits blank optional URLs when saving a product edit', () => {
+  expect(cleanOptionalProductUrls({ demoUrl: '', documentationUrl: '  ', externalUrl: ' https://example.com/tool ' })).toEqual({
+    demoUrl: undefined,
+    documentationUrl: undefined,
+    externalUrl: 'https://example.com/tool'
+  });
 });

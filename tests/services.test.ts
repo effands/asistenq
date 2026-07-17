@@ -6,6 +6,7 @@ import {
   createLicenseCheckout,
   createMember,
   createProductRecord,
+  deleteProductRecord,
   formatInvoiceHtml,
   generateLicenseForPaidOrder,
   expirePendingOrders,
@@ -130,6 +131,28 @@ describe('server services', () => {
       { code: 'TRIAL', price: 0, durationDays: 1, isFree: true, isActive: true },
       { code: '3M', price: 249000, durationDays: 90, isFree: false, isActive: true }
     ]);
+  });
+
+  it('deletes an unreferenced product and its plans', () => {
+    const product = createProductRecord(store, {
+      name: 'Temporary Tool', slug: 'temporary-tool', type: 'tool', billingPeriod: 'monthly', price: 99000,
+      plans: [{ code: '1M', name: 'Satu Bulan', price: 99000, billingPeriod: 'monthly', durationDays: 30 }]
+    });
+
+    deleteProductRecord(store, product.id);
+
+    expect(store.data.products.some((item) => item.id === product.id)).toBe(false);
+    expect(store.data.plans.some((item) => item.productId === product.id)).toBe(false);
+  });
+
+  it('refuses to delete a product that already has an order', async () => {
+    const member = await createMember(store, { name: 'Buyer', email: 'delete-check@example.com', password: 'secret123' });
+    const product = createProductRecord(store, {
+      name: 'Purchased Tool', slug: 'purchased-tool', type: 'tool', billingPeriod: 'one_time', price: 0
+    });
+    await createCheckout(store, member.id, product.id);
+
+    expect(() => deleteProductRecord(store, product.id)).toThrow('transaksi');
   });
 
   it('stores internal and external tool destinations without changing legacy defaults', () => {
