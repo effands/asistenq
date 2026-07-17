@@ -1222,6 +1222,15 @@ p {
   font-size: 12px;
 }
 
+.qris-payload-input {
+  min-height: 118px;
+  resize: vertical;
+  font-family: "Cascadia Code", Consolas, monospace;
+  font-size: 11px;
+  line-height: 1.55;
+  word-break: break-all;
+}
+
 .compact-token-card .form-notice {
   margin: 0;
   border-radius: 11px;
@@ -3999,13 +4008,25 @@ textarea {
 
 .order-admin-row {
   display: grid;
-  grid-template-columns: minmax(180px, 1fr) minmax(200px, 1.2fr) minmax(150px, 1fr) 120px 90px 110px;
+  grid-template-columns: minmax(180px, 1fr) minmax(200px, 1.2fr) minmax(150px, 1fr) 120px 90px 110px minmax(150px, .8fr);
   gap: 12px;
   align-items: center;
-  min-width: 900px;
+  min-width: 1080px;
   border-top: 1px solid var(--line);
   padding: 10px 12px;
   font-size: 12px;
+}
+
+.order-admin-actions {
+  display: flex;
+  align-items: center;
+}
+
+.verify-payment-button {
+  min-height: 34px;
+  border-color: rgba(0, 140, 134, .3);
+  color: var(--teal);
+  white-space: nowrap;
 }
 
 .order-admin-head {

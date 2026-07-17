@@ -8,6 +8,8 @@ describe('active payment integration source', () => {
       'src/server/index.ts',
       'src/server/services.ts',
       'src/shared/types.ts',
+      'src/ui/App.tsx',
+      'src/ui/api.ts',
       '.env.example'
     ];
 

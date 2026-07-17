@@ -47,6 +47,19 @@ import {
 type Route = 'home' | 'admin' | 'member' | 'product';
 type AdminSection = 'dashboard' | 'landing' | 'products' | 'orders' | 'licenses' | 'members' | 'course' | 'deploy';
 type AdminTheme = 'light' | 'dark';
+type DeploymentSettingsInput = {
+  githubRepo: string;
+  githubBranch: string;
+  githubToken?: string;
+  telegramBotToken?: string;
+  telegramOwnerId?: string;
+  smtpHost?: string;
+  smtpPort?: string;
+  smtpUser?: string;
+  smtpPass?: string;
+  mailFrom?: string;
+  qrisStaticPayload?: string;
+};
 
 const productTypes: ProductType[] = ['tool', 'course', 'ebook', 'video', 'bundle', 'free', 'class'];
 const productVisibilities: ProductVisibility[] = ['public', 'private', 'draft'];
@@ -360,6 +373,16 @@ export function App() {
             await loadAdminOrders(adminSession.token);
             await loadAdminSummary(adminSession.token);
             setMessage(result.message);
+          }}
+          onMarkOrderPaid={async (orderId) => {
+            if (!adminSession) throw new Error('Login admin dulu.');
+            await apiRequest(`/admin/orders/${orderId}/paid`, {
+              token: adminSession.token,
+              method: 'POST'
+            });
+            await loadAdminOrders(adminSession.token);
+            await loadAdminSummary(adminSession.token);
+            setMessage('Pembayaran berhasil diverifikasi.');
           }}
           onExportOrders={async () => {
             if (!adminSession) throw new Error('Login admin dulu.');
@@ -759,6 +782,7 @@ function AdminPanel({
   onRefreshLicenses,
   onRefreshMembers,
   onClearExpiredOrders,
+  onMarkOrderPaid,
   onExportOrders,
   onUpdateMember,
   onResetOperationalData,
@@ -821,6 +845,7 @@ function AdminPanel({
   onRefreshLicenses: () => Promise<void>;
   onRefreshMembers: () => Promise<void>;
   onClearExpiredOrders: () => Promise<void>;
+  onMarkOrderPaid: (orderId: string) => Promise<void>;
   onExportOrders: () => Promise<void>;
   onUpdateMember: (id: string, input: any) => Promise<void>;
   onResetOperationalData: () => Promise<void>;
@@ -833,7 +858,7 @@ function AdminPanel({
   onStartBot: () => Promise<TelegramBotStatus>;
   onStopBot: () => Promise<TelegramBotStatus>;
   deploymentSettings: DeploymentSettingsResult | null;
-  onSaveDeploymentSettings: (input: { githubRepo: string; githubBranch: string; githubToken?: string; telegramBotToken?: string; telegramOwnerId?: string; smtpHost?: string; smtpPort?: string; smtpUser?: string; smtpPass?: string; mailFrom?: string; danaSandboxApiUrl?: string; danaMerchantId?: string; danaClientId?: string; danaClientSecret?: string; danaPublicKey?: string; danaPrivateKey?: string }) => Promise<DeploymentSettingsResult>;
+  onSaveDeploymentSettings: (input: DeploymentSettingsInput) => Promise<DeploymentSettingsResult>;
 }) {
   if (!session) {
     return (
@@ -881,7 +906,7 @@ function AdminPanel({
   }
 
   if (activeSection === 'orders') {
-    return <AdminOrderPanel onClearExpired={onClearExpiredOrders} onExportOrders={onExportOrders} orders={orders} />;
+    return <AdminOrderPanel onClearExpired={onClearExpiredOrders} onExportOrders={onExportOrders} onMarkPaid={onMarkOrderPaid} orders={orders} />;
   }
 
   if (activeSection === 'members') {
@@ -991,10 +1016,11 @@ function formatRemaining(value?: string | null) {
   return hours > 0 ? `${hours}j ${minutes}m` : `${minutes}m`;
 }
 
-function AdminOrderPanel({ orders, onClearExpired, onExportOrders }: {
+function AdminOrderPanel({ orders, onClearExpired, onExportOrders, onMarkPaid }: {
   orders: PublicOrder[];
   onClearExpired: () => Promise<void>;
   onExportOrders: () => Promise<void>;
+  onMarkPaid: (orderId: string) => Promise<void>;
 }) {
   const [busy, setBusy] = useState('');
   const [notice, setNotice] = useState('');
@@ -1003,7 +1029,11 @@ function AdminOrderPanel({ orders, onClearExpired, onExportOrders }: {
     setNotice('');
     try {
       await action();
-      setNotice(name === 'export' ? 'Export order berhasil dibuat.' : 'Order expired berhasil dibersihkan.');
+      setNotice(name === 'export'
+        ? 'Export order berhasil dibuat.'
+        : name.startsWith('paid-')
+          ? 'Pembayaran berhasil diverifikasi.'
+          : 'Order expired berhasil dibersihkan.');
     } catch (error) {
       setNotice(error instanceof Error ? error.message : 'Aksi order gagal.');
     } finally {
@@ -1022,7 +1052,7 @@ function AdminOrderPanel({ orders, onClearExpired, onExportOrders }: {
         </div>
       </div>
       <div className="order-admin-table-wrap">
-        <div className="order-admin-row order-admin-head"><span>Invoice</span><span>Member</span><span>Produk</span><span>Total</span><span>Status</span><span>Tanggal</span></div>
+        <div className="order-admin-row order-admin-head"><span>Invoice</span><span>Member</span><span>Produk</span><span>Total</span><span>Status</span><span>Tanggal</span><span>Aksi</span></div>
         {orders.length === 0 && <div className="empty-state">Belum ada order.</div>}
         {orders.map((order) => (
           <div className="order-admin-row" key={order.id}>
@@ -1035,6 +1065,22 @@ function AdminOrderPanel({ orders, onClearExpired, onExportOrders }: {
             <b>{order.formattedTotalAmount}</b>
             <span className={`status-dot status-${order.status}`}>{order.status}</span>
             <span>{formatDate(order.createdAt)}</span>
+            <div className="order-admin-actions">
+              {order.status === 'pending' && formatRemaining(order.expiresAt) !== 'Kedaluwarsa' ? (
+                <button
+                  className="ghost-button verify-payment-button"
+                  disabled={!!busy}
+                  onClick={() => {
+                    const invoice = order.invoiceNumber ?? order.id;
+                    if (!window.confirm(`Verifikasi pembayaran ${invoice} sebesar ${order.formattedTotalAmount}?`)) return;
+                    void runOrderAction(`paid-${order.id}`, () => onMarkPaid(order.id));
+                  }}
+                  type="button"
+                >
+                  {busy === `paid-${order.id}` ? 'Memproses...' : 'Verifikasi Dibayar'}
+                </button>
+              ) : <span className="muted">—</span>}
+            </div>
           </div>
         ))}
       </div>
@@ -1585,7 +1631,7 @@ function DeployPanel({ settings, onDeployUpdate, onRefreshBotStatus, onSaveSetti
   settings: DeploymentSettingsResult | null;
   onDeployUpdate: () => Promise<{ ok: boolean; message: string; stdout?: string; stderr?: string; detail?: string }>;
   onRefreshBotStatus: () => Promise<TelegramBotStatus>;
-  onSaveSettings: (input: { githubRepo: string; githubBranch: string; githubToken?: string; telegramBotToken?: string; telegramOwnerId?: string; smtpHost?: string; smtpPort?: string; smtpUser?: string; smtpPass?: string; mailFrom?: string; danaSandboxApiUrl?: string; danaMerchantId?: string; danaClientId?: string; danaClientSecret?: string; danaPublicKey?: string; danaPrivateKey?: string }) => Promise<DeploymentSettingsResult>;
+  onSaveSettings: (input: DeploymentSettingsInput) => Promise<DeploymentSettingsResult>;
   onStartBot: () => Promise<TelegramBotStatus>;
   onStopBot: () => Promise<TelegramBotStatus>;
 }) {
@@ -1606,13 +1652,8 @@ function DeployPanel({ settings, onDeployUpdate, onRefreshBotStatus, onSaveSetti
   const [smtpPass, setSmtpPass] = useState('');
   const [mailFrom, setMailFrom] = useState(settings?.mailFrom ?? 'AsistenQ <cs@asistenq.com>');
   const [smtpNotice, setSmtpNotice] = useState('');
-  const [danaSandboxApiUrl, setDanaSandboxApiUrl] = useState(settings?.danaSandboxApiUrl ?? 'https://api.sandbox.dana.id');
-  const [danaMerchantId, setDanaMerchantId] = useState(settings?.danaMerchantId ?? '');
-  const [danaClientId, setDanaClientId] = useState(settings?.danaClientId ?? '');
-  const [danaClientSecret, setDanaClientSecret] = useState('');
-  const [danaPublicKey, setDanaPublicKey] = useState(settings?.danaPublicKey ?? '');
-  const [danaPrivateKey, setDanaPrivateKey] = useState('');
-  const [danaNotice, setDanaNotice] = useState('');
+  const [qrisStaticPayload, setQrisStaticPayload] = useState(settings?.qrisStaticPayload ?? '');
+  const [qrisNotice, setQrisNotice] = useState('');
   const botStatus = settings?.botStatus;
 
   useEffect(() => {
@@ -1624,10 +1665,7 @@ function DeployPanel({ settings, onDeployUpdate, onRefreshBotStatus, onSaveSetti
       setSmtpPort(settings.smtpPort || '465');
       setSmtpUser(settings.smtpUser || 'cs@asistenq.com');
       setMailFrom(settings.mailFrom || 'AsistenQ <cs@asistenq.com>');
-      setDanaSandboxApiUrl(settings.danaSandboxApiUrl || 'https://api.sandbox.dana.id');
-      setDanaMerchantId(settings.danaMerchantId || '');
-      setDanaClientId(settings.danaClientId || '');
-      setDanaPublicKey(settings.danaPublicKey || '');
+      setQrisStaticPayload(settings.qrisStaticPayload || '');
     }
   }, [settings]);
 
@@ -1819,45 +1857,39 @@ function DeployPanel({ settings, onDeployUpdate, onRefreshBotStatus, onSaveSetti
       <form className="panel compact-token-card" onSubmit={async (event) => {
         event.preventDefault();
         setSaving(true);
-        setDanaNotice('Menyimpan credential DANA sandbox...');
+        setQrisNotice('Memvalidasi dan menyimpan QRIS...');
         try {
-          const result = await onSaveSettings({
+          await onSaveSettings({
             githubRepo: githubRepo.trim(),
             githubBranch: githubBranch.trim(),
-            githubToken: '',
-            telegramBotToken: '',
-            telegramOwnerId: telegramOwnerId.trim(),
-            danaSandboxApiUrl: danaSandboxApiUrl.trim(),
-            danaMerchantId: danaMerchantId.trim(),
-            danaClientId: danaClientId.trim(),
-            danaClientSecret: danaClientSecret.trim(),
-            danaPublicKey: danaPublicKey.trim(),
-            danaPrivateKey: danaPrivateKey.trim()
+            qrisStaticPayload: qrisStaticPayload.trim()
           });
-          setDanaClientSecret('');
-          setDanaPrivateKey('');
-          setDanaNotice(result.hasDanaClientSecret && result.hasDanaPrivateKey ? 'Credential DANA sandbox tersimpan.' : 'Credential DANA sandbox belum lengkap.');
+          setQrisNotice('QRIS statis valid dan tersimpan. Checkout baru akan memakai nominal dinamis.');
         } catch (error) {
-          setDanaNotice(error instanceof Error ? error.message : 'Credential DANA sandbox gagal disimpan.');
+          setQrisNotice(error instanceof Error ? error.message : 'QRIS gagal disimpan.');
         } finally {
           setSaving(false);
         }
       }}>
         <div className="panel-heading">
-          <div><p className="section-kicker">DANA Sandbox</p><h2>Credential API</h2></div>
-          <span className={`soft-badge ${settings?.hasDanaClientSecret && settings?.hasDanaPrivateKey ? 'status-active' : ''}`}>{settings?.hasDanaClientSecret && settings?.hasDanaPrivateKey ? 'DANA siap test' : 'Belum lengkap'}</span>
+          <div><p className="section-kicker">QRIS Pembayaran</p><h2>QRIS Statis Merchant</h2></div>
+          <span className={`soft-badge ${settings?.qrisStaticPayload ? 'status-active' : ''}`}>{settings?.qrisStaticPayload ? 'QRIS aktif' : 'Belum diatur'}</span>
         </div>
         <div className="compact-token-fields">
-          <label>Sandbox API URL<input name="danaSandboxApiUrl" value={danaSandboxApiUrl} onChange={(event) => setDanaSandboxApiUrl(event.target.value)} placeholder="https://api.sandbox.dana.id" /></label>
-          <label>Merchant ID<input name="danaMerchantId" value={danaMerchantId} onChange={(event) => setDanaMerchantId(event.target.value.replace(/\D/g, ''))} placeholder="Merchant ID DANA" /></label>
-          <label>Client ID<input name="danaClientId" value={danaClientId} onChange={(event) => setDanaClientId(event.target.value.replace(/\D/g, ''))} placeholder="Client ID DANA" /></label>
-          <label className="span-two">Client Secret<input name="danaClientSecret" value={danaClientSecret} onChange={(event) => setDanaClientSecret(event.target.value)} placeholder={settings?.maskedDanaClientSecret || 'Client Secret DANA'} type="password" autoComplete="new-password" /></label>
-          <label className="span-two">Public Key<textarea name="danaPublicKey" value={danaPublicKey} onChange={(event) => setDanaPublicKey(event.target.value)} placeholder="Public key DANA sandbox" rows={4} /></label>
-          <label className="span-two">Private Key<textarea name="danaPrivateKey" value={danaPrivateKey} onChange={(event) => setDanaPrivateKey(event.target.value)} placeholder={settings?.maskedDanaPrivateKey || 'Private key DANA sandbox'} rows={5} /></label>
+          <label className="span-two">Payload QRIS Statis
+            <textarea
+              className="qris-payload-input"
+              name="qrisStaticPayload"
+              value={qrisStaticPayload}
+              onChange={(event) => setQrisStaticPayload(event.target.value.replace(/\s/g, ''))}
+              placeholder="Tempel string QRIS statis merchant"
+              rows={6}
+            />
+          </label>
         </div>
-        <p className="form-helper">Credential ini dipakai hanya untuk pengujian sandbox DANA. Secret dan private key disimpan di server dalam bentuk private dan hanya ditampilkan sebagai masking setelah tersimpan.</p>
-        <button className="primary" disabled={saving}>{saving ? 'Menyimpan...' : 'Simpan Credential DANA'}</button>
-        {danaNotice && <p className="form-notice">{danaNotice}</p>}
+        <p className="form-helper">QRIS ini menjadi sumber merchant. Saat checkout, server otomatis memasukkan harga + kode unik tiga digit dan menghitung ulang CRC.</p>
+        <button className="primary" disabled={saving || !qrisStaticPayload.trim()}>{saving ? 'Menyimpan...' : 'Validasi & Simpan QRIS'}</button>
+        {qrisNotice && <p className="form-notice">{qrisNotice}</p>}
       </form>
     </section>
   );
@@ -3102,7 +3134,7 @@ function InvoiceModal({ order, onClose }: { order: PublicOrder; onClose: () => v
           </div>
           <div className="qris-box">
             {order.paymentQrUrl && <img src={order.paymentQrUrl} alt="QRIS pembayaran" />}
-            <p>Scan QRIS ini lalu bayar sesuai total invoice. Kode unik membantu admin mencocokkan transaksi.</p>
+            <p>Scan QRIS ini dan bayar persis sesuai total invoice. Nominal harga + kode unik sudah terisi otomatis.</p>
             <div className="payment-confirm-box">
               <strong>Sudah bayar?</strong>
               <span>Kirim konfirmasi dan bukti transfer via Telegram agar admin bisa cek lalu kirim lisensi.</span>

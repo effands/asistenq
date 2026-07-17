@@ -134,14 +134,7 @@ export type DeploymentSettingsResult = {
   hasSmtpPass: boolean;
   maskedSmtpPass: string;
   mailFrom: string;
-  danaSandboxApiUrl: string;
-  danaMerchantId: string;
-  danaClientId: string;
-  hasDanaClientSecret: boolean;
-  maskedDanaClientSecret: string;
-  danaPublicKey: string;
-  hasDanaPrivateKey: boolean;
-  maskedDanaPrivateKey: string;
+  qrisStaticPayload: string;
   botStatus: TelegramBotStatus;
   updatedAt?: string;
 };
