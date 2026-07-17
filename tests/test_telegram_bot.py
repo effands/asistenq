@@ -121,6 +121,46 @@ class TelegramCommerceTests(unittest.TestCase):
             self.assertTrue(BOT.handle_pending_text(2002, "ABCDEF1234567890"))
         api.assert_called_once_with("/bot/buyer/orders/INV-1/hwid", "POST", {"hwid": "ABCDEF1234567890"}, telegram_id="2002")
 
+    def test_owner_license_menu_loads_direct_product_catalog(self):
+        products = [{"id": "p1", "name": "VJ Studio", "slug": "vjstudio", "plans": [{"id": "pl1", "code": "1M", "name": "1 Bulan"}]}]
+        with patch.object(BOT, "answer_callback"), patch.object(BOT, "api", return_value={"products": products}) as api, patch.object(BOT, "send") as send:
+            BOT.handle_callback(87394692, "cb", "license_menu")
+        api.assert_called_once_with("/bot/owner/license-products")
+        markup = send.call_args.args[2]
+        self.assertEqual(markup["inline_keyboard"][0][0]["callback_data"], "direct_product:vjstudio")
+
+    def test_direct_license_confirmation_shows_token_and_delivery_button(self):
+        state = {
+            "action": "direct_license", "step": "confirm", "productSlug": "vjstudio",
+            "productName": "VJ Studio", "planCode": "1M", "planName": "1 Bulan",
+            "email": "buyer@example.com", "hwid": "CA00E2C30BA61C8D"
+        }
+        result = {
+            "reused": False, "buyerTelegramId": "2002",
+            "license": {"id": "license-1", "key": "TOKEN-1", "email": "buyer@example.com", "hwid": "CA00E2C30BA61C8D", "expiresAt": "2026-08-17"}
+        }
+        with patch.object(BOT, "answer_callback"), patch.object(BOT, "pop_pending", return_value=state), patch.object(BOT, "api", return_value=result) as api, patch.object(BOT, "send") as send:
+            BOT.handle_callback(87394692, "cb", "direct_confirm")
+        api.assert_called_once_with("/bot/license-generate", "POST", {
+            "productSlug": "vjstudio", "planCode": "1M", "email": "buyer@example.com", "hwid": "CA00E2C30BA61C8D"
+        })
+        self.assertIn("TOKEN-1", send.call_args.args[1])
+        self.assertEqual(send.call_args.args[2]["inline_keyboard"][0][0]["callback_data"], "direct_send:license-1")
+
+    def test_direct_license_delivery_requires_owner_button(self):
+        result = {"buyerTelegramId": "2002", "license": {"id": "license-1", "key": "TOKEN-1", "email": "buyer@example.com", "hwid": "CA00E2C30BA61C8D", "expiresAt": None}}
+        with patch.object(BOT, "answer_callback"), patch.object(BOT, "api", return_value=result) as api, patch.object(BOT, "send") as send:
+            BOT.handle_callback(87394692, "cb", "direct_send:license-1")
+        api.assert_called_once_with("/bot/owner/licenses/license-1/delivery")
+        buyer_call = next(call for call in send.call_args_list if str(call.args[0]) == "2002")
+        self.assertIn("TOKEN-1", buyer_call.args[1])
+
+    def test_direct_license_invalid_hwid_keeps_wizard_state(self):
+        state = {"action": "direct_license", "step": "hwid", "email": "buyer@example.com"}
+        with patch.object(BOT, "pop_pending", return_value=state), patch.object(BOT, "set_pending") as keep, patch.object(BOT, "send"):
+            self.assertTrue(BOT.handle_pending_text(87394692, "SHORT"))
+        keep.assert_called_once_with(87394692, state)
+
     def test_download_approval_renders_url_button_for_buyer(self):
         result = {"order": {"invoiceNumber": "INV-D"}, "buyerTelegramId": "2002", "fulfillmentType": "download", "download": {"downloadUrl": "https://asistenq.com/api/download/token", "expiresAt": "tomorrow", "remainingDownloads": 3}}
         with patch.object(BOT, "answer_callback"), patch.object(BOT, "api", return_value=result), patch.object(BOT, "send") as send:

@@ -46,6 +46,15 @@ class TelegramBotResponseTest(unittest.TestCase):
         self.assertEqual(calls, [("/bot/deploy-update", "POST", None, bot.DEPLOY_HTTP_TIMEOUT_SECONDS)])
         self.assertIn("Update selesai", reply)
 
+    def test_generate_command_reads_direct_license_response(self):
+        original_api = bot.api
+        try:
+            bot.api = lambda *_args, **_kwargs: {"license": {"key": "TOKEN-1", "status": "generated"}, "reused": False}
+            reply = bot.handle("/generate vjstudio 1M buyer@example.com CA00E2C30BA61C8D")
+        finally:
+            bot.api = original_api
+        self.assertIn("TOKEN-1", reply)
+
 
 if __name__ == "__main__":
     unittest.main()

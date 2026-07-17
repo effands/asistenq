@@ -159,6 +159,36 @@ def main_menu() -> Dict[str, Any]:
     ])
 
 
+def direct_product_keyboard(products: List[Dict[str, Any]]) -> Dict[str, Any]:
+    rows = [[{"text": str(product.get("name") or product.get("slug")), "callback_data": f"direct_product:{product.get('slug')}"}]
+            for product in products]
+    rows.append([{"text": "❌ Batal", "callback_data": "direct_cancel"}])
+    return keyboard(rows)
+
+
+def direct_plan_keyboard(plans: List[Dict[str, Any]]) -> Dict[str, Any]:
+    rows = [[{"text": f"{plan.get('name')} ({plan.get('code')})", "callback_data": f"direct_plan:{plan.get('code')}"}]
+            for plan in plans]
+    rows.append([{"text": "❌ Batal", "callback_data": "direct_cancel"}])
+    return keyboard(rows)
+
+
+def direct_license_summary(state: Dict[str, Any]) -> str:
+    return (
+        "Konfirmasi lisensi langsung\n"
+        f"Produk: {state.get('productName')}\nPaket: {state.get('planName')} ({state.get('planCode')})\n"
+        f"Email: {state.get('email')}\nHWID: {state.get('hwid')}"
+    )
+
+
+def direct_license_result_text(license_data: Dict[str, Any], reused: bool = False) -> str:
+    return (
+        f"{'Lisensi aktif yang sama ditemukan' if reused else 'Lisensi berhasil dibuat'}\n"
+        f"Email: {license_data.get('email', '-')}\nHWID: {license_data.get('hwid', '-')}\n"
+        f"Token: {license_data.get('key', '-')}\nKedaluwarsa: {license_data.get('expiresAt') or 'Lifetime'}"
+    )
+
+
 def is_owner(chat_id: Any) -> bool:
     return str(chat_id) == OWNER_ID
 
@@ -628,6 +658,31 @@ def handle_pending_text(chat_id: int, text: str) -> bool:
         return False
     action = pending.get("action")
     value = text.strip()
+    if action == "direct_license":
+        step = pending.get("step")
+        if step == "email":
+            if "@" not in value or value.startswith("@") or value.endswith("@"):
+                set_pending(chat_id, pending)
+                send(chat_id, "Email tidak valid. Kirim alamat email yang benar.")
+                return True
+            pending["email"] = value.lower()
+            pending["step"] = "hwid"
+            set_pending(chat_id, pending)
+            send(chat_id, "Kirim HWID 16 karakter huruf/angka.")
+            return True
+        if step == "hwid":
+            if len(value) != 16 or not value.isalnum():
+                set_pending(chat_id, pending)
+                send(chat_id, "HWID harus tepat 16 karakter huruf/angka.")
+                return True
+            pending["hwid"] = value.upper()
+            pending["step"] = "confirm"
+            set_pending(chat_id, pending)
+            send(chat_id, direct_license_summary(pending), keyboard([
+                [{"text": "✅ Buat Lisensi", "callback_data": "direct_confirm"}],
+                [{"text": "❌ Batal", "callback_data": "direct_cancel"}],
+            ]))
+            return True
     if action == "owner_product":
         try:
             next_state = advance_product_wizard(pending, value)
@@ -883,11 +938,70 @@ def handle_callback(chat_id: int, callback_id: str, data: str) -> None:
         ]))
         return
     if data == "license_menu":
-        orders = pending_orders()
-        if not orders:
-            send(chat_id, "Belum ada order pending untuk dibuatkan lisensi.", main_menu())
+        products = api("/bot/owner/license-products").get("products", [])
+        if not products:
+            send(chat_id, "Belum ada produk lisensi aktif.", main_menu())
             return
-        send(chat_id, "Pilih invoice untuk dibuatkan lisensi:", orders_keyboard(orders))
+        send(chat_id, "Pilih produk lisensi:", direct_product_keyboard(products))
+        return
+    if data.startswith("direct_product:"):
+        product_slug = data.split(":", 1)[1]
+        products = api("/bot/owner/license-products").get("products", [])
+        product = next((item for item in products if str(item.get("slug")) == product_slug), None)
+        if not product:
+            send(chat_id, "Produk lisensi tidak ditemukan.", main_menu())
+            return
+        state = {
+            "action": "direct_license", "step": "plan", "productSlug": product_slug,
+            "productName": product.get("name"), "plans": product.get("plans", [])
+        }
+        set_pending(chat_id, state)
+        send(chat_id, f"Pilih paket untuk {product.get('name')}:", direct_plan_keyboard(state["plans"]))
+        return
+    if data.startswith("direct_plan:"):
+        plan_code = data.split(":", 1)[1]
+        state = pop_pending(chat_id)
+        if not state or state.get("action") != "direct_license":
+            send(chat_id, "Data lisensi tidak ditemukan. Mulai lagi.", main_menu())
+            return
+        plan = next((item for item in state.get("plans", []) if str(item.get("code")) == plan_code), None)
+        if not plan:
+            send(chat_id, "Paket lisensi tidak ditemukan.", main_menu())
+            return
+        state.update({"step": "email", "planCode": plan_code, "planName": plan.get("name")})
+        set_pending(chat_id, state)
+        send(chat_id, "Kirim email pengguna lisensi.")
+        return
+    if data == "direct_cancel":
+        pop_pending(chat_id)
+        send(chat_id, "Pembuatan lisensi dibatalkan.", main_menu())
+        return
+    if data == "direct_confirm":
+        state = pop_pending(chat_id)
+        if not state or state.get("action") != "direct_license" or state.get("step") != "confirm":
+            send(chat_id, "Data lisensi tidak lengkap. Mulai lagi.", main_menu())
+            return
+        result = api("/bot/license-generate", "POST", {
+            "productSlug": state["productSlug"], "planCode": state["planCode"],
+            "email": state["email"], "hwid": state["hwid"]
+        })
+        license_data = result.get("license", {})
+        rows = []
+        if result.get("buyerTelegramId"):
+            rows.append([{"text": "📨 Kirim ke Pembeli", "callback_data": f"direct_send:{license_data.get('id')}"}])
+        rows.append([{"text": "🏠 Menu", "callback_data": "menu"}])
+        send(chat_id, direct_license_result_text(license_data, bool(result.get("reused"))), keyboard(rows))
+        return
+    if data.startswith("direct_send:"):
+        license_id = data.split(":", 1)[1]
+        result = api(f"/bot/owner/licenses/{license_id}/delivery")
+        buyer_id = str(result.get("buyerTelegramId") or "")
+        license_data = result.get("license", {})
+        if not buyer_id:
+            send(chat_id, "Email pembeli belum terhubung ke Telegram.", main_menu())
+            return
+        send(int(buyer_id), "Lisensi Anda telah dibuat\n" + direct_license_result_text(license_data), buyer_menu())
+        send(chat_id, f"Lisensi dikirim ke Telegram pembeli {buyer_id}.", main_menu())
         return
     if data.startswith("license:"):
         invoice = data.split(":", 1)[1]
@@ -969,7 +1083,8 @@ def handle(text: str) -> str:
             "productSlug": parts[1], "planCode": parts[2],
             "email": parts[3], "hwid": parts[4],
         })
-        return f"Lisensi dibuat\n{result['key']}\nStatus: {result['status']}"
+        license_data = result.get("license", result)
+        return f"Lisensi dibuat\n{license_data['key']}\nStatus: {license_data['status']}"
     if command in {"/activate", "/verify"} and len(parts) == 4:
         result = request_json(f"{API_BASE}/license/{command[1:]}", "POST", {
             "productSlug": parts[1], "token": parts[2], "hwid": parts[3],
