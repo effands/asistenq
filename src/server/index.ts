@@ -1440,7 +1440,7 @@ const digitalProductUpload = multer({
 
 app.post('/api/bot/owner/products', (req, res) => {
   try {
-    const result = createTelegramProduct(store, telegramProductSchema.parse(req.body));
+    const result = createTelegramProduct(store, telegramProductSchema.parse(req.body), telegramUserId(req));
     res.status(201).json({ product: publicProduct(result.product), plan: result.plan });
   } catch (error) {
     res.status(400).json({ message: publicTelegramError(error, 'Produk gagal dibuat.') });
@@ -1448,17 +1448,17 @@ app.post('/api/bot/owner/products', (req, res) => {
 });
 
 app.patch('/api/bot/owner/products/:id', (req, res) => {
-  try { res.json(publicProduct(updateTelegramProduct(store, String(req.params.id), telegramProductPatchSchema.parse(req.body)))); }
+  try { res.json(publicProduct(updateTelegramProduct(store, String(req.params.id), telegramProductPatchSchema.parse(req.body), telegramUserId(req)))); }
   catch (error) { res.status(400).json({ message: publicTelegramError(error, 'Produk gagal diperbarui.') }); }
 });
 
 app.post('/api/bot/owner/products/:id/deactivate', (req, res) => {
-  try { res.json(publicProduct(deactivateTelegramProduct(store, String(req.params.id)))); }
+  try { res.json(publicProduct(deactivateTelegramProduct(store, String(req.params.id), telegramUserId(req)))); }
   catch (error) { res.status(400).json({ message: publicTelegramError(error, 'Produk gagal dinonaktifkan.') }); }
 });
 
 app.patch('/api/bot/owner/plans/:id', (req, res) => {
-  try { res.json(updateTelegramPlan(store, String(req.params.id), telegramPlanPatchSchema.parse(req.body))); }
+  try { res.json(updateTelegramPlan(store, String(req.params.id), telegramPlanPatchSchema.parse(req.body), telegramUserId(req))); }
   catch (error) { res.status(400).json({ message: publicTelegramError(error, 'Paket gagal diperbarui.') }); }
 });
 
@@ -1470,7 +1470,7 @@ app.post('/api/bot/owner/products/:id/digital-file', (req, res, next) => {
 }, (req, res) => {
   if (!req.file) { res.status(400).json({ message: 'File ZIP wajib diunggah.' }); return; }
   try {
-    res.json(publicProduct(attachTelegramDigitalFile(store, String(req.params.id), req.file.path)));
+    res.json(publicProduct(attachTelegramDigitalFile(store, String(req.params.id), req.file.path, telegramUserId(req))));
   } catch (error) {
     fs.rmSync(req.file.path, { force: true });
     res.status(400).json({ message: publicTelegramError(error, 'File digital gagal disimpan.') });

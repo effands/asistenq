@@ -179,6 +179,8 @@ describe('Telegram buyer commerce', () => {
     expect(second.id).toBe(first.id);
     expect(store.data.orders).toHaveLength(1);
     expect(new Set(store.data.orders.map((order) => order.invoiceNumber)).size).toBe(1);
+    expect(store.data.auditLogs.filter((item) => item.action === 'telegram.checkout.created')).toHaveLength(1);
+    expect(store.data.auditLogs.at(-1)).toMatchObject({ actorId: '1001', targetType: 'order', targetId: first.id });
   });
 
   it('accepts proof only from its buyer and reviews identical approval once', () => {
@@ -188,6 +190,7 @@ describe('Telegram buyer commerce', () => {
       orders: [{ id: 'o1', memberId: 'm1', productId: 'p1', invoiceNumber: 'INV-1', amount: 1000, status: 'pending', qrisPayload: 'q', expiresAt: '2026-07-17T08:30:00Z', createdAt: '2026-07-17T08:00:00Z' }]
     });
     const submitted = submitPaymentProof(store, { telegramId: 'buyer-1', invoiceNumber: 'INV-1', fileId: 'file-1' }, new Date('2026-07-17T08:10:00Z'));
+    submitPaymentProof(store, { telegramId: 'buyer-1', invoiceNumber: 'INV-1', fileId: 'file-1' }, new Date('2026-07-17T08:10:30Z'));
     expect(submitted.paymentProofStatus).toBe('submitted');
     expect(() => submitPaymentProof(store, { telegramId: 'buyer-2', invoiceNumber: 'INV-1', fileId: 'stolen' })).toThrow('order tidak ditemukan');
     const first = reviewPaymentProof(store, { ownerTelegramId: 'owner', invoiceNumber: 'INV-1', decision: 'approve' }, new Date('2026-07-17T08:11:00Z'));
@@ -195,6 +198,8 @@ describe('Telegram buyer commerce', () => {
     expect(second.order.id).toBe(first.order.id);
     expect(store.data.subscriptions).toHaveLength(1);
     expect(listSubmittedPaymentProofs(store)).toHaveLength(0);
+    expect(store.data.auditLogs.filter((item) => item.action === 'telegram.payment_proof.submitted')).toHaveLength(1);
+    expect(store.data.auditLogs.filter((item) => item.action === 'telegram.payment_proof.approved')).toHaveLength(1);
   });
 
   it('requires reopening an expired submitted invoice before approval', () => {
@@ -217,11 +222,14 @@ describe('Telegram owner product management', () => {
       name: 'Mixer Pro', slug: 'mixer-pro', fulfillmentType: 'license',
       description: 'Mixer audio', status: 'draft',
       plan: { code: '1M', name: '1 Bulan', price: 59000, durationDays: 30 }
-    });
+    }, 'owner');
 
     expect(result.product.visibility).toBe('draft');
     expect(result.product.fulfillmentType).toBe('license');
     expect(result.plan).toMatchObject({ price: 59000, isActive: true });
+    expect(store.data.auditLogs.at(-1)).toMatchObject({
+      actorId: 'owner', action: 'telegram.product.created', targetType: 'product', targetId: result.product.id
+    });
   });
 
   it('deactivates a product without deleting order history', () => {

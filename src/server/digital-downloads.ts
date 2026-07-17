@@ -35,7 +35,7 @@ export function validateDownloadSource(source: string): { kind: 'local' | 'remot
   return { kind: 'remote', value: url.toString() };
 }
 
-export function issueDownloadGrant(store: Store, orderId: string, now = new Date(), fixedToken?: string) {
+function createDownloadGrant(store: Store, orderId: string, now: Date, fixedToken: string | undefined, action: 'issued' | 'reissued') {
   const order = store.data.orders.find((item) => item.id === orderId && item.status === 'paid');
   if (!order) throw new Error('order paid tidak ditemukan');
   const product = store.data.products.find((item) => item.id === order.productId);
@@ -46,15 +46,19 @@ export function issueDownloadGrant(store: Store, orderId: string, now = new Date
   const token = fixedToken ?? crypto.randomBytes(32).toString('base64url');
   const grant: DownloadGrant = { id: crypto.randomUUID(), orderId: order.id, memberId: order.memberId, productId: product.id, tokenHash: hashToken(token), expiresAt: new Date(now.getTime() + 86_400_000).toISOString(), maxDownloads: 3, downloadCount: 0, createdAt: now.toISOString() };
   store.data.downloadGrants.push(grant);
-  store.data.auditLogs.push({ id: crypto.randomUUID(), actorId: order.telegramId ?? order.memberId, action: 'telegram.download.issued', targetType: 'download_grant', targetId: grant.id, createdAt: now.toISOString() });
+  store.data.auditLogs.push({ id: crypto.randomUUID(), actorId: order.telegramId ?? order.memberId, action: `telegram.download.${action}`, targetType: 'download_grant', targetId: grant.id, createdAt: now.toISOString() });
   store.save();
   return { grant, token };
+}
+
+export function issueDownloadGrant(store: Store, orderId: string, now = new Date(), fixedToken?: string) {
+  return createDownloadGrant(store, orderId, now, fixedToken, 'issued');
 }
 
 export function reissueDownloadGrant(store: Store, orderId: string, now = new Date(), fixedToken?: string) {
   for (const grant of store.data.downloadGrants.filter((item) => item.orderId === orderId)) grant.expiresAt = now.toISOString();
   store.save();
-  return issueDownloadGrant(store, orderId, now, fixedToken);
+  return createDownloadGrant(store, orderId, now, fixedToken, 'reissued');
 }
 
 export function consumeDownloadGrant(store: Store, token: string, now = new Date()) {

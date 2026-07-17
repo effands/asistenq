@@ -348,6 +348,8 @@ describe('server services', () => {
     expect(second.id).toBe(first.id);
     expect(first).toMatchObject({ orderId: order.id, planId: plan.id });
     expect(store.data.licenses).toHaveLength(1);
+    expect(store.data.auditLogs.filter((item) => item.action === 'telegram.license.fulfilled')).toHaveLength(1);
+    expect(store.data.auditLogs.at(-1)).toMatchObject({ targetType: 'license', targetId: first.id });
   });
 
   it('renders a downloadable invoice html for a member order', async () => {

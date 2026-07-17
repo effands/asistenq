@@ -47,6 +47,24 @@ LEGACY_REPLY_BUTTON_LABELS = {
     "🔙 Kembali ke Pengaturan",
 }
 
+SAFE_ERROR_PARTS = (
+    "email tidak valid", "email sudah", "whatsapp tidak valid", "hwid harus",
+    "profil pembeli belum lengkap", "produk atau paket tidak tersedia",
+    "order tidak ditemukan", "invoice sudah kedaluwarsa", "invoice tidak dapat",
+    "bukti pembayaran tidak", "alasan penolakan wajib", "link download kedaluwarsa",
+    "batas download habis", "url download harus https"
+)
+
+
+def safe_error(error: Exception) -> str:
+    message = str(error).strip()
+    lowered = message.lower()
+    for marker in SAFE_ERROR_PARTS:
+        if marker in lowered:
+            return message.split("API ", 1)[-1].split(": ", 1)[-1] if message.startswith("API ") else message
+    print(f"Bot operation error: {type(error).__name__}: {message}", flush=True)
+    return "Operasi gagal. Silakan coba lagi atau hubungi admin."
+
 
 def request_json(url: str, method: str = "GET", body: Optional[Dict[str, Any]] = None,
                  headers: Optional[Dict[str, str]] = None,
@@ -967,7 +985,7 @@ def main() -> None:
                     try:
                         handle_callback(chat_id, str(callback.get("id", "")), str(callback.get("data", "")))
                     except Exception as error:
-                        send(chat_id, f"Gagal: {error}", menu_for(chat_id))
+                        send(chat_id, safe_error(error), menu_for(chat_id))
                     continue
 
                 message = update.get("message") or {}
@@ -1001,7 +1019,7 @@ def main() -> None:
                         send(chat_id, "Bot Telegram restart sebentar supaya pakai versi terbaru.")
                         restart_self()
                 except Exception as error:
-                    send(chat_id, f"Gagal: {error}", menu_for(chat_id))
+                    send(chat_id, safe_error(error), menu_for(chat_id))
         except Exception as error:
             print(f"Bot polling error: {error}", flush=True)
             time.sleep(5)

@@ -135,6 +135,10 @@ class TelegramCommerceTests(unittest.TestCase):
         self.assertEqual(state["step"], "confirm")
         self.assertEqual(state["values"]["plan"]["price"], 59000)
 
+    def test_safe_error_hides_secrets_and_server_paths(self):
+        message = BOT.safe_error(RuntimeError(r"token=secret C:\home\app stack trace"))
+        self.assertEqual(message, "Operasi gagal. Silakan coba lagi atau hubungi admin.")
+
 
 if __name__ == "__main__":
     unittest.main()

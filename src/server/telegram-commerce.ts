@@ -24,7 +24,7 @@ function validatedDownloadSource(type: ProductFulfillmentType, source?: string):
   return value;
 }
 
-export function createTelegramProduct(store: Store, input: TelegramProductInput) {
+export function createTelegramProduct(store: Store, input: TelegramProductInput, actorTelegramId = 'system') {
   const downloadSourceUrl = validatedDownloadSource(input.fulfillmentType, input.downloadSourceUrl);
   const product = createProductRecord(store, {
     name: input.name.trim(), slug: input.slug.trim(), type: 'tool',
@@ -39,10 +39,12 @@ export function createTelegramProduct(store: Store, input: TelegramProductInput)
     billingPeriod: input.plan.durationDays === null ? 'lifetime' : 'monthly',
     durationDays: input.plan.durationDays, isActive: true
   });
+  audit(store, actorTelegramId, 'telegram.product.created', 'product', product.id, new Date());
+  store.save();
   return { product, plan };
 }
 
-export function updateTelegramProduct(store: Store, productId: string, input: Partial<Omit<TelegramProductInput, 'plan'>>) {
+export function updateTelegramProduct(store: Store, productId: string, input: Partial<Omit<TelegramProductInput, 'plan'>>, actorTelegramId = 'system') {
   const product = store.data.products.find((item) => item.id === productId);
   if (!product) throw new Error('product not found');
   const fulfillmentType = input.fulfillmentType ?? product.fulfillmentType ?? (product.downloadSourceUrl ? 'download' : 'license');
@@ -59,18 +61,27 @@ export function updateTelegramProduct(store: Store, productId: string, input: Pa
   }
   if (fulfillmentType === 'download' && downloadSourceUrl !== undefined) patch.downloadSourceUrl = downloadSourceUrl;
   if (fulfillmentType === 'license') patch.downloadSourceUrl = '';
-  return updateProductRecord(store, productId, patch);
+  const updated = updateProductRecord(store, productId, patch);
+  audit(store, actorTelegramId, 'telegram.product.updated', 'product', productId, new Date());
+  store.save();
+  return updated;
 }
 
-export function updateTelegramPlan(store: Store, planId: string, input: Partial<{ name: string; price: number; durationDays: number | null; isActive: boolean }>) {
-  return updatePlanRecord(store, planId, input);
+export function updateTelegramPlan(store: Store, planId: string, input: Partial<{ name: string; price: number; durationDays: number | null; isActive: boolean }>, actorTelegramId = 'system') {
+  const updated = updatePlanRecord(store, planId, input);
+  audit(store, actorTelegramId, 'telegram.plan.updated', 'plan', planId, new Date());
+  store.save();
+  return updated;
 }
 
-export function deactivateTelegramProduct(store: Store, productId: string) {
-  return updateProductRecord(store, productId, { active: false, visibility: 'draft' });
+export function deactivateTelegramProduct(store: Store, productId: string, actorTelegramId = 'system') {
+  const updated = updateProductRecord(store, productId, { active: false, visibility: 'draft' });
+  audit(store, actorTelegramId, 'telegram.product.deactivated', 'product', productId, new Date());
+  store.save();
+  return updated;
 }
 
-export function attachTelegramDigitalFile(store: Store, productId: string, filePath: string) {
+export function attachTelegramDigitalFile(store: Store, productId: string, filePath: string, actorTelegramId = 'system') {
   const product = store.data.products.find((item) => item.id === productId);
   if (!product || product.fulfillmentType !== 'download') throw new Error('produk bukan produk download');
   const privateRoot = path.resolve('data/digital-products');
@@ -83,7 +94,10 @@ export function attachTelegramDigitalFile(store: Store, productId: string, fileP
     (signature[2] === 0x07 && signature[3] === 0x08)
   );
   if (!zipSignature) throw new Error('file bukan ZIP yang valid');
-  return updateProductRecord(store, productId, { downloadSourceUrl: absolutePath });
+  const updated = updateProductRecord(store, productId, { downloadSourceUrl: absolutePath });
+  audit(store, actorTelegramId, 'telegram.product.file_attached', 'product', productId, new Date());
+  store.save();
+  return updated;
 }
 
 function audit(store: Store, actorId: string, action: string, targetType: string, targetId: string, now: Date) {
@@ -189,13 +203,18 @@ export async function createTelegramCheckout(store: Store, input: {
     return reusable;
   }
 
-  return createCheckout(store, member.id, product.id, now, {
+  const order = await createCheckout(store, member.id, product.id, now, {
     planId: plan.id,
     price: plan.price,
     telegramId: input.telegramId,
     lifetimeMinutes: telegramInvoiceLifetimeMinutes,
     reusePending: true
   });
+  if (!store.data.auditLogs.some((item) => item.action === 'telegram.checkout.created' && item.targetId === order.id)) {
+    audit(store, input.telegramId, 'telegram.checkout.created', 'order', order.id, now);
+    store.save();
+  }
+  return order;
 }
 
 export function submitPaymentProof(store: Store, input: {
@@ -208,6 +227,7 @@ export function submitPaymentProof(store: Store, input: {
   if (order.expiresAt && new Date(order.expiresAt) <= now) throw new Error('invoice sudah kedaluwarsa');
   const fileId = input.fileId.trim();
   if (!fileId) throw new Error('foto bukti pembayaran wajib diisi');
+  if (order.paymentProofStatus === 'submitted' && order.paymentProofFileId === fileId) return order;
   order.paymentProofFileId = fileId;
   order.paymentProofStatus = 'submitted';
   order.paymentProofSubmittedAt = now.toISOString();

@@ -14,6 +14,9 @@ describe('digital download grants', () => {
     const store = fixture();
     const issued = issueDownloadGrant(store, 'o', new Date('2026-07-17T08:00:00Z'), 'raw-token');
     expect(JSON.stringify(store.data.downloadGrants)).not.toContain('raw-token');
+    expect(store.data.auditLogs.at(-1)).toMatchObject({
+      actorId: 'm', action: 'telegram.download.issued', targetType: 'download_grant', targetId: issued.grant.id
+    });
     consumeDownloadGrant(store, issued.token, new Date('2026-07-17T09:00:00Z'));
     consumeDownloadGrant(store, issued.token, new Date('2026-07-17T09:01:00Z'));
     consumeDownloadGrant(store, issued.token, new Date('2026-07-17T09:02:00Z'));

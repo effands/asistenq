@@ -1039,6 +1039,14 @@ export function generateLicenseForPaidOrder(store: Store, input: {
     salt: input.salt
   });
   license.orderId = order.id;
+  store.data.auditLogs.push({
+    id: crypto.randomUUID(),
+    actorId: order.telegramId ?? order.memberId,
+    action: 'telegram.license.fulfilled',
+    targetType: 'license',
+    targetId: license.id,
+    createdAt: (input.now ?? new Date()).toISOString()
+  });
   store.save();
   return license;
 }
