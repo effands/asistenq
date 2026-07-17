@@ -10,6 +10,7 @@ import { seedInitialData } from '../src/server/seed';
 const botSecret = 'test-bot-secret';
 const ownerId = 'owner-1';
 const adminToken = signSession({ id: 'admin-test', email: 'admin@example.com', type: 'admin', role: 'super_admin', scopes: [] });
+const memberToken = signSession({ id: 'member-buyer-1', email: 'buyer1@example.com', type: 'member' });
 const paymentProofDirectory = path.resolve('data/payment-proofs');
 
 function botRequest(method: 'get' | 'post', path: string, telegramId = 'buyer-1') {
@@ -42,6 +43,27 @@ beforeEach(() => {
 });
 
 describe('Telegram commerce API boundaries', () => {
+  it('creates one authenticated invoice for multiple cart items', async () => {
+    await seedInitialData(store);
+    store.data.products.push({ id: 'extra', name: 'Extra', slug: 'extra', type: 'tool', visibility: 'public', fulfillmentType: 'license', billingPeriod: 'one_time', price: 10000, active: true, headline: '', description: '', coverUrl: '', accessUrl: '', createdAt: '', updatedAt: '' });
+    store.data.plans.push({ id: 'extra-plan', productId: 'extra', code: 'ONE', name: 'One', price: 10000, billingPeriod: 'one_time', durationDays: null, isFree: false, isActive: true });
+    const products = [store.data.products.find((item) => item.slug === 'vjstudio')!, store.data.products.find((item) => item.id === 'extra')!];
+    const items = products.map((product) => ({
+      productId: product.id,
+      planId: store.data.plans.find((plan) => plan.productId === product.id && plan.isActive)!.id
+    }));
+    const response = await request(app).post('/api/checkout')
+      .set('Authorization', `Bearer ${memberToken}`)
+      .send({ items });
+    expect(response.status).toBe(201);
+    expect(response.body.orderItems).toHaveLength(2);
+    expect(store.data.orders).toHaveLength(1);
+    store.data.orders[0].customerHwid = 'CA00E2C30BA61C8D';
+    const paid = await request(app).post(`/api/admin/orders/${store.data.orders[0].id}/paid`)
+      .set('Authorization', `Bearer ${adminToken}`);
+    expect(paid.status).toBe(200);
+    expect(paid.body.fulfillment).toHaveLength(2);
+  });
   it('creates and protects a VJ Studio desktop order', async () => {
     await seedInitialData(store);
     const created = await request(app).post('/api/license/orders').send({

@@ -15,6 +15,8 @@ import type {
   BannedHwid,
   BillingPeriod,
   CourseMaterial,
+  LandingFaq,
+  LandingFeature,
   LicenseStatus,
   MemberAccount,
   Order,
@@ -23,6 +25,7 @@ import type {
   ProductDestinationType,
   ProductFulfillmentType,
   ProductOpenMode,
+  ProductGalleryItem,
   ProductPlan,
   ProductType,
   ProductVisibility,
@@ -32,6 +35,7 @@ import type {
 } from '../shared/types';
 import type { Store } from './store';
 import { generateDynamicQris } from './qris';
+import { validateCart, type CartInput } from './cart-checkout';
 
 type Actor = {
   role: 'super_admin' | 'admin';
@@ -343,6 +347,27 @@ export function createProductRecord(store: Store, input: {
   description?: string;
   coverUrl?: string;
   accessUrl?: string;
+  marketplaceCoverUrl?: string;
+  marketplaceAccent?: string;
+  cardDescription?: string;
+  tags?: string[];
+  badge?: string;
+  gallery?: ProductGalleryItem[];
+  benefits?: LandingFeature[];
+  features?: LandingFeature[];
+  specifications?: Record<string, string>;
+  changelog?: string;
+  productFaqs?: LandingFaq[];
+  targetUsers?: string[];
+  developer?: string;
+  version?: string;
+  fileSize?: string;
+  compatibility?: string;
+  language?: string;
+  latestUpdate?: string;
+  sku?: string;
+  demoUrl?: string;
+  documentationUrl?: string;
   plans?: Array<{
     code: string;
     name: string;
@@ -407,6 +432,27 @@ export function updateProductRecord(store: Store, productId: string, input: Part
   description: string;
   coverUrl: string;
   accessUrl: string;
+  marketplaceCoverUrl: string;
+  marketplaceAccent: string;
+  cardDescription: string;
+  tags: string[];
+  badge: string;
+  gallery: ProductGalleryItem[];
+  benefits: LandingFeature[];
+  features: LandingFeature[];
+  specifications: Record<string, string>;
+  changelog: string;
+  productFaqs: LandingFaq[];
+  targetUsers: string[];
+  developer: string;
+  version: string;
+  fileSize: string;
+  compatibility: string;
+  language: string;
+  latestUpdate: string;
+  sku: string;
+  demoUrl: string;
+  documentationUrl: string;
 }>): Product {
   const product = store.data.products.find((item) => item.id === productId);
 
@@ -543,6 +589,55 @@ export async function createCheckout(
   options: CheckoutOptions = {}
 ): Promise<Order> {
   return serializeCheckout(store, () => createCheckoutLocked(store, memberId, productId, now, options));
+}
+
+export async function createCartCheckout(
+  store: Store,
+  memberId: string,
+  input: CartInput,
+  now = new Date()
+): Promise<Order> {
+  return serializeCheckout(store, async () => {
+    const member = store.data.members.find((row) => row.id === memberId && row.active);
+    if (!member) throw new Error('member not found');
+    const validated = validateCart(store, input, now);
+    const uniqueCode = validated.amount > 0 ? allocateUniquePaymentCode(store, now) : 0;
+    const totalAmount = validated.amount + uniqueCode;
+    const generatedQris = validated.amount > 0
+      ? await generateDynamicQris(store.data.deploymentSettings?.qrisStaticPayload ?? '', totalAmount)
+      : undefined;
+    const invoiceNumber = `INV-${now.toISOString().slice(0, 10).replace(/-/g, '')}-${String(store.data.orders.length + 1).padStart(4, '0')}`;
+    const first = validated.items[0];
+    const order: Order = {
+      id: createId('order'),
+      memberId,
+      productId: first.productId,
+      planId: first.planId,
+      productName: first.productName,
+      customerEmail: member.email,
+      customerHwid: input.customerHwid ? normalizeHwid(input.customerHwid) : undefined,
+      orderItems: validated.items.map((item) => ({ ...item, id: createId('order_item') })),
+      invoiceNumber,
+      uniqueCode,
+      amount: validated.subtotal,
+      discountAmount: validated.discountAmount,
+      voucherId: validated.voucherId,
+      totalAmount,
+      status: 'pending',
+      qrisPayload: generatedQris?.payload ?? '',
+      paymentQrUrl: generatedQris?.dataUrl,
+      paymentProofStatus: 'none',
+      createdAt: now.toISOString(),
+      expiresAt: new Date(now.getTime() + invoiceLifetimeHours * 60 * 60 * 1000).toISOString()
+    };
+    store.data.orders.push(order);
+    if (validated.voucherId) {
+      const voucher = store.data.vouchers.find((row) => row.id === validated.voucherId);
+      if (voucher) voucher.usedCount += 1;
+    }
+    store.save();
+    return order;
+  });
 }
 
 function orderAccessToken(orderId: string, idempotencyKey: string): string {

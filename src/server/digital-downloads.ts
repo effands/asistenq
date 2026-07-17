@@ -67,7 +67,7 @@ export function consumeDownloadGrant(store: Store, token: string, now = new Date
   if (new Date(grant.expiresAt) <= now) throw new Error('link download kedaluwarsa');
   if (grant.downloadCount >= grant.maxDownloads) throw new Error('batas download habis');
   const order = store.data.orders.find((item) => item.id === grant.orderId && item.status === 'paid');
-  const product = order && store.data.products.find((item) => item.id === grant.productId && item.id === order.productId);
+  const product = order && store.data.products.find((item) => item.id === grant.productId && (item.id === order.productId || order.orderItems?.some((orderItem) => orderItem.productId === item.id)));
   if (!product?.downloadSourceUrl || product.fulfillmentType !== 'download') throw new Error('file produk digital tidak tersedia');
   const source = validateDownloadSource(product.downloadSourceUrl);
   grant.downloadCount += 1;

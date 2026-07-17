@@ -76,6 +76,7 @@ export type CourseItem = CourseMaterial;
 export type PublicProduct = Product & {
   formattedPrice: string;
   discountPercent: number;
+  plans?: ProductPlan[];
   downloadSourceConfigured?: boolean;
   analytics?: ToolAnalyticsRow;
   landingConfig?: LandingConfig;

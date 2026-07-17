@@ -14,6 +14,9 @@ describe('multi-product database shape', () => {
     expect(store.data.vouchers).toEqual([]);
     expect(store.data.announcements).toEqual([]);
     expect(store.data.bannedHwids).toEqual([]);
+    expect(store.data.accessGrants).toEqual([]);
+    expect(store.data.contentPages).toEqual([]);
+    expect(store.data.subscribers).toEqual([]);
   });
 
   it('normalizes legacy partial data while preserving existing records', () => {
@@ -88,6 +91,10 @@ describe('multi-product database shape', () => {
     expect(store.data.vouchers).toEqual([]);
     expect(store.data.announcements).toEqual([]);
     expect(store.data.bannedHwids).toEqual([]);
+    expect(store.data.accessGrants).toEqual([]);
+    expect(store.data.contentPages).toEqual([]);
+    expect(store.data.subscribers).toEqual([]);
+    expect(store.data.orders[0].orderItems).toBeUndefined();
     expect(store.data.admins).toEqual(legacyData.admins);
     expect(store.data.members).toEqual(legacyData.members);
     expect(store.data.products).toEqual(legacyData.products);

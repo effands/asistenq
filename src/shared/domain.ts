@@ -3,7 +3,10 @@ import type {
   AdminScope,
   BillingPeriod,
   CourseMaterial,
+  LandingFaq,
+  LandingFeature,
   Product,
+  ProductGalleryItem,
   ProductFulfillmentType,
   ProductAccessMode,
   ProductDestinationType,
@@ -43,6 +46,27 @@ type ProductInput = {
   description?: string;
   coverUrl?: string;
   accessUrl?: string;
+  marketplaceCoverUrl?: string;
+  marketplaceAccent?: string;
+  cardDescription?: string;
+  tags?: string[];
+  badge?: string;
+  gallery?: ProductGalleryItem[];
+  benefits?: LandingFeature[];
+  features?: LandingFeature[];
+  specifications?: Record<string, string>;
+  changelog?: string;
+  productFaqs?: LandingFaq[];
+  targetUsers?: string[];
+  developer?: string;
+  version?: string;
+  fileSize?: string;
+  compatibility?: string;
+  language?: string;
+  latestUpdate?: string;
+  sku?: string;
+  demoUrl?: string;
+  documentationUrl?: string;
 };
 
 export function createId(prefix: string): string {
@@ -84,6 +108,27 @@ export function createProduct(input: ProductInput): Product {
     description: input.description ?? '',
     coverUrl: input.coverUrl ?? '',
     accessUrl: input.accessUrl ?? '',
+    marketplaceCoverUrl: input.marketplaceCoverUrl,
+    marketplaceAccent: input.marketplaceAccent,
+    cardDescription: input.cardDescription,
+    tags: input.tags ?? [],
+    badge: input.badge,
+    gallery: input.gallery ?? [],
+    benefits: input.benefits ?? [],
+    features: input.features ?? [],
+    specifications: input.specifications ?? {},
+    changelog: input.changelog,
+    productFaqs: input.productFaqs ?? [],
+    targetUsers: input.targetUsers ?? [],
+    developer: input.developer,
+    version: input.version,
+    fileSize: input.fileSize,
+    compatibility: input.compatibility,
+    language: input.language,
+    latestUpdate: input.latestUpdate,
+    sku: input.sku,
+    demoUrl: input.demoUrl,
+    documentationUrl: input.documentationUrl,
     createdAt: now,
     updatedAt: now
   };

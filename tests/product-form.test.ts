@@ -16,3 +16,8 @@ it('keeps an HTTPS source for download products', () => {
 it('rejects a non-HTTPS download source', () => {
   expect(() => buildProductFulfillmentPatch('download', 'http://files.example.com/tool.zip')).toThrow('HTTPS');
 });
+
+it('does not require a download source for URL and course fulfillment', () => {
+  expect(buildProductFulfillmentPatch('url', '')).toEqual({ fulfillmentType: 'url' });
+  expect(buildProductFulfillmentPatch('course', '')).toEqual({ fulfillmentType: 'course' });
+});
