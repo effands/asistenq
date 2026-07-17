@@ -393,7 +393,7 @@ async function runGitHubDeployUpdate(githubToken: string): Promise<{ stdout: str
     }
   };
   const results = [
-    await runCommand('git', ['pull', '--autostash', remote, githubBranch], commandOptions),
+    await runCommand('git', ['pull', '--no-rebase', '--autostash', remote, githubBranch], commandOptions),
     await runCommand('npm', deploymentInstallArgs(hasLockfile), commandOptions),
     await runCommand('npm', deploymentAuditArgs(), commandOptions),
     await runCommand('npm', ['run', 'build'], commandOptions)
