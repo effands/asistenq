@@ -52,7 +52,7 @@ export function deploymentAuditArgs(): string[] {
 }
 
 export function deploymentPullArgs(remote: string, branch: string): string[] {
-  return ['pull', '--autostash', remote, branch];
+  return ['pull', '--no-rebase', '--autostash', remote, branch];
 }
 
 function shellQuote(value: string): string {
