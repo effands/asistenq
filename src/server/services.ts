@@ -464,7 +464,13 @@ export function createPlanRecord(store: Store, input: {
 export const invoiceLifetimeHours = 24;
 export const invoiceReminderHours = 3;
 
-export async function createCheckout(store: Store, memberId: string, productId: string, now = new Date()): Promise<Order> {
+export async function createCheckout(
+  store: Store,
+  memberId: string,
+  productId: string,
+  now = new Date(),
+  options: { planId?: string; price?: number; telegramId?: string; lifetimeMinutes?: number } = {}
+): Promise<Order> {
   const member = store.data.members.find((item) => item.id === memberId);
   const product = store.data.products.find((item) => item.id === productId && item.active);
 
@@ -476,11 +482,15 @@ export async function createCheckout(store: Store, memberId: string, productId: 
     throw new Error('product not found');
   }
 
-  const uniqueCode = product.price > 0 ? Math.floor(Math.random() * 900) + 100 : 0;
-  const totalAmount = product.price + uniqueCode;
+  const amount = options.price ?? product.price;
+  const uniqueCode = amount > 0 ? Math.floor(Math.random() * 900) + 100 : 0;
+  const totalAmount = amount + uniqueCode;
   const invoiceNumber = `INV-${now.toISOString().slice(0, 10).replace(/-/g, '')}-${String(store.data.orders.length + 1).padStart(4, '0')}`;
-  const expiresAt = new Date(now.getTime() + invoiceLifetimeHours * 60 * 60 * 1000).toISOString();
-  const generatedQris = product.price > 0
+  const lifetimeMs = options.lifetimeMinutes === undefined
+    ? invoiceLifetimeHours * 60 * 60 * 1000
+    : options.lifetimeMinutes * 60 * 1000;
+  const expiresAt = new Date(now.getTime() + lifetimeMs).toISOString();
+  const generatedQris = amount > 0
     ? await generateDynamicQris(store.data.deploymentSettings?.qrisStaticPayload ?? '', totalAmount)
     : undefined;
 
@@ -490,12 +500,15 @@ export async function createCheckout(store: Store, memberId: string, productId: 
     productId,
     invoiceNumber,
     productName: product.name,
+    planId: options.planId,
+    telegramId: options.telegramId,
     uniqueCode,
-    amount: product.price,
+    amount,
     totalAmount,
     status: 'pending',
     qrisPayload: generatedQris?.payload ?? '',
     paymentQrUrl: generatedQris?.dataUrl,
+    paymentProofStatus: 'none',
     createdAt: now.toISOString(),
     expiresAt
   };

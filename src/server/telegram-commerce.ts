@@ -1,0 +1,98 @@
+import crypto from 'node:crypto';
+import { formatCurrency } from '../shared/domain';
+import type { MemberAccount, Order } from '../shared/types';
+import type { Store } from './store';
+import { createCheckout, createMember, expirePendingOrders } from './services';
+
+export async function registerTelegramBuyer(store: Store, input: {
+  telegramId: string;
+  name: string;
+  email: string;
+  whatsapp: string;
+}): Promise<MemberAccount> {
+  const telegramId = input.telegramId.trim();
+  const email = input.email.trim().toLowerCase();
+  const byTelegram = store.data.members.find((item) => item.telegramId === telegramId);
+
+  if (byTelegram) {
+    return byTelegram;
+  }
+
+  const byEmail = store.data.members.find((item) => item.email === email);
+  if (byEmail?.telegramId && byEmail.telegramId !== telegramId) {
+    throw new Error('email sudah terhubung ke akun Telegram lain');
+  }
+
+  if (byEmail) {
+    byEmail.telegramId = telegramId;
+    byEmail.name = input.name.trim();
+    byEmail.whatsapp = input.whatsapp.trim();
+    store.save();
+    return byEmail;
+  }
+
+  return createMember(store, {
+    ...input,
+    telegramId,
+    password: crypto.randomBytes(24).toString('base64url')
+  });
+}
+
+export function listTelegramCatalog(store: Store) {
+  return store.data.products
+    .filter((product) => product.active && product.visibility !== 'draft')
+    .map((product) => {
+      const { downloadSourceUrl: _privateSource, ...publicProduct } = product;
+
+      return {
+        ...publicProduct,
+        plans: store.data.plans
+          .filter((plan) => plan.productId === product.id && plan.isActive)
+          .map((plan) => ({ ...plan, formattedPrice: formatCurrency(plan.price) }))
+      };
+    })
+    .filter((product) => product.plans.length > 0);
+}
+
+export const telegramInvoiceLifetimeMinutes = 30;
+
+export async function createTelegramCheckout(store: Store, input: {
+  telegramId: string;
+  productId: string;
+  planId: string;
+}, now = new Date()): Promise<Order> {
+  expirePendingOrders(store, now);
+
+  const member = store.data.members.find((item) => item.telegramId === input.telegramId);
+  if (!member) {
+    throw new Error('profil pembeli belum lengkap');
+  }
+
+  const product = store.data.products.find((item) => item.id === input.productId && item.active);
+  const plan = store.data.plans.find((item) => (
+    item.id === input.planId &&
+    item.productId === input.productId &&
+    item.isActive
+  ));
+  if (!product || !plan) {
+    throw new Error('produk atau paket tidak tersedia');
+  }
+
+  const reusable = store.data.orders.find((order) => (
+    order.memberId === member.id &&
+    order.productId === product.id &&
+    order.planId === plan.id &&
+    order.status === 'pending' &&
+    Boolean(order.expiresAt && new Date(order.expiresAt) > now)
+  ));
+  if (reusable) {
+    return reusable;
+  }
+
+  return createCheckout(store, member.id, product.id, now, {
+    planId: plan.id,
+    price: plan.price,
+    telegramId: input.telegramId,
+    lifetimeMinutes: telegramInvoiceLifetimeMinutes
+  });
+}

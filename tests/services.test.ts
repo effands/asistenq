@@ -165,6 +165,23 @@ describe('server services', () => {
     expect(store.data.orders[0].status).toBe('expired');
   });
 
+  it('supports plan price and custom lifetime without changing the default checkout API', async () => {
+    const member = await createMember(store, { name: 'Buyer', email: 'plan@asistenq.com', password: 'secret123' });
+    const product = createProductRecord(store, {
+      name: 'VJ Studio Pro', slug: 'vjstudio-options', type: 'tool', billingPeriod: 'monthly', price: 99000
+    });
+    const now = new Date('2026-07-17T08:00:00.000Z');
+
+    const order = await createCheckout(store, member.id, product.id, now, {
+      planId: 'plan_3m', price: 249000, telegramId: '1001', lifetimeMinutes: 30
+    });
+
+    expect(order).toMatchObject({
+      planId: 'plan_3m', telegramId: '1001', amount: 249000,
+      expiresAt: '2026-07-17T08:30:00.000Z', paymentProofStatus: 'none'
+    });
+  });
+
   it('lists pending orders and marks an invoice paid for Telegram approval', async () => {
     const member = await createMember(store, { name: 'Buyer', email: 'buyer@asistenq.com', password: 'secret123' });
     const product = createProductRecord(store, {
