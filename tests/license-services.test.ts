@@ -5,6 +5,7 @@ import {
   activateLicense,
   banHwid,
   createMember,
+  generateDirectToolLicense,
   generateToolLicense,
   memberLicenseDashboard,
   productLicenseConfig,
@@ -159,6 +160,27 @@ describe('license services', () => {
       badge: 'Best Seller',
       highlighted: true
     });
+  });
+
+  it('creates one orderless direct license and reuses the active duplicate', () => {
+    store.data.members.push({
+      id: 'member-linked', name: 'Linked Buyer', email: 'buyer@example.com', passwordHash: 'hash',
+      telegramId: 'buyer-telegram-1', active: true, createdAt: new Date().toISOString()
+    });
+    const input = {
+      productSlug: 'vjstudio', planCode: '1M', email: 'BUYER@example.com',
+      hwid: 'CA00E2C30BA61C8D', now: new Date('2026-07-17T00:00:00.000Z')
+    };
+
+    const first = generateDirectToolLicense(store, input);
+    const second = generateDirectToolLicense(store, input);
+
+    expect(first.reused).toBe(false);
+    expect(first.license.orderId).toBeUndefined();
+    expect(first.buyerTelegramId).toBe('buyer-telegram-1');
+    expect(second).toMatchObject({ reused: true, buyerTelegramId: 'buyer-telegram-1' });
+    expect(second.license.id).toBe(first.license.id);
+    expect(store.data.licenses).toHaveLength(1);
   });
 
   it('returns a versioned VJ Studio license configuration', () => {

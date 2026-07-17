@@ -1162,6 +1162,34 @@ export function generateLicenseForPaidOrder(store: Store, input: {
   return license;
 }
 
+export function generateDirectToolLicense(store: Store, input: {
+  productSlug: string;
+  planCode: string;
+  email: string;
+  hwid: string;
+  now?: Date;
+  salt?: string;
+}): { license: ToolLicense; reused: boolean; buyerTelegramId?: string } {
+  const product = findProductBySlug(store, input.productSlug);
+  findPlanByCode(store, product.id, input.planCode);
+  const now = input.now ?? new Date();
+  const email = normalizeEmail(input.email);
+  const hwid = normalizeHwid(input.hwid);
+  const linkedMember = store.data.members.find((member) => member.active && member.email === email && member.telegramId);
+  const existing = store.data.licenses.find((license) => (
+    license.productId === product.id &&
+    license.email === email &&
+    license.hwid === hwid &&
+    ['generated', 'active'].includes(license.status) &&
+    (!license.expiresAt || new Date(`${license.expiresAt}T23:59:59.999Z`) >= now)
+  ));
+
+  if (existing) return { license: existing, reused: true, buyerTelegramId: linkedMember?.telegramId };
+
+  const license = generateToolLicense(store, { ...input, email, hwid, now });
+  return { license, reused: false, buyerTelegramId: linkedMember?.telegramId };
+}
+
 export function formatInvoiceHtml(store: Store, orderIdOrInvoice: string, memberId?: string): string {
   const order = store.data.orders.find((item) => (
     item.id === orderIdOrInvoice || item.invoiceNumber === orderIdOrInvoice
