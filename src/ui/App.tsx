@@ -3033,7 +3033,7 @@ function MemberPanel({ session, products, dashboard, orders, onRegister, onLogin
   const [cartBusy, setCartBusy] = useState(false);
   const [activeOrder, setActiveOrder] = useState<PublicOrder | null>(null);
   const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
-  const [activeMemberTab, setActiveMemberTab] = useState<'licenses' | 'products' | 'orders' | 'course' | 'help'>('licenses');
+  const [activeMemberTab, setActiveMemberTab] = useState<'dashboard' | 'licenses' | 'products' | 'orders' | 'profile' | 'help' | 'affiliate'>('dashboard');
 
   if (!session) {
     return (
@@ -3075,6 +3075,13 @@ function MemberPanel({ session, products, dashboard, orders, onRegister, onLogin
     const hasSubscription = (dashboard?.subscriptions ?? []).some((subscription) => subscription.productId === product.id && subscription.status === 'active');
     return hasPaidOrder || hasSubscription;
   });
+  const ownedProductIds = new Set([
+    ...ownedLicenses.map((license) => license.productId),
+    ...(dashboard?.subscriptions ?? []).filter((subscription) => subscription.status === 'active').map((subscription) => subscription.productId),
+    ...orders.filter((order) => order.status === 'paid').map((order) => order.productId)
+  ]);
+  const ownedProducts = paidProducts.filter((product) => ownedProductIds.has(product.id));
+  const pendingOrders = orders.filter((order) => order.status === 'pending').length;
 
   function toggleCart(productId: string) {
     setCartProductIds((current) => current.includes(productId)
@@ -3083,27 +3090,57 @@ function MemberPanel({ session, products, dashboard, orders, onRegister, onLogin
   }
 
   return (
-    <main className="member-page">
-      <section className="member-dashboard-hero">
-        <div>
-          <span className="chip">Member Workspace</span>
-          <h1>Halo, {session.user.name}. Ini pusat aksesmu.</h1>
-        </div>
-        <div className="member-stat-card">
-          <span>Total lisensi</span>
-          <strong>{ownedLicenses.length}</strong>
-          <small>{session.user.email}</small>
-        </div>
-      </section>
+    <main className="member-page member-workspace-page">
+      <section className="member-workspace-shell">
+        <aside className="member-sidebar" aria-label="Menu member">
+          <div className="member-sidebar-user">
+            <span>{session.user.name.slice(0, 1).toUpperCase()}</span>
+            <div><strong>{session.user.name}</strong><small>{session.user.email}</small></div>
+          </div>
+          <nav>
+            <button className={activeMemberTab === 'dashboard' ? 'active' : ''} onClick={() => setActiveMemberTab('dashboard')}><LayoutDashboard /> Dashboard</button>
+            <button className={activeMemberTab === 'products' ? 'active' : ''} onClick={() => setActiveMemberTab('products')}><Boxes /> Produk Saya</button>
+            <button className={activeMemberTab === 'licenses' ? 'active' : ''} onClick={() => setActiveMemberTab('licenses')}><KeyRound /> Lisensi</button>
+            <button className={activeMemberTab === 'orders' ? 'active' : ''} onClick={() => setActiveMemberTab('orders')}><CreditCard /> Pesanan</button>
+            <button className={activeMemberTab === 'profile' ? 'active' : ''} onClick={() => setActiveMemberTab('profile')}><Users /> Profil</button>
+            <button className={activeMemberTab === 'help' ? 'active' : ''} onClick={() => setActiveMemberTab('help')}><BookOpen /> Bantuan</button>
+            <button className={activeMemberTab === 'affiliate' ? 'active' : ''} onClick={() => setActiveMemberTab('affiliate')}><Sparkles /> Affiliate <small>Coming Soon</small></button>
+          </nav>
+          <button className="member-sidebar-logout" onClick={onLogout}><LogOut /> Logout</button>
+        </aside>
 
-      <section className="member-tabs">
-        <div className="member-tab-list" aria-label="Menu member">
-          <button className={activeMemberTab === 'licenses' ? 'active' : ''} onClick={() => setActiveMemberTab('licenses')}>Lisensi</button>
-          <button className={activeMemberTab === 'products' ? 'active' : ''} onClick={() => setActiveMemberTab('products')}>Beli Produk</button>
-          <button className={activeMemberTab === 'orders' ? 'active' : ''} onClick={() => setActiveMemberTab('orders')}>History</button>
-          <button className={activeMemberTab === 'course' ? 'active' : ''} onClick={() => setActiveMemberTab('course')}>Course</button>
-          <button className={activeMemberTab === 'help' ? 'active' : ''} onClick={() => setActiveMemberTab('help')}>Bantuan</button>
-        </div>
+        <div className="member-workspace-content">
+          {activeMemberTab === 'dashboard' && <section className="member-dashboard-hero">
+            <div className="member-welcome-copy">
+              <span>Selamat datang kembali,</span>
+              <h1>{session.user.name} <span aria-hidden="true">👋</span></h1>
+              <p>Kelola produk, lisensi, pesanan, dan semua aset digitalmu di AsistenQ.</p>
+              <div><button className="member-lime-button" onClick={() => setActiveMemberTab('products')}><Boxes /> Lihat Produk Saya</button><button className="member-outline-button" onClick={() => setActiveMemberTab('help')}><BookOpen /> Butuh Bantuan?</button></div>
+            </div>
+            <div className="member-metrics">
+              <article><Boxes /><span>Produk Dimiliki</span><strong>{ownedProducts.length}</strong><small>Produk aktif</small></article>
+              <article><ShieldCheck /><span>Lisensi Aktif</span><strong>{ownedLicenses.filter((license) => license.status === 'active').length}</strong><small>Dari {ownedLicenses.length} lisensi</small></article>
+              <article><CreditCard /><span>Pesanan</span><strong>{orders.length}</strong><small>{pendingOrders} menunggu bayar</small></article>
+              <article><GraduationCap /><span>Course Aktif</span><strong>{accessibleCourseProducts.length}</strong><small>Kelas tersedia</small></article>
+            </div>
+          </section>}
+
+          {activeMemberTab === 'dashboard' && (
+            <section className="member-owned-overview">
+              <div className="member-section-heading"><div><h2><Boxes /> Produk & Tools Saya</h2><p>Semua produk digital yang sudah aktif di akunmu.</p></div><button onClick={() => setActiveMemberTab('products')}>Lihat Semua <ArrowRight /></button></div>
+              {ownedProducts.length === 0 ? <div className="empty-state">Belum ada produk aktif. Pilih produk dari Marketplace untuk memulai.</div> : (
+                <div className="member-owned-grid">
+                  {ownedProducts.slice(0, 4).map((product) => (
+                    <article className="member-owned-card" key={product.id}>
+                      <div className="member-owned-cover">{product.coverUrl ? <img src={product.coverUrl} alt="" /> : productIcon(product)}<span>{product.category}</span></div>
+                      <div><h3>{product.name}</h3><p>{product.headline}</p><small>{product.type}</small></div>
+                      <footer><b>Aktif</b><button onClick={() => setActiveMemberTab('products')}>Buka <ArrowRight /></button></footer>
+                    </article>
+                  ))}
+                </div>
+              )}
+            </section>
+          )}
 
         {activeMemberTab === 'licenses' && (
           <div className="panel stack member-license-panel">
@@ -3176,61 +3213,29 @@ function MemberPanel({ session, products, dashboard, orders, onRegister, onLogin
           <div className="member-products-panel">
             <div className="member-products-head">
               <div>
-                <p className="section-kicker">Marketplace Member</p>
-                <h2>Beli Produk</h2>
-              </div>
-              <div className="member-products-toolbar">
-                <span className="soft-badge">QRIS</span>
-                <button
-                  className="ghost-button cart-batch-button"
-                  disabled={cartBusy || cartProductIds.length === 0}
-                  onClick={async () => {
-                    setCheckoutNotice('');
-                    setCartBusy(true);
-                    try {
-                      const selected = paidProducts.filter((product) => cartProductIds.includes(product.id));
-                      let lastOrder: PublicOrder | undefined;
-                      for (const product of selected) {
-                        lastOrder = await onCheckout(product.id);
-                      }
-                      if (lastOrder) setActiveOrder(lastOrder);
-                      setCheckoutNotice(`${selected.length} invoice berhasil dibuat dari keranjang.`);
-                      setCartProductIds([]);
-                    } catch (error) {
-                      setCheckoutNotice(error instanceof Error ? error.message : 'Checkout keranjang gagal.');
-                    } finally {
-                      setCartBusy(false);
-                    }
-                  }}
-                >
-                  <ShoppingCart size={16} /> Keranjang {cartProductIds.length > 0 ? `(${cartProductIds.length})` : ''}
-                </button>
+                <p className="section-kicker">Digital Library</p>
+                <h2>Produk Saya</h2>
+                <p className="muted">Download, buka aplikasi, dan akses materi course dari satu tempat.</p>
               </div>
             </div>
+            {ownedProducts.length === 0 && <div className="empty-state">Belum ada produk aktif di akun ini. Buka Marketplace untuk membeli produk.</div>}
             <div className="member-product-list">
-              {paidProducts.map((product) => (
+              {ownedProducts.map((product) => (
                 <article className="member-product-card" key={product.id}>
-                  <div className="member-product-top">
-                    <span>{product.type}</span>
-                    {productIcon(product)}
-                  </div>
+                  <div className="member-product-cover">{product.coverUrl ? <img src={product.coverUrl} alt="" /> : productIcon(product)}<span>{product.category}</span></div>
                   <strong>{product.name}</strong>
                   <small>{product.headline}</small>
                   <div className="member-product-footer">
-                    <b>{product.price === 0 ? 'Gratis' : product.formattedPrice}</b>
+                    <b>Aktif di akunmu</b>
                     <div className="member-product-actions">
                       <button className="ghost-button" type="button" onClick={() => {
-                        window.history.pushState({}, '', product.landingPath ?? `/produk/${product.slug}`);
-                        window.dispatchEvent(new PopStateEvent('popstate'));
+                        if (product.accessUrl) window.location.href = product.accessUrl;
+                        else {
+                          window.history.pushState({}, '', product.landingPath ?? `/produk/${product.slug}`);
+                          window.dispatchEvent(new PopStateEvent('popstate'));
+                        }
                       }}>
-                        Selengkapnya
-                      </button>
-                      <button
-                        className={cartProductIds.includes(product.id) ? 'ghost-button active-cart-button' : 'primary'}
-                        onClick={() => toggleCart(product.id)}
-                        type="button"
-                      >
-                        <ShoppingCart size={16} />
+                        {product.courseMaterials?.length ? 'Buka Materi' : product.downloadSourceConfigured ? 'Download' : 'Buka Produk'} <ArrowRight size={15} />
                       </button>
                     </div>
                   </div>
@@ -3275,7 +3280,7 @@ function MemberPanel({ session, products, dashboard, orders, onRegister, onLogin
           </div>
         )}
 
-        {activeMemberTab === 'course' && (
+        {activeMemberTab === 'products' && accessibleCourseProducts.length > 0 && (
           <div className="panel stack member-help-panel">
             <p className="section-kicker">Course Access</p>
             <h2>Kelas dan materi pendukung.</h2>
@@ -3343,6 +3348,28 @@ function MemberPanel({ session, products, dashboard, orders, onRegister, onLogin
           </div>
         )}
 
+        {activeMemberTab === 'profile' && (
+          <div className="panel stack member-profile-panel">
+            <p className="section-kicker">Akun Member</p>
+            <h2>Profil Saya</h2>
+            <div className="member-profile-card">
+              <span>{session.user.name.slice(0, 1).toUpperCase()}</span>
+              <div><small>Nama lengkap</small><strong>{session.user.name}</strong><small>Email</small><strong>{session.user.email}</strong></div>
+            </div>
+            <p className="muted">Perubahan data akun dapat dibantu melalui Customer Service AsistenQ.</p>
+          </div>
+        )}
+
+        {activeMemberTab === 'affiliate' && (
+          <div className="member-coming-soon">
+            <Sparkles />
+            <span className="chip">Coming Soon</span>
+            <h2>Program Affiliate AsistenQ</h2>
+            <p>Sistem referral, komisi, dan dashboard affiliate sedang kami siapkan.</p>
+            <button className="member-outline-button" onClick={() => setActiveMemberTab('dashboard')}>Kembali ke Dashboard</button>
+          </div>
+        )}
+
         {activeMemberTab === 'help' && (
           <div className="panel stack member-help-panel">
             <p className="section-kicker">Pusat Bantuan</p>
@@ -3379,6 +3406,7 @@ function MemberPanel({ session, products, dashboard, orders, onRegister, onLogin
             </div>
           </div>
         )}
+        </div>
       </section>
       {activeOrder && <InvoiceModal order={activeOrder} onClose={() => setActiveOrder(null)} />}
     </main>
