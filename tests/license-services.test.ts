@@ -195,4 +195,63 @@ describe('license services', () => {
       ]
     });
   });
+
+  it('returns paid MIXIN9 license plans in display order', () => {
+    expect(productLicenseConfig(store, 'mixin9')).toMatchObject({
+      version: 1,
+      product: 'mixin9',
+      plans: [
+        { code: '1M', price: 35000, durationDays: 30 },
+        { code: '6M', price: 99000, durationDays: 180, highlighted: true },
+        { code: '1Y', price: 155000, durationDays: 365 }
+      ]
+    });
+  });
+
+  it('migrates legacy free MIXIN9 plans without touching other product prices', async () => {
+    const legacyStore = createMemoryStore({
+      products: [{
+        id: 'legacy-mixin9',
+        name: 'MIXIN9',
+        slug: 'mixin9',
+        type: 'tool',
+        billingPeriod: 'one_time',
+        price: 0,
+        active: true,
+        headline: 'Old',
+        description: 'Old',
+        coverUrl: '',
+        accessUrl: '/member',
+        createdAt: '2026-07-17T00:00:00.000Z',
+        updatedAt: '2026-07-17T00:00:00.000Z'
+      }, {
+        id: 'other-product',
+        name: 'Other',
+        slug: 'other-product',
+        type: 'tool',
+        billingPeriod: 'monthly',
+        price: 123456,
+        active: true,
+        headline: 'Other',
+        description: 'Other',
+        coverUrl: '',
+        accessUrl: '/member',
+        createdAt: '2026-07-17T00:00:00.000Z',
+        updatedAt: '2026-07-17T00:00:00.000Z'
+      }],
+      plans: [
+        { id: 'legacy-free', productId: 'legacy-mixin9', code: 'DEFAULT', name: 'Akses Gratis', price: 0, billingPeriod: 'one_time', durationDays: null, isFree: true, isActive: true },
+        { id: 'other-plan', productId: 'other-product', code: '1M', name: 'Other Plan', price: 123456, billingPeriod: 'monthly', durationDays: 30, isFree: false, isActive: true }
+      ]
+    });
+
+    await seedInitialData(legacyStore);
+
+    expect(productLicenseConfig(legacyStore, 'mixin9').plans).toMatchObject([
+      { code: '1M', price: 35000 },
+      { code: '6M', price: 99000 },
+      { code: '1Y', price: 155000 }
+    ]);
+    expect(legacyStore.data.plans.find((plan) => plan.id === 'other-plan')?.price).toBe(123456);
+  });
 });

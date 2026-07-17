@@ -376,6 +376,9 @@ export function createProductRecord(store: Store, input: {
     durationDays: number | null;
     isFree?: boolean;
     isActive?: boolean;
+    badge?: string;
+    highlighted?: boolean;
+    sortOrder?: number;
   }>;
 }): Product {
   if (store.data.products.some((product) => product.slug === input.slug)) {
@@ -395,7 +398,10 @@ export function createProductRecord(store: Store, input: {
       billingPeriod: plan.billingPeriod,
       durationDays: plan.durationDays,
       isFree: plan.isFree ?? plan.price === 0,
-      isActive: true
+      isActive: true,
+      badge: plan.badge,
+      highlighted: plan.highlighted,
+      sortOrder: plan.sortOrder
     });
   }
   store.save();

@@ -1,7 +1,7 @@
 import { createPlanRecord, createProductRecord } from './services';
 import type { Store } from './store';
 import bcrypt from 'bcryptjs';
-import type { BillingPeriod, Product, ProductAccessMode, ProductType, ProductVisibility } from '../shared/types';
+import type { BillingPeriod, Product, ProductAccessMode, ProductFulfillmentType, ProductType, ProductVisibility } from '../shared/types';
 import { seedSiteContent } from './site-content';
 
 type SeedProduct = {
@@ -21,11 +21,13 @@ type SeedProduct = {
   landingTemplate?: string;
   ctaLabel?: string;
   accessRequirement?: string;
+  fulfillmentType?: ProductFulfillmentType;
   featured: boolean;
   headline: string;
   description: string;
   coverUrl: string;
   accessUrl: string;
+  plans?: Parameters<typeof createProductRecord>[1]['plans'];
 };
 
 function ensureProduct(store: Store, input: SeedProduct): Product {
@@ -36,6 +38,39 @@ function ensureProduct(store: Store, input: SeedProduct): Product {
   }
 
   return createProductRecord(store, input);
+}
+
+function syncLegacyMixin9Plans(store: Store, product: Product): void {
+  const productPlans = store.data.plans.filter((plan) => plan.productId === product.id);
+  const hasLegacyFreePlan = productPlans.some((plan) => plan.code === 'DEFAULT' && plan.price === 0);
+  const hasExpectedPlans = ['1M', '6M', '1Y'].every((code) => productPlans.some((plan) => plan.code === code));
+
+  if (product.price !== 0 && !hasLegacyFreePlan && hasExpectedPlans) return;
+
+  Object.assign(product, {
+    accessMode: 'paid' as const,
+    billingPeriod: 'monthly' as const,
+    price: 35000,
+    compareAtPrice: 199000,
+    discountLabel: 'Paket Fleksibel',
+    promoText: 'Batch mixing audio cepat untuk creator. Pilih paket 1 bulan, 6 bulan, atau 1 tahun.',
+    landingTemplate: 'mixin9',
+    ctaLabel: 'Beli MIXIN9 Sekarang',
+    accessRequirement: 'Selesaikan pembayaran QRIS untuk membuka lisensi MIXIN9.',
+    fulfillmentType: 'license' as const,
+    updatedAt: new Date().toISOString()
+  });
+
+  store.data.plans = store.data.plans.filter((plan) => !(plan.productId === product.id && plan.code === 'DEFAULT'));
+  [
+    { code: '1M', name: 'Lisensi 1 Bulan', price: 35000, billingPeriod: 'monthly' as const, durationDays: 30, isFree: false, isActive: true, sortOrder: 10 },
+    { code: '6M', name: 'Lisensi 6 Bulan', price: 99000, billingPeriod: 'monthly' as const, durationDays: 180, isFree: false, isActive: true, highlighted: true, sortOrder: 20 },
+    { code: '1Y', name: 'Lisensi 1 Tahun', price: 155000, billingPeriod: 'annual' as const, durationDays: 365, isFree: false, isActive: true, sortOrder: 30 }
+  ].forEach((plan) => {
+    const record = createPlanRecord(store, { productId: product.id, ...plan });
+    if (record.price === 0 || record.code === plan.code) Object.assign(record, plan);
+  });
+  store.save();
 }
 
 export async function seedInitialData(store: Store): Promise<void> {
@@ -140,28 +175,64 @@ export async function seedInitialData(store: Store): Promise<void> {
     accessUrl: '/member/courses/kelas-youtube'
   });
 
-  ensureProduct(store, {
+  const mixin9 = ensureProduct(store, {
     name: 'MIXIN9',
     slug: 'mixin9',
     type: 'tool',
     category: 'Audio Tools',
     visibility: 'public',
-    billingPeriod: 'one_time',
-    price: 0,
-    compareAtPrice: 299000,
-    discountLabel: 'Free Beta',
-    promoText: 'Batch mixing audio cepat untuk creator. Daftar member untuk ambil akses gratis.',
+    accessMode: 'paid',
+    billingPeriod: 'monthly',
+    price: 35000,
+    compareAtPrice: 199000,
+    discountLabel: 'Paket Fleksibel',
+    promoText: 'Batch mixing audio cepat untuk creator. Pilih paket 1 bulan, 6 bulan, atau 1 tahun.',
     logoUrl: '',
     landingPath: '/mixin9',
-    landingTemplate: 'zip-html',
-    ctaLabel: 'Ambil MIXIN9 Gratis',
-    accessRequirement: 'Daftar jadi member untuk membuka akses download dan update.',
+    landingTemplate: 'mixin9',
+    ctaLabel: 'Beli MIXIN9 Sekarang',
+    accessRequirement: 'Selesaikan pembayaran QRIS untuk membuka lisensi MIXIN9.',
+    fulfillmentType: 'license',
     featured: true,
     headline: 'Batch mixing audio banyak file dalam satu alur cepat.',
     description: 'MIXIN9 membantu creator merapikan loudness, balance, dan proses mixing audio secara batch tanpa membuka file satu per satu.',
     coverUrl: '',
-    accessUrl: '/landing-imports/mixin9/index.html'
+    accessUrl: '/landing-imports/mixin9/index.html',
+    plans: [
+      {
+        code: '1M',
+        name: 'Lisensi 1 Bulan',
+        price: 35000,
+        billingPeriod: 'monthly',
+        durationDays: 30,
+        isFree: false,
+        isActive: true,
+        sortOrder: 10
+      },
+      {
+        code: '6M',
+        name: 'Lisensi 6 Bulan',
+        price: 99000,
+        billingPeriod: 'monthly',
+        durationDays: 180,
+        isFree: false,
+        isActive: true,
+        highlighted: true,
+        sortOrder: 20
+      },
+      {
+        code: '1Y',
+        name: 'Lisensi 1 Tahun',
+        price: 155000,
+        billingPeriod: 'annual',
+        durationDays: 365,
+        isFree: false,
+        isActive: true,
+        sortOrder: 30
+      }
+    ]
   });
+  syncLegacyMixin9Plans(store, mixin9);
 
   ensureProduct(store, {
     name: 'YouTube Starter Kit',
