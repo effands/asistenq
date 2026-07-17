@@ -128,6 +128,13 @@ class TelegramCommerceTests(unittest.TestCase):
         buyer_call = next(call for call in send.call_args_list if str(call.args[0]) == "2002")
         self.assertEqual(buyer_call.args[2]["inline_keyboard"][0][0]["url"], result["download"]["downloadUrl"])
 
+    def test_owner_product_wizard_reaches_confirmation(self):
+        state = BOT.new_product_state()
+        for value in ["Mixer Pro", "mixer-pro", "license", "Mixer audio", "1M", "1 Bulan", "59000", "30", "draft"]:
+            state = BOT.advance_product_wizard(state, value)
+        self.assertEqual(state["step"], "confirm")
+        self.assertEqual(state["values"]["plan"]["price"], 59000)
+
 
 if __name__ == "__main__":
     unittest.main()

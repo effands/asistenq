@@ -25,7 +25,8 @@ import {
   WandSparkles
 } from 'lucide-react';
 import { useEffect, useState, type ReactNode } from 'react';
-import type { BillingPeriod, ProductAccessMode, ProductDestinationType, ProductOpenMode, ProductType, ProductVisibility } from '../shared/types';
+import type { BillingPeriod, ProductAccessMode, ProductDestinationType, ProductFulfillmentType, ProductOpenMode, ProductType, ProductVisibility } from '../shared/types';
+import { buildProductFulfillmentPatch } from './product-form';
 import {
   apiRequest,
   type AdminLicenseDashboard,
@@ -833,6 +834,8 @@ function AdminPanel({
     externalUrl?: string;
     openMode?: ProductOpenMode;
     trackLiveUsers?: boolean;
+    fulfillmentType?: ProductFulfillmentType;
+    downloadSourceUrl?: string;
     ctaLabel?: string;
     accessRequirement?: string;
     headline: string;
@@ -2017,6 +2020,8 @@ function ProductForm({ onCreateProduct }: {
     externalUrl?: string;
     openMode?: ProductOpenMode;
     trackLiveUsers?: boolean;
+    fulfillmentType?: ProductFulfillmentType;
+    downloadSourceUrl?: string;
     ctaLabel?: string;
     accessRequirement?: string;
     headline: string;
@@ -2040,6 +2045,8 @@ function ProductForm({ onCreateProduct }: {
   const [externalUrl, setExternalUrl] = useState('');
   const [openMode, setOpenMode] = useState<ProductOpenMode>('same_tab');
   const [trackLiveUsers, setTrackLiveUsers] = useState(true);
+  const [fulfillmentType, setFulfillmentType] = useState<ProductFulfillmentType>('license');
+  const [downloadSourceUrl, setDownloadSourceUrl] = useState('');
   const [ctaLabel, setCtaLabel] = useState('Daftar jadi member');
   const [accessRequirement, setAccessRequirement] = useState('Daftar jadi member untuk membuka akses.');
   const [headline, setHeadline] = useState('Bantu produksi video lebih cepat.');
@@ -2094,6 +2101,7 @@ function ProductForm({ onCreateProduct }: {
         externalUrl: destinationType === 'external' ? externalUrl.trim() || undefined : undefined,
         openMode,
         trackLiveUsers: destinationType === 'external' ? false : trackLiveUsers,
+        ...buildProductFulfillmentPatch(fulfillmentType, downloadSourceUrl),
         ctaLabel: ctaLabel.trim() || undefined,
         accessRequirement: accessRequirement.trim() || undefined,
         headline,
@@ -2146,6 +2154,13 @@ function ProductForm({ onCreateProduct }: {
               />
             </label>
           ))}
+        </div>
+      </div>
+      <div className="product-form-section">
+        <div className="product-form-section-title"><span>04</span><div><strong>Pemenuhan pesanan</strong><small>Lisensi meminta HWID; download mengirim file setelah pembayaran disetujui.</small></div></div>
+        <div className="product-form-grid two">
+          <label>Jenis pemenuhan<select value={fulfillmentType} onChange={(event) => setFulfillmentType(event.target.value as ProductFulfillmentType)}><option value="license">Lisensi software</option><option value="download">Download digital</option></select></label>
+          {fulfillmentType === 'download' && <label>URL sumber HTTPS<input required value={downloadSourceUrl} onChange={(event) => setDownloadSourceUrl(event.target.value)} type="url" placeholder="https://files.example.com/produk.zip" /></label>}
         </div>
       </div>
       <details className="product-advanced">
@@ -2265,7 +2280,9 @@ function ProductTable({ products, onUpdateProduct, onImportLandingZip, onImportL
       accessRequirement: product.accessRequirement,
       headline: product.headline,
       description: product.description,
-      accessUrl: product.accessUrl
+      accessUrl: product.accessUrl,
+      fulfillmentType: product.fulfillmentType ?? 'license',
+      downloadSourceUrl: ''
     });
   }
 
@@ -2315,14 +2332,22 @@ function ProductTable({ products, onUpdateProduct, onImportLandingZip, onImportL
                   <select value={draft.openMode ?? 'same_tab'} onChange={(event) => setDraft({ ...draft, openMode: event.target.value as ProductOpenMode })}><option value="same_tab">Tab yang sama</option><option value="new_tab">Tab baru</option><option value="wrapper">Wrapper</option></select>
                   <input value={draft.externalUrl ?? ''} onChange={(event) => setDraft({ ...draft, externalUrl: event.target.value })} placeholder="URL external" type="url" />
                   <input value={draft.ctaLabel ?? ''} onChange={(event) => setDraft({ ...draft, ctaLabel: event.target.value })} placeholder="CTA" />
+                  <select value={draft.fulfillmentType ?? 'license'} onChange={(event) => setDraft({ ...draft, fulfillmentType: event.target.value as ProductFulfillmentType, downloadSourceUrl: '' })}><option value="license">Lisensi software</option><option value="download">Download digital</option></select>
+                  {draft.fulfillmentType === 'download' && <input value={draft.downloadSourceUrl ?? ''} onChange={(event) => setDraft({ ...draft, downloadSourceUrl: event.target.value })} placeholder="URL HTTPS baru (kosong = pertahankan)" type="url" />}
                 </div>
+                {product.fulfillmentType === 'download' && product.downloadSourceConfigured && <p className="form-notice">File atau URL sumber digital sudah tersimpan (path privat disembunyikan).</p>}
                 <textarea value={draft.headline ?? ''} onChange={(event) => setDraft({ ...draft, headline: event.target.value })} placeholder="Headline" />
                 <textarea value={draft.description ?? ''} onChange={(event) => setDraft({ ...draft, description: event.target.value })} placeholder="Deskripsi" />
                 <textarea value={draft.accessRequirement ?? ''} onChange={(event) => setDraft({ ...draft, accessRequirement: event.target.value })} placeholder="Syarat akses" />
                 <div className="product-edit-actions">
                   <button className="primary" type="button" onClick={async () => {
+                    const fulfillmentPatch = draft.fulfillmentType === 'download' && !draft.downloadSourceUrl?.trim()
+                      ? { fulfillmentType: 'download' as const }
+                      : buildProductFulfillmentPatch(draft.fulfillmentType ?? 'license', draft.downloadSourceUrl ?? '');
                     await onUpdateProduct(product.id, {
                       ...draft,
+                      ...fulfillmentPatch,
+                      downloadSourceUrl: 'downloadSourceUrl' in fulfillmentPatch ? fulfillmentPatch.downloadSourceUrl : undefined,
                       discountLabel: draft.discountLabel?.trim() || undefined,
                       promoText: draft.promoText?.trim() || undefined,
                       logoUrl: draft.logoUrl?.trim() || undefined,

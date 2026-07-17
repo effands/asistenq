@@ -4,6 +4,7 @@ import type {
   BillingPeriod,
   CourseMaterial,
   Product,
+  ProductFulfillmentType,
   ProductAccessMode,
   ProductDestinationType,
   ProductOpenMode,
@@ -34,6 +35,8 @@ type ProductInput = {
   externalUrl?: string;
   openMode?: ProductOpenMode;
   trackLiveUsers?: boolean;
+  fulfillmentType?: ProductFulfillmentType;
+  downloadSourceUrl?: string;
   active?: boolean;
   featured?: boolean;
   headline?: string;
@@ -72,6 +75,8 @@ export function createProduct(input: ProductInput): Product {
     destinationType,
     externalUrl: input.externalUrl,
     openMode: input.openMode ?? (destinationType === 'external' ? 'new_tab' : 'same_tab'),
+    fulfillmentType: input.fulfillmentType,
+    downloadSourceUrl: input.downloadSourceUrl,
     trackLiveUsers: input.trackLiveUsers ?? destinationType !== 'external',
     active: input.active ?? true,
     featured: input.featured ?? false,

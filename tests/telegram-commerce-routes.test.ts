@@ -36,6 +36,32 @@ beforeEach(() => {
 });
 
 describe('Telegram commerce API boundaries', () => {
+  it('lets only the owner create products without exposing a download source', async () => {
+    const payload = {
+      name: 'Digital Pack', slug: 'digital-pack', fulfillmentType: 'download',
+      description: 'Files', status: 'draft', downloadSourceUrl: 'https://private.example.com/pack.zip',
+      plan: { code: 'FULL', name: 'Full', price: 50000, durationDays: null }
+    };
+    expect((await botRequest('post', '/api/bot/owner/products').send(payload)).status).toBe(403);
+    const response = await botRequest('post', '/api/bot/owner/products', ownerId).send(payload);
+    expect(response.status).toBe(201);
+    expect(JSON.stringify(response.body)).not.toContain('private.example.com');
+    expect(store.data.products[0].downloadSourceUrl).toBe(payload.downloadSourceUrl);
+  });
+
+  it('accepts only a ZIP document for a download product and keeps its path private', async () => {
+    const product = createProductRecord(store, {
+      name: 'ZIP Pack', slug: 'zip-pack', type: 'tool', fulfillmentType: 'download',
+      visibility: 'draft', billingPeriod: 'one_time', price: 1000
+    });
+    const zipHeader = Buffer.from([0x50, 0x4b, 0x03, 0x04, 0, 0, 0, 0]);
+    const response = await request(app).post(`/api/bot/owner/products/${product.id}/digital-file`)
+      .set('x-asistenq-bot-secret', botSecret).set('x-telegram-user-id', ownerId)
+      .attach('file', zipHeader, { filename: 'pack.zip', contentType: 'application/zip' });
+    expect(response.status).toBe(200);
+    expect(JSON.stringify(response.body)).not.toContain('digital-products');
+    expect(store.data.products[0].downloadSourceUrl).toMatch(/digital-products[\\/]\S+\.zip$/);
+  });
   it('requires the bot secret and Telegram identity on buyer routes', async () => {
     const noSecret = await request(app)
       .get('/api/bot/buyer/products')

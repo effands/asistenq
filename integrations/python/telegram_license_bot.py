@@ -11,6 +11,7 @@ import os
 import subprocess
 import sys
 import time
+import tempfile
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -88,6 +89,22 @@ def api(path: str, method: str = "GET", body: Optional[Dict[str, Any]] = None,
         "x-asistenq-bot-secret": BOT_SECRET,
         "x-telegram-user-id": telegram_id,
     }, timeout=timeout)
+
+
+def api_file(path: str, file_path: Path, telegram_id: str = OWNER_ID) -> Any:
+    boundary = "----AsistenQDigitalProductBoundary"
+    payload = file_path.read_bytes()
+    body = (
+        f'--{boundary}\r\nContent-Disposition: form-data; name="file"; filename="{file_path.name}"\r\n'
+        'Content-Type: application/zip\r\n\r\n'.encode() + payload + f"\r\n--{boundary}--\r\n".encode()
+    )
+    url = f"{API_BASE}{path}"
+    request = urllib.request.Request(url, data=body, method="POST", headers={
+        "Accept": "application/json", "Content-Type": f"multipart/form-data; boundary={boundary}",
+        "x-asistenq-bot-secret": BOT_SECRET, "x-telegram-user-id": telegram_id,
+    })
+    with urllib.request.urlopen(request, timeout=HTTP_TIMEOUT_SECONDS) as response:
+        return parse_json_response(response.read().decode("utf-8"), url)
 
 
 def keyboard(rows: List[List[Dict[str, str]]]) -> Dict[str, Any]:
@@ -301,6 +318,87 @@ def advance_registration(state: Dict[str, Any], text: str) -> Dict[str, Any]:
     return {**state, "step": "complete", "values": {**values, "whatsapp": digits}}
 
 
+def new_product_state() -> Dict[str, Any]:
+    return {"action": "owner_product", "step": "name", "values": {"plan": {}}}
+
+
+def advance_product_wizard(state: Dict[str, Any], text: str) -> Dict[str, Any]:
+    value = text.strip()
+    values = dict(state.get("values") or {})
+    plan = dict(values.get("plan") or {})
+    step = state.get("step")
+    if step == "name":
+        if len(value) < 2: raise ValueError("Nama produk minimal 2 karakter.")
+        values["name"] = value; next_step = "slug"
+    elif step == "slug":
+        if not value or any(char not in "abcdefghijklmnopqrstuvwxyz0123456789-" for char in value): raise ValueError("Slug hanya boleh huruf kecil, angka, dan minus.")
+        values["slug"] = value; next_step = "fulfillment_type"
+    elif step == "fulfillment_type":
+        normalized = value.lower()
+        if normalized not in {"license", "download"}: raise ValueError("Pilih license atau download.")
+        values["fulfillmentType"] = normalized; next_step = "description"
+    elif step == "description":
+        values["description"] = value; next_step = "plan_code"
+    elif step == "plan_code":
+        plan["code"] = value.upper(); next_step = "plan_name"
+    elif step == "plan_name":
+        plan["name"] = value; next_step = "plan_price"
+    elif step == "plan_price":
+        price = int(value)
+        if price < 0: raise ValueError("Harga tidak valid.")
+        plan["price"] = price; next_step = "duration_days"
+    elif step == "duration_days":
+        duration = None if value.lower() in {"lifetime", "0", "-"} else int(value)
+        if duration is not None and duration <= 0: raise ValueError("Durasi harus positif atau lifetime.")
+        plan["durationDays"] = duration
+        next_step = "download_source" if values.get("fulfillmentType") == "download" else "status"
+    elif step == "download_source":
+        if value.lower() == "upload":
+            values["downloadMethod"] = "upload"
+        elif value.startswith("https://"):
+            values["downloadMethod"] = "url"; values["downloadSourceUrl"] = value
+        else: raise ValueError("Kirim URL HTTPS atau ketik upload.")
+        next_step = "status"
+    elif step == "status":
+        normalized = value.lower()
+        if normalized not in {"public", "private", "draft"}: raise ValueError("Status harus public, private, atau draft.")
+        values["status"] = normalized; next_step = "confirm"
+    else:
+        raise ValueError("Tahap produk tidak valid.")
+    values["plan"] = plan
+    return {**state, "step": next_step, "values": values}
+
+
+def product_wizard_prompt(step: str) -> str:
+    return {
+        "name": "Kirim nama produk.", "slug": "Kirim slug produk (huruf kecil/angka/minus).",
+        "fulfillment_type": "Pilih jenis: license atau download.", "description": "Kirim deskripsi produk.",
+        "plan_code": "Kirim kode paket, contoh 1M.", "plan_name": "Kirim nama paket.",
+        "plan_price": "Kirim harga angka saja.", "duration_days": "Kirim durasi hari atau lifetime.",
+        "download_source": "Kirim URL HTTPS, atau ketik upload untuk mengunggah ZIP.",
+        "status": "Kirim status: public, private, atau draft."
+    }.get(step, "Lanjutkan data produk.")
+
+
+def product_wizard_keyboard(step: str) -> Optional[Dict[str, Any]]:
+    choices = {
+        "fulfillment_type": [[("🔐 Lisensi", "license"), ("📥 Download", "download")]],
+        "download_source": [[("📎 Upload ZIP", "upload"), ("🔗 Pakai URL HTTPS", "url")]],
+        "status": [[("🌐 Public", "public"), ("🔒 Private", "private"), ("📝 Draft", "draft")]],
+    }.get(step)
+    if not choices: return keyboard([[{"text": "❌ Batal", "callback_data": "product_cancel"}]])
+    rows = [[{"text": label, "callback_data": f"product_value:{value}"} for label, value in row] for row in choices]
+    rows.append([{"text": "❌ Batal", "callback_data": "product_cancel"}])
+    return keyboard(rows)
+
+
+def product_confirmation(values: Dict[str, Any]) -> str:
+    plan = values.get("plan") or {}
+    return (f"Konfirmasi produk\n{values.get('name')} ({values.get('slug')})\n"
+            f"Jenis: {values.get('fulfillmentType')}\nPaket: {plan.get('name')} • Rp{plan.get('price')}\n"
+            f"Status: {values.get('status')}")
+
+
 def start_registration(chat_id: int, continuation: Optional[Dict[str, Any]] = None) -> None:
     pending: Dict[str, Any] = {"action": "buyer_register", "step": "name", "values": {}}
     if continuation:
@@ -492,6 +590,22 @@ def handle_pending_text(chat_id: int, text: str) -> bool:
         return False
     action = pending.get("action")
     value = text.strip()
+    if action == "owner_product":
+        try:
+            next_state = advance_product_wizard(pending, value)
+        except (ValueError, TypeError) as error:
+            set_pending(chat_id, pending)
+            send(chat_id, str(error))
+            return True
+        set_pending(chat_id, next_state)
+        if next_state["step"] == "confirm":
+            send(chat_id, product_confirmation(next_state["values"]), keyboard([
+                [{"text": "✅ Simpan Produk", "callback_data": "product_save"}],
+                [{"text": "❌ Batal", "callback_data": "product_cancel"}],
+            ]))
+        else:
+            send(chat_id, product_wizard_prompt(next_state["step"]), product_wizard_keyboard(next_state["step"]))
+        return True
     if action == "buyer_register":
         try:
             next_state = advance_registration(pending, value)
@@ -558,6 +672,33 @@ def handle_pending_text(chat_id: int, text: str) -> bool:
     return False
 
 
+def handle_pending_document(chat_id: int, document: Dict[str, Any]) -> bool:
+    pending = pop_pending(chat_id)
+    if not pending or pending.get("action") != "owner_product_zip":
+        if pending: set_pending(chat_id, pending)
+        return False
+    filename = Path(str(document.get("file_name") or "")).name
+    size = int(document.get("file_size") or 0)
+    if not filename.lower().endswith(".zip") or size <= 0 or size > 50 * 1024 * 1024:
+        set_pending(chat_id, pending)
+        send(chat_id, "Dokumen harus ZIP dan maksimal 50 MB.")
+        return True
+    file_info = telegram("getFile", {"file_id": str(document.get("file_id") or "")})
+    remote_path = str((file_info.get("result") or {}).get("file_path") or "")
+    if not remote_path: raise RuntimeError("File Telegram tidak ditemukan.")
+    temp_path: Optional[Path] = None
+    try:
+        with tempfile.NamedTemporaryFile(prefix="asistenq-", suffix=".zip", delete=False) as temp:
+            temp.write(urllib.request.urlopen(f"https://api.telegram.org/file/bot{BOT_TOKEN}/{remote_path}", timeout=HTTP_TIMEOUT_SECONDS).read())
+            temp_path = Path(temp.name)
+        if temp_path.stat().st_size > 50 * 1024 * 1024: raise RuntimeError("File ZIP melebihi 50 MB.")
+        api_file(f"/bot/owner/products/{pending['productId']}/digital-file", temp_path)
+        send(chat_id, "File ZIP produk tersimpan.", main_menu())
+    finally:
+        if temp_path: temp_path.unlink(missing_ok=True)
+    return True
+
+
 def handle_callback(chat_id: int, callback_id: str, data: str) -> None:
     answer_callback(callback_id)
     if data == "menu":
@@ -602,6 +743,54 @@ def handle_callback(chat_id: int, callback_id: str, data: str) -> None:
         return
     if not is_owner(chat_id):
         send(chat_id, "Menu tersebut tidak tersedia untuk akun pembeli.", buyer_menu())
+        return
+    if data == "product_add":
+        state = new_product_state()
+        set_pending(chat_id, state)
+        send(chat_id, product_wizard_prompt(state["step"]), product_wizard_keyboard(state["step"]))
+        return
+    if data.startswith("product_value:"):
+        value = data.split(":", 1)[1]
+        state = pop_pending(chat_id)
+        if not state or state.get("action") != "owner_product":
+            send(chat_id, "Data produk tidak ditemukan.", main_menu())
+            return
+        if state.get("step") == "download_source" and value == "url":
+            set_pending(chat_id, state)
+            send(chat_id, "Kirim URL download yang diawali https://", product_wizard_keyboard("download_source"))
+            return
+        try:
+            next_state = advance_product_wizard(state, value)
+        except ValueError as error:
+            set_pending(chat_id, state); send(chat_id, str(error), product_wizard_keyboard(str(state.get("step")))); return
+        set_pending(chat_id, next_state)
+        if next_state["step"] == "confirm":
+            send(chat_id, product_confirmation(next_state["values"]), keyboard([
+                [{"text": "✅ Simpan Produk", "callback_data": "product_save"}],
+                [{"text": "❌ Batal", "callback_data": "product_cancel"}],
+            ]))
+        else:
+            send(chat_id, product_wizard_prompt(next_state["step"]), product_wizard_keyboard(next_state["step"]))
+        return
+    if data == "product_cancel":
+        pop_pending(chat_id)
+        send(chat_id, "Penambahan produk dibatalkan.", main_menu())
+        return
+    if data == "product_save":
+        state = pop_pending(chat_id)
+        if not state or state.get("action") != "owner_product" or state.get("step") != "confirm":
+            send(chat_id, "Data produk tidak ditemukan. Mulai lagi dari Tambah Produk.", main_menu())
+            return
+        values = state["values"]
+        result = api("/bot/owner/products", "POST", {
+            key: values[key] for key in ("name", "slug", "fulfillmentType", "description", "status", "downloadSourceUrl") if values.get(key) is not None
+        } | {"plan": values["plan"]})
+        product = result.get("product") or {}
+        if values.get("fulfillmentType") == "download" and values.get("downloadMethod") == "upload":
+            set_pending(chat_id, {"action": "owner_product_zip", "productId": product.get("id")})
+            send(chat_id, "📎 Kirim dokumen ZIP maksimal 50 MB.")
+        else:
+            send(chat_id, f"Produk {product.get('name', values.get('name'))} tersimpan.", main_menu())
         return
     if data == "help":
         send(chat_id, command_help(), main_menu())
@@ -787,6 +976,9 @@ def main() -> None:
                 try:
                     photos = message.get("photo") or []
                     if photos and handle_pending_photo(chat_id, photos):
+                        continue
+                    document = message.get("document")
+                    if isinstance(document, dict) and handle_pending_document(chat_id, document):
                         continue
                     if is_owner(chat_id) and is_legacy_reply_button(text):
                         send(chat_id, "Keyboard lama sudah dihapus.", remove_legacy_keyboard())

@@ -1,6 +1,8 @@
 import cors from 'cors';
 import express from 'express';
+import multer from 'multer';
 import AdmZip from 'adm-zip';
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { z } from 'zod';
@@ -52,7 +54,12 @@ import {
   reopenTelegramInvoice,
   reviewPaymentProof,
   submitPaymentProof,
-  registerTelegramBuyer
+  registerTelegramBuyer,
+  attachTelegramDigitalFile,
+  createTelegramProduct,
+  deactivateTelegramProduct,
+  updateTelegramPlan,
+  updateTelegramProduct
 } from './telegram-commerce';
 import { consumeDownloadGrant, issueDownloadGrant, listBuyerDownloadGrants, reissueDownloadGrant } from './digital-downloads';
 import { createMemoryStore } from './store';
@@ -75,6 +82,7 @@ app.use(express.json());
 
 const landingImportDir = path.resolve('data/landing-imports');
 const productAssetDir = path.resolve('data/product-assets');
+const digitalProductDir = path.resolve('data/digital-products');
 const bundledLandingDir = path.resolve('landings');
 const bundledToolDir = path.resolve('tools-dist');
 const retiredLandingPaths = new Set(['/jadwalinaja']);
@@ -170,6 +178,8 @@ const productSchema = z.object({
   externalUrl: z.string().url().optional(),
   openMode: z.enum(['same_tab', 'new_tab', 'wrapper']).optional(),
   trackLiveUsers: z.boolean().optional(),
+  fulfillmentType: z.enum(['license', 'download']).optional(),
+  downloadSourceUrl: z.string().url().refine((value) => value.startsWith('https://'), 'URL download harus HTTPS.').optional(),
   headline: z.string().optional(),
   description: z.string().optional(),
   coverUrl: z.string().optional(),
@@ -282,8 +292,10 @@ function publicProduct(product: typeof store.data.products[number]) {
   const discountPercent = product.compareAtPrice && product.compareAtPrice > product.price
     ? Math.round((1 - product.price / product.compareAtPrice) * 100)
     : 0;
+  const { downloadSourceUrl: _privateDownloadSource, ...safeProduct } = product;
   return {
-    ...product,
+    ...safeProduct,
+    downloadSourceConfigured: Boolean(_privateDownloadSource),
     destinationType: product.destinationType ?? 'internal',
     openMode: product.openMode ?? (product.destinationType === 'external' ? 'new_tab' : 'same_tab'),
     trackLiveUsers: product.trackLiveUsers ?? product.destinationType !== 'external',
@@ -1395,6 +1407,75 @@ app.get('/api/download/:token', (req, res) => {
 // Establish the authorization boundary now so every current and future owner route
 // rejects non-owner identities before route-specific handlers run.
 app.use('/api/bot/owner', requireBotSecret, requireTelegramIdentity, requireBotOwner);
+
+const telegramProductSchema = z.object({
+  name: z.string().trim().min(2), slug: z.string().regex(/^[a-z0-9-]+$/),
+  fulfillmentType: z.enum(['license', 'download']), description: z.string().trim(),
+  status: z.enum(['public', 'private', 'draft']),
+  downloadSourceUrl: z.string().url().refine((value) => value.startsWith('https://'), 'URL download harus HTTPS.').optional(),
+  plan: z.object({
+    code: z.string().trim().min(1), name: z.string().trim().min(1),
+    price: z.number().int().nonnegative(), durationDays: z.number().int().positive().nullable()
+  })
+});
+const telegramProductPatchSchema = telegramProductSchema.omit({ plan: true }).partial();
+const telegramPlanPatchSchema = z.object({
+  name: z.string().trim().min(1).optional(), price: z.number().int().nonnegative().optional(),
+  durationDays: z.number().int().positive().nullable().optional(), isActive: z.boolean().optional()
+});
+const digitalProductUpload = multer({
+  storage: multer.diskStorage({
+    destination: (_req, _file, callback) => {
+      fs.mkdirSync(digitalProductDir, { recursive: true });
+      callback(null, digitalProductDir);
+    },
+    filename: (_req, _file, callback) => callback(null, `${crypto.randomUUID()}.zip`)
+  }),
+  limits: { fileSize: 50 * 1024 * 1024, files: 1 },
+  fileFilter: (_req, file, callback) => {
+    const zipMime = new Set(['application/zip', 'application/x-zip-compressed', 'application/octet-stream']);
+    callback(null, path.extname(path.basename(file.originalname)).toLowerCase() === '.zip' && zipMime.has(file.mimetype));
+  }
+});
+
+app.post('/api/bot/owner/products', (req, res) => {
+  try {
+    const result = createTelegramProduct(store, telegramProductSchema.parse(req.body));
+    res.status(201).json({ product: publicProduct(result.product), plan: result.plan });
+  } catch (error) {
+    res.status(400).json({ message: publicTelegramError(error, 'Produk gagal dibuat.') });
+  }
+});
+
+app.patch('/api/bot/owner/products/:id', (req, res) => {
+  try { res.json(publicProduct(updateTelegramProduct(store, String(req.params.id), telegramProductPatchSchema.parse(req.body)))); }
+  catch (error) { res.status(400).json({ message: publicTelegramError(error, 'Produk gagal diperbarui.') }); }
+});
+
+app.post('/api/bot/owner/products/:id/deactivate', (req, res) => {
+  try { res.json(publicProduct(deactivateTelegramProduct(store, String(req.params.id)))); }
+  catch (error) { res.status(400).json({ message: publicTelegramError(error, 'Produk gagal dinonaktifkan.') }); }
+});
+
+app.patch('/api/bot/owner/plans/:id', (req, res) => {
+  try { res.json(updateTelegramPlan(store, String(req.params.id), telegramPlanPatchSchema.parse(req.body))); }
+  catch (error) { res.status(400).json({ message: publicTelegramError(error, 'Paket gagal diperbarui.') }); }
+});
+
+app.post('/api/bot/owner/products/:id/digital-file', (req, res, next) => {
+  digitalProductUpload.single('file')(req, res, (error) => {
+    if (error) { res.status(400).json({ message: error instanceof multer.MulterError && error.code === 'LIMIT_FILE_SIZE' ? 'File ZIP maksimal 50 MB.' : 'Upload ZIP tidak valid.' }); return; }
+    next();
+  });
+}, (req, res) => {
+  if (!req.file) { res.status(400).json({ message: 'File ZIP wajib diunggah.' }); return; }
+  try {
+    res.json(publicProduct(attachTelegramDigitalFile(store, String(req.params.id), req.file.path)));
+  } catch (error) {
+    fs.rmSync(req.file.path, { force: true });
+    res.status(400).json({ message: publicTelegramError(error, 'File digital gagal disimpan.') });
+  }
+});
 
 app.get('/api/bot/owner/payment-proofs', (_req, res) => {
   res.json({ orders: listSubmittedPaymentProofs(store).map((order) => ({

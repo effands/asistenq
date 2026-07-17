@@ -1,8 +1,90 @@
 import crypto from 'node:crypto';
+import fs from 'node:fs';
+import path from 'node:path';
 import { formatCurrency } from '../shared/domain';
-import type { MemberAccount, Order } from '../shared/types';
+import type { MemberAccount, Order, ProductFulfillmentType, ProductVisibility } from '../shared/types';
 import type { Store } from './store';
-import { createCheckout, createMember, expirePendingOrders, markOrderPaidByInvoice } from './services';
+import { createCheckout, createMember, createPlanRecord, createProductRecord, expirePendingOrders, markOrderPaidByInvoice, updatePlanRecord, updateProductRecord } from './services';
+
+export type TelegramProductInput = {
+  name: string;
+  slug: string;
+  fulfillmentType: ProductFulfillmentType;
+  description: string;
+  status: ProductVisibility;
+  downloadSourceUrl?: string;
+  plan: { code: string; name: string; price: number; durationDays: number | null };
+};
+
+function validatedDownloadSource(type: ProductFulfillmentType, source?: string): string | undefined {
+  if (type !== 'download' || !source?.trim()) return undefined;
+  const value = source.trim();
+  const parsed = new URL(value);
+  if (parsed.protocol !== 'https:') throw new Error('URL download harus HTTPS.');
+  return value;
+}
+
+export function createTelegramProduct(store: Store, input: TelegramProductInput) {
+  const downloadSourceUrl = validatedDownloadSource(input.fulfillmentType, input.downloadSourceUrl);
+  const product = createProductRecord(store, {
+    name: input.name.trim(), slug: input.slug.trim(), type: 'tool',
+    visibility: input.status, accessMode: 'paid', billingPeriod: 'one_time',
+    price: input.plan.price, active: input.status !== 'draft',
+    description: input.description.trim(), fulfillmentType: input.fulfillmentType,
+    downloadSourceUrl
+  });
+  const plan = createPlanRecord(store, {
+    productId: product.id, code: input.plan.code, name: input.plan.name,
+    price: input.plan.price,
+    billingPeriod: input.plan.durationDays === null ? 'lifetime' : 'monthly',
+    durationDays: input.plan.durationDays, isActive: true
+  });
+  return { product, plan };
+}
+
+export function updateTelegramProduct(store: Store, productId: string, input: Partial<Omit<TelegramProductInput, 'plan'>>) {
+  const product = store.data.products.find((item) => item.id === productId);
+  if (!product) throw new Error('product not found');
+  const fulfillmentType = input.fulfillmentType ?? product.fulfillmentType ?? (product.downloadSourceUrl ? 'download' : 'license');
+  const downloadSourceUrl = input.downloadSourceUrl === undefined
+    ? product.downloadSourceUrl
+    : validatedDownloadSource(fulfillmentType, input.downloadSourceUrl);
+  const patch: Parameters<typeof updateProductRecord>[2] = { fulfillmentType };
+  if (input.name !== undefined) patch.name = input.name.trim();
+  if (input.slug !== undefined) patch.slug = input.slug.trim();
+  if (input.description !== undefined) patch.description = input.description.trim();
+  if (input.status !== undefined) {
+    patch.visibility = input.status;
+    patch.active = input.status !== 'draft';
+  }
+  if (fulfillmentType === 'download' && downloadSourceUrl !== undefined) patch.downloadSourceUrl = downloadSourceUrl;
+  if (fulfillmentType === 'license') patch.downloadSourceUrl = '';
+  return updateProductRecord(store, productId, patch);
+}
+
+export function updateTelegramPlan(store: Store, planId: string, input: Partial<{ name: string; price: number; durationDays: number | null; isActive: boolean }>) {
+  return updatePlanRecord(store, planId, input);
+}
+
+export function deactivateTelegramProduct(store: Store, productId: string) {
+  return updateProductRecord(store, productId, { active: false, visibility: 'draft' });
+}
+
+export function attachTelegramDigitalFile(store: Store, productId: string, filePath: string) {
+  const product = store.data.products.find((item) => item.id === productId);
+  if (!product || product.fulfillmentType !== 'download') throw new Error('produk bukan produk download');
+  const privateRoot = path.resolve('data/digital-products');
+  const absolutePath = path.resolve(filePath);
+  if (path.dirname(absolutePath) !== privateRoot || path.extname(absolutePath).toLowerCase() !== '.zip') throw new Error('path file digital tidak valid');
+  const signature = fs.readFileSync(absolutePath).subarray(0, 4);
+  const zipSignature = signature.length === 4 && signature[0] === 0x50 && signature[1] === 0x4b && (
+    (signature[2] === 0x03 && signature[3] === 0x04) ||
+    (signature[2] === 0x05 && signature[3] === 0x06) ||
+    (signature[2] === 0x07 && signature[3] === 0x08)
+  );
+  if (!zipSignature) throw new Error('file bukan ZIP yang valid');
+  return updateProductRecord(store, productId, { downloadSourceUrl: absolutePath });
+}
 
 function audit(store: Store, actorId: string, action: string, targetType: string, targetId: string, now: Date) {
   store.data.auditLogs.push({ id: crypto.randomUUID(), actorId, action, targetType, targetId, createdAt: now.toISOString() });

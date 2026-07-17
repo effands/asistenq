@@ -4,6 +4,7 @@ server-dist/
 .env
 data/*.json
 data/landing-imports/
+data/digital-products/
 tools/
 coverage/
 *.log

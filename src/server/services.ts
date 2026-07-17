@@ -21,6 +21,7 @@ import type {
   Product,
   ProductAccessMode,
   ProductDestinationType,
+  ProductFulfillmentType,
   ProductOpenMode,
   ProductPlan,
   ProductType,
@@ -334,6 +335,8 @@ export function createProductRecord(store: Store, input: {
   externalUrl?: string;
   openMode?: ProductOpenMode;
   trackLiveUsers?: boolean;
+  fulfillmentType?: ProductFulfillmentType;
+  downloadSourceUrl?: string;
   active?: boolean;
   featured?: boolean;
   headline?: string;
@@ -396,6 +399,8 @@ export function updateProductRecord(store: Store, productId: string, input: Part
   externalUrl: string;
   openMode: ProductOpenMode;
   trackLiveUsers: boolean;
+  fulfillmentType: ProductFulfillmentType;
+  downloadSourceUrl: string;
   active: boolean;
   featured: boolean;
   headline: string;
@@ -457,6 +462,15 @@ export function createPlanRecord(store: Store, input: {
   };
 
   store.data.plans.push(plan);
+  store.save();
+  return plan;
+}
+
+export function updatePlanRecord(store: Store, planId: string, input: Partial<Pick<ProductPlan, 'name' | 'price' | 'durationDays' | 'isActive'>>): ProductPlan {
+  const plan = store.data.plans.find((item) => item.id === planId);
+  if (!plan) throw new Error('plan not found');
+  if (input.price !== undefined && (!Number.isInteger(input.price) || input.price < 0)) throw new Error('harga tidak valid');
+  Object.assign(plan, input);
   store.save();
   return plan;
 }

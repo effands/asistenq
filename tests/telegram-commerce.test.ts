@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
+  createTelegramProduct,
+  deactivateTelegramProduct,
+  updateTelegramPlan,
   createTelegramCheckout,
   listTelegramCatalog,
   listSubmittedPaymentProofs,
@@ -204,5 +207,44 @@ describe('Telegram buyer commerce', () => {
     const reopened = reopenTelegramInvoice(store, { ownerTelegramId: 'owner', invoiceNumber: 'INV-X' }, new Date('2026-07-17T09:00:00Z'));
     expect(reopened.expiresAt).toBe('2026-07-17T09:30:00.000Z');
     expect(reopened.paymentProofSubmittedAt).toBe('2026-07-17T08:20:00Z');
+  });
+});
+
+describe('Telegram owner product management', () => {
+  it('creates a draft product with one active plan and fulfillment type', () => {
+    const store = createMemoryStore();
+    const result = createTelegramProduct(store, {
+      name: 'Mixer Pro', slug: 'mixer-pro', fulfillmentType: 'license',
+      description: 'Mixer audio', status: 'draft',
+      plan: { code: '1M', name: '1 Bulan', price: 59000, durationDays: 30 }
+    });
+
+    expect(result.product.visibility).toBe('draft');
+    expect(result.product.fulfillmentType).toBe('license');
+    expect(result.plan).toMatchObject({ price: 59000, isActive: true });
+  });
+
+  it('deactivates a product without deleting order history', () => {
+    const store = createMemoryStore({
+      products: [{ id: 'product_1', name: 'Tool', slug: 'tool', type: 'tool', billingPeriod: 'one_time', price: 1, active: true, headline: '', description: '', coverUrl: '', accessUrl: '', createdAt: '', updatedAt: '' }],
+      orders: [{ id: 'order_1', memberId: 'member_1', productId: 'product_1', invoiceNumber: 'INV-1', amount: 1, status: 'paid', qrisPayload: 'q', createdAt: '' }]
+    });
+
+    deactivateTelegramProduct(store, 'product_1');
+
+    expect(store.data.products[0]).toMatchObject({ active: false, visibility: 'draft' });
+    expect(store.data.orders).toHaveLength(1);
+  });
+
+  it('updates future plan price without changing existing order amounts', () => {
+    const store = createMemoryStore({
+      plans: [{ id: 'plan_1', productId: 'product_1', code: 'ONE', name: 'One', price: 1000, billingPeriod: 'one_time', durationDays: null, isFree: false, isActive: true }],
+      orders: [{ id: 'order_1', memberId: 'member_1', productId: 'product_1', planId: 'plan_1', invoiceNumber: 'INV-1', amount: 1000, totalAmount: 1123, status: 'pending', qrisPayload: 'q', createdAt: '' }]
+    });
+
+    updateTelegramPlan(store, 'plan_1', { price: 2000 });
+
+    expect(store.data.plans[0].price).toBe(2000);
+    expect(store.data.orders[0]).toMatchObject({ amount: 1000, totalAmount: 1123 });
   });
 });
