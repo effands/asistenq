@@ -10,6 +10,7 @@ import { createId, formatCurrency } from '../shared/domain';
 import { clearSessionCookie, readSession, sessionCookie, signSession, requireAdminScope, requireSession } from './auth';
 import { getTelegramBotStatus, startTelegramBot, stopTelegramBot } from './bot-control';
 import { buildGitHubRemote, deploymentAuditArgs, deploymentInstallArgs, parseDeploymentSettings, runCommand, schedulePassengerRestart } from './deploy';
+import { clearPaymentProofDirectory, removePaymentProof } from './payment-proof-storage';
 import { seedInitialData } from './seed';
 import {
   adminLicenseDashboard,
@@ -705,6 +706,7 @@ app.post('/api/license/orders/:invoice/payment-proof', desktopPaymentProofUpload
     return;
   }
   fs.mkdirSync(paymentProofDir, { recursive: true });
+  const previousFile = order.paymentProofFileId;
   const extension = req.file.mimetype === 'image/png' ? '.png' : req.file.mimetype === 'image/webp' ? '.webp' : '.jpg';
   const fileName = `${order.id.replace(/[^a-zA-Z0-9_-]/g, '')}-${Date.now()}${extension}`;
   fs.writeFileSync(path.join(paymentProofDir, fileName), req.file.buffer);
@@ -712,6 +714,7 @@ app.post('/api/license/orders/:invoice/payment-proof', desktopPaymentProofUpload
   order.paymentProofStatus = 'submitted';
   order.paymentProofSubmittedAt = new Date().toISOString();
   store.save();
+  if (previousFile && previousFile !== fileName) removePaymentProof(paymentProofDir, previousFile);
   res.json(desktopOrderDto(order));
 });
 
@@ -1811,6 +1814,31 @@ app.get('/api/admin/orders/:id/payment-proof', requireSession, requireAdminScope
     return;
   }
   res.sendFile(filePath);
+});
+
+app.delete('/api/admin/orders/:id/payment-proof', requireSession, requireAdminScope('orders'), (req, res) => {
+  const order = store.data.orders.find((item) => item.id === String(req.params.id));
+  if (!order) {
+    res.status(404).json({ message: 'Order tidak ditemukan.' });
+    return;
+  }
+  const result = removePaymentProof(paymentProofDir, order.paymentProofFileId);
+  order.paymentProofFileId = undefined;
+  order.paymentProofSubmittedAt = undefined;
+  if (order.paymentProofStatus === 'submitted') order.paymentProofStatus = 'none';
+  store.save();
+  res.json({ ok: true, ...result, message: `${result.files} bukti pembayaran dihapus.` });
+});
+
+app.delete('/api/admin/payment-proofs', requireSession, requireAdminScope('orders'), (_req, res) => {
+  const result = clearPaymentProofDirectory(paymentProofDir);
+  for (const order of store.data.orders) {
+    order.paymentProofFileId = undefined;
+    order.paymentProofSubmittedAt = undefined;
+    if (order.paymentProofStatus === 'submitted') order.paymentProofStatus = 'none';
+  }
+  store.save();
+  res.json({ ok: true, ...result, message: `${result.files} bukti pembayaran dibersihkan.` });
 });
 
 app.post('/api/admin/orders/:id/paid', requireSession, requireAdminScope('orders'), (req, res) => {

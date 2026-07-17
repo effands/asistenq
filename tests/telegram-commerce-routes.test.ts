@@ -1,11 +1,16 @@
+import fs from 'node:fs';
+import path from 'node:path';
 import request from 'supertest';
 import { beforeEach, describe, expect, it } from 'vitest';
+import { signSession } from '../src/server/auth';
 import { app, store } from '../src/server/index';
 import { createProductRecord } from '../src/server/services';
 import { seedInitialData } from '../src/server/seed';
 
 const botSecret = 'test-bot-secret';
 const ownerId = 'owner-1';
+const adminToken = signSession({ id: 'admin-test', email: 'admin@example.com', type: 'admin', role: 'super_admin', scopes: [] });
+const paymentProofDirectory = path.resolve('data/payment-proofs');
 
 function botRequest(method: 'get' | 'post', path: string, telegramId = 'buyer-1') {
   return request(app)[method](path)
@@ -54,6 +59,82 @@ describe('Telegram commerce API boundaries', () => {
       .set('x-order-token', created.body.accessToken);
     expect(status.status).toBe(200);
     expect(status.body.status).toBe('pending');
+  });
+
+  it('deletes one uploaded desktop payment proof without deleting its order', async () => {
+    await seedInitialData(store);
+    const created = await request(app).post('/api/license/orders').send({
+      productSlug: 'vjstudio', planCode: '1M', email: 'cleanup@example.com',
+      hwid: 'CA00E2C30BA61C8D', idempotencyKey: 'desktop-cleanup-one'
+    });
+    const order = store.data.orders.find((item) => item.invoiceNumber === created.body.invoiceNumber)!;
+    fs.mkdirSync(paymentProofDirectory, { recursive: true });
+    const fileName = `test-single-${Date.now()}.png`;
+    fs.writeFileSync(path.join(paymentProofDirectory, fileName), Buffer.from('test'));
+    order.paymentProofFileId = fileName;
+    order.paymentProofStatus = 'submitted';
+    order.paymentProofSubmittedAt = new Date().toISOString();
+
+    const response = await request(app).delete(`/api/admin/orders/${order.id}/payment-proof`)
+      .set('Authorization', `Bearer ${adminToken}`);
+
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({ ok: true, files: 1, bytes: 4 });
+    expect(store.data.orders).toContain(order);
+    expect(order.paymentProofFileId).toBeUndefined();
+    expect(order.paymentProofStatus).toBe('none');
+    expect(fs.existsSync(path.join(paymentProofDirectory, fileName))).toBe(false);
+  });
+
+  it('clears all uploaded proof files while preserving orders', async () => {
+    await seedInitialData(store);
+    fs.mkdirSync(paymentProofDirectory, { recursive: true });
+    const suffix = Date.now();
+    const names = [`test-bulk-${suffix}-one.png`, `test-bulk-${suffix}-two.jpg`];
+    fs.writeFileSync(path.join(paymentProofDirectory, names[0]), Buffer.from('abc'));
+    fs.writeFileSync(path.join(paymentProofDirectory, names[1]), Buffer.from('test'));
+    store.data.orders.push({
+      id: `order-cleanup-${suffix}`, memberId: 'member-buyer-1', productId: 'product-x',
+      amount: 1, totalAmount: 1, status: 'pending', createdAt: new Date().toISOString(),
+      paymentProofFileId: names[0], paymentProofStatus: 'submitted', paymentProofSubmittedAt: new Date().toISOString()
+    });
+    const existingOrderCount = store.data.orders.length;
+
+    const response = await request(app).delete('/api/admin/payment-proofs')
+      .set('Authorization', `Bearer ${adminToken}`);
+
+    expect(response.status).toBe(200);
+    expect(response.body.files).toBeGreaterThanOrEqual(2);
+    expect(response.body.bytes).toBeGreaterThanOrEqual(7);
+    expect(store.data.orders).toHaveLength(existingOrderCount);
+    expect(store.data.orders.at(-1)?.paymentProofFileId).toBeUndefined();
+    expect(store.data.orders.at(-1)?.paymentProofStatus).toBe('none');
+  });
+
+  it('replaces an existing desktop proof instead of accumulating files', async () => {
+    await seedInitialData(store);
+    const created = await request(app).post('/api/license/orders').send({
+      productSlug: 'vjstudio', planCode: '1M', email: 'replace@example.com',
+      hwid: 'CA00E2C30BA61C8D', idempotencyKey: 'desktop-replace-proof'
+    });
+    const invoice = created.body.invoiceNumber as string;
+    const accessToken = created.body.accessToken as string;
+    await request(app).post(`/api/license/orders/${invoice}/payment-proof`)
+      .set('x-order-token', accessToken)
+      .attach('file', Buffer.from('first'), { filename: 'first.png', contentType: 'image/png' })
+      .expect(200);
+    const order = store.data.orders.find((item) => item.invoiceNumber === invoice)!;
+    const firstStoredName = order.paymentProofFileId!;
+    expect(fs.existsSync(path.join(paymentProofDirectory, firstStoredName))).toBe(true);
+
+    await request(app).post(`/api/license/orders/${invoice}/payment-proof`)
+      .set('x-order-token', accessToken)
+      .attach('file', Buffer.from('second'), { filename: 'second.png', contentType: 'image/png' })
+      .expect(200);
+
+    expect(order.paymentProofFileId).not.toBe(firstStoredName);
+    expect(fs.existsSync(path.join(paymentProofDirectory, firstStoredName))).toBe(false);
+    if (order.paymentProofFileId) fs.rmSync(path.join(paymentProofDirectory, order.paymentProofFileId), { force: true });
   });
   it('lets only the owner create products without exposing a download source', async () => {
     const payload = {
