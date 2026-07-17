@@ -11,6 +11,12 @@ SPEC.loader.exec_module(BOT)
 
 
 class TelegramKeyboardMigrationTests(unittest.TestCase):
+    def test_start_returns_only_a_short_menu_title(self):
+        self.assertEqual(BOT.handle("/start"), "Pilih menu AsistenQ:")
+
+    def test_help_keeps_the_command_reference(self):
+        self.assertIn("Command cepat tetap tersedia:", BOT.handle("/help"))
+
     def test_recognizes_buttons_left_by_the_legacy_reply_keyboard(self):
         self.assertTrue(BOT.is_legacy_reply_button("📋 Daftar Voucher"))
         self.assertTrue(BOT.is_legacy_reply_button("➕ Tambah/Edit Voucher"))

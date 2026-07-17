@@ -371,7 +371,9 @@ def handle_callback(chat_id: int, callback_id: str, data: str) -> None:
 def handle(text: str) -> str:
     parts = text.strip().split()
     command = parts[0].split("@")[0].lower() if parts else "/help"
-    if command in {"/start", "/help"}:
+    if command == "/start":
+        return "Pilih menu AsistenQ:"
+    if command == "/help":
         return command_help()
     if command == "/status":
         return format_status()
@@ -461,8 +463,6 @@ def main() -> None:
                     if handle_pending_text(chat_id, text):
                         continue
                     command = text.strip().split(" ")[0].split("@")[0].lower()
-                    if command in {"/start", "/help"}:
-                        send(chat_id, "Mengaktifkan menu tombol baru.", remove_legacy_keyboard())
                     reply_markup = main_menu() if command in {"/start", "/help"} else None
                     reply = handle(text)
                     send(chat_id, reply, reply_markup)
