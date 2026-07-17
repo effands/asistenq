@@ -149,6 +149,34 @@ describe('Telegram commerce API boundaries', () => {
     expect(store.data.products[0].downloadSourceUrl).toBe(payload.downloadSourceUrl);
   });
 
+  it('lets only the owner create a direct license and resolve explicit buyer delivery', async () => {
+    await seedInitialData(store);
+    const catalog = await botRequest('get', '/api/bot/owner/license-products', ownerId);
+    expect(catalog.status).toBe(200);
+    expect(catalog.body.products).toEqual(expect.arrayContaining([
+      expect.objectContaining({ slug: 'vjstudio', plans: expect.arrayContaining([expect.objectContaining({ code: '1M' })]) })
+    ]));
+
+    const denied = await botRequest('post', '/api/bot/license-generate').send({
+      productSlug: 'vjstudio', planCode: '1M', email: 'buyer1@example.com', hwid: 'CA00E2C30BA61C8D'
+    });
+    expect(denied.status).toBe(403);
+
+    const created = await botRequest('post', '/api/bot/license-generate', ownerId).send({
+      productSlug: 'vjstudio', planCode: '1M', email: 'buyer1@example.com', hwid: 'CA00E2C30BA61C8D'
+    });
+    expect(created.status).toBe(201);
+    expect(created.body).toMatchObject({
+      reused: false, buyerTelegramId: 'buyer-1',
+      license: { email: 'buyer1@example.com', hwid: 'CA00E2C30BA61C8D' }
+    });
+    expect(created.body.license).not.toHaveProperty('orderId');
+
+    const delivery = await botRequest('get', `/api/bot/owner/licenses/${created.body.license.id}/delivery`, ownerId);
+    expect(delivery.status).toBe(200);
+    expect(delivery.body).toMatchObject({ buyerTelegramId: 'buyer-1', license: { id: created.body.license.id } });
+  });
+
   it('accepts only a ZIP document for a download product and keeps its path private', async () => {
     const product = createProductRecord(store, {
       name: 'ZIP Pack', slug: 'zip-pack', type: 'tool', fulfillmentType: 'download',

@@ -25,6 +25,7 @@ import {
   formatInvoiceHtml,
   invoiceReminderHours,
   createProductRecord,
+  generateDirectToolLicense,
   generateToolLicense,
   generateLicenseForPaidOrder,
   listPendingOrders,
@@ -1685,16 +1686,53 @@ app.post('/api/bot/orders/paid', ...ownerBotMiddleware, (req, res) => {
   }
 });
 
+app.get('/api/bot/owner/license-products', ...ownerBotMiddleware, (_req, res) => {
+  const products = store.data.products
+    .filter((product) => product.active)
+    .map((product) => ({
+      id: product.id,
+      name: product.name,
+      slug: product.slug,
+      plans: store.data.plans
+        .filter((plan) => plan.productId === product.id && plan.isActive)
+        .sort((left, right) => (left.sortOrder ?? 0) - (right.sortOrder ?? 0))
+        .map((plan) => ({
+          id: plan.id,
+          code: plan.code,
+          name: plan.name,
+          durationDays: plan.durationDays
+        }))
+    }))
+    .filter((product) => product.plans.length > 0);
+  res.json({ products });
+});
+
 app.post('/api/bot/license-generate', ...ownerBotMiddleware, (req, res) => {
   try {
     const body = generateLicenseSchema.parse(req.body);
-    res.status(201).json(generateToolLicense(store, body));
+    const result = generateDirectToolLicense(store, body);
+    res.status(result.reused ? 200 : 201).json(result);
   } catch (error) {
     const message = error instanceof z.ZodError
       ? error.issues.map((issue) => issue.message).join(', ')
       : error instanceof Error ? error.message : 'Data lisensi tidak valid.';
     res.status(400).json({ message });
   }
+});
+
+app.get('/api/bot/owner/licenses/:id/delivery', ...ownerBotMiddleware, (req, res) => {
+  const license = store.data.licenses.find((item) => item.id === String(req.params.id));
+  if (!license) {
+    res.status(404).json({ message: 'Lisensi tidak ditemukan.' });
+    return;
+  }
+  const email = license.email.trim().toLowerCase();
+  const member = store.data.members.find((item) => item.active && item.email === email && item.telegramId);
+  if (!member?.telegramId) {
+    res.status(404).json({ message: 'Email pembeli belum terhubung ke Telegram.' });
+    return;
+  }
+  res.json({ license, buyerTelegramId: member.telegramId });
 });
 
 app.post('/api/bot/license-send', ...ownerBotMiddleware, (req, res) => {
