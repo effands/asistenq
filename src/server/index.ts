@@ -30,10 +30,12 @@ import {
   memberLicenseDashboard,
   publicCatalog,
   publicPlansForProduct,
+  productLicenseConfig,
   requestPasswordReset,
   resetPassword,
   resetLicenseDevice,
   updateProductRecord,
+  updatePlanRecord,
   unbanHwid,
   verifyLicense,
   verifyAdminLogin,
@@ -191,7 +193,10 @@ const productSchema = z.object({
     billingPeriod: z.enum(['trial', 'monthly', 'annual', 'lifetime', 'one_time']),
     durationDays: z.number().int().positive().nullable(),
     isFree: z.boolean().optional(),
-    isActive: z.boolean().optional()
+    isActive: z.boolean().optional(),
+    badge: z.string().max(40).optional(),
+    highlighted: z.boolean().optional(),
+    sortOrder: z.number().int().optional()
   })).optional(),
   landingConfig: z.object({
     heroImageUrl: z.string().optional(),
@@ -612,6 +617,14 @@ app.get('/api/packages', (_req, res) => {
   res.json(publicPlansForProduct(store, 'vjstudio'));
 });
 
+app.get('/api/license/products/:slug/config', (req, res) => {
+  try {
+    res.json(productLicenseConfig(store, String(req.params.slug)));
+  } catch (error) {
+    res.status(404).json({ message: error instanceof Error ? error.message : 'product not found' });
+  }
+});
+
 app.get('/announcement', (_req, res) => {
   const product = store.data.products.find((item) => item.slug === 'vjstudio');
   const announcement = store.data.announcements.find((item) => item.productId === product?.id && item.enabled);
@@ -995,6 +1008,17 @@ app.put('/api/admin/products/:id', requireSession, requireAdminScope('products')
   res.json(publicProduct(product));
 });
 
+app.patch('/api/admin/plans/:id', requireSession, requireAdminScope('products'), (req, res) => {
+  try {
+    res.json(updatePlanRecord(store, String(req.params.id), planPatchSchema.parse(req.body)));
+  } catch (error) {
+    const message = error instanceof z.ZodError
+      ? error.issues.map((issue) => issue.message).join(', ')
+      : error instanceof Error ? error.message : 'Data paket tidak valid.';
+    res.status(400).json({ message });
+  }
+});
+
 app.post(
   '/api/admin/products/:id/landing-zip',
   requireSession,
@@ -1310,6 +1334,16 @@ app.post('/api/admin/bot/start', requireSession, requireAdminScope('products'), 
 
 app.post('/api/admin/bot/stop', requireSession, requireAdminScope('products'), (_req, res) => {
   res.json(stopTelegramBot());
+});
+
+const planPatchSchema = z.object({
+  name: z.string().trim().min(1).optional(),
+  price: z.number().int().nonnegative().optional(),
+  durationDays: z.number().int().positive().nullable().optional(),
+  isActive: z.boolean().optional(),
+  badge: z.string().max(40).optional(),
+  highlighted: z.boolean().optional(),
+  sortOrder: z.number().int().optional()
 });
 
 app.post('/api/bot/buyer/register', requireBotSecret, requireTelegramIdentity, async (req, res) => {

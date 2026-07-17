@@ -87,18 +87,24 @@ export async function seedInitialData(store: Store): Promise<void> {
   });
 
   [
-    { code: 'TRIAL', name: 'Trial 1 Hari', price: 0, billingPeriod: 'trial' as const, durationDays: 1, isFree: true },
-    { code: '1M', name: 'Lisensi 1 Bulan', price: 49900, billingPeriod: 'monthly' as const, durationDays: 30, isFree: false },
-    { code: '2M', name: 'Lisensi 2 Bulan', price: 85900, billingPeriod: 'monthly' as const, durationDays: 60, isFree: false },
-    { code: '3M', name: 'Lisensi 3 Bulan', price: 129900, billingPeriod: 'monthly' as const, durationDays: 90, isFree: false },
-    { code: '6M', name: 'Lisensi 6 Bulan', price: 225900, billingPeriod: 'monthly' as const, durationDays: 180, isFree: false },
-    { code: '1Y', name: 'Lisensi 1 Tahun', price: 399000, billingPeriod: 'annual' as const, durationDays: 365, isFree: false },
-    { code: 'LIFETIME', name: 'Lisensi Lifetime', price: 799000, billingPeriod: 'lifetime' as const, durationDays: null, isFree: false }
+    { code: 'TRIAL', name: 'Trial 1 Hari', price: 0, billingPeriod: 'trial' as const, durationDays: 1, isFree: true, isActive: false },
+    { code: '1M', name: 'Lisensi 1 Bulan', price: 49900, billingPeriod: 'monthly' as const, durationDays: 30, isFree: false, isActive: true, sortOrder: 10 },
+    { code: '2M', name: 'Lisensi 2 Bulan', price: 85900, billingPeriod: 'monthly' as const, durationDays: 60, isFree: false, isActive: false },
+    { code: '3M', name: 'Lisensi 3 Bulan', price: 129900, billingPeriod: 'monthly' as const, durationDays: 90, isFree: false, isActive: true, sortOrder: 20 },
+    { code: '6M', name: 'Lisensi 6 Bulan', price: 225900, billingPeriod: 'monthly' as const, durationDays: 180, isFree: false, isActive: true, sortOrder: 30, badge: 'Best Seller', highlighted: true },
+    { code: '1Y', name: 'Lisensi 1 Tahun', price: 399000, billingPeriod: 'annual' as const, durationDays: 365, isFree: false, isActive: true, sortOrder: 40 },
+    { code: 'LIFETIME', name: 'Lisensi Lifetime', price: 799000, billingPeriod: 'lifetime' as const, durationDays: null, isFree: false, isActive: false }
   ].forEach((plan) => {
-    createPlanRecord(store, {
+    const record = createPlanRecord(store, {
       productId: vjStudio.id,
       ...plan
     });
+    if (!plan.isActive) record.isActive = false;
+    if (plan.isActive && record.sortOrder === undefined) record.sortOrder = plan.sortOrder;
+    if (plan.code === '6M') {
+      if (record.badge === undefined) record.badge = 'Best Seller';
+      if (record.highlighted === undefined) record.highlighted = true;
+    }
   });
 
   ensureProduct(store, {

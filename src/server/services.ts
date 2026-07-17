@@ -435,6 +435,9 @@ export function createPlanRecord(store: Store, input: {
   durationDays: number | null;
   isFree?: boolean;
   isActive?: boolean;
+  badge?: string;
+  highlighted?: boolean;
+  sortOrder?: number;
 }): ProductPlan {
   if (!store.data.products.some((product) => product.id === input.productId)) {
     throw new Error('product not found');
@@ -458,7 +461,10 @@ export function createPlanRecord(store: Store, input: {
     billingPeriod: input.billingPeriod,
     durationDays: input.durationDays,
     isFree: input.isFree ?? input.price === 0,
-    isActive: input.isActive ?? true
+    isActive: input.isActive ?? true,
+    badge: input.badge,
+    highlighted: input.highlighted ?? false,
+    sortOrder: input.sortOrder
   };
 
   store.data.plans.push(plan);
@@ -466,11 +472,19 @@ export function createPlanRecord(store: Store, input: {
   return plan;
 }
 
-export function updatePlanRecord(store: Store, planId: string, input: Partial<Pick<ProductPlan, 'name' | 'price' | 'durationDays' | 'isActive'>>): ProductPlan {
+export function updatePlanRecord(store: Store, planId: string, input: Partial<Pick<ProductPlan, 'name' | 'price' | 'durationDays' | 'isActive' | 'badge' | 'highlighted' | 'sortOrder'>>): ProductPlan {
   const plan = store.data.plans.find((item) => item.id === planId);
   if (!plan) throw new Error('plan not found');
   if (input.price !== undefined && (!Number.isInteger(input.price) || input.price < 0)) throw new Error('harga tidak valid');
+  if (input.durationDays !== undefined && input.durationDays !== null && (!Number.isInteger(input.durationDays) || input.durationDays <= 0)) throw new Error('durasi tidak valid');
+  if (input.sortOrder !== undefined && !Number.isInteger(input.sortOrder)) throw new Error('urutan tidak valid');
+  if (input.highlighted) {
+    store.data.plans
+      .filter((item) => item.productId === plan.productId && item.id !== plan.id)
+      .forEach((item) => { item.highlighted = false; });
+  }
   Object.assign(plan, input);
+  if (plan.badge !== undefined) plan.badge = plan.badge.trim() || undefined;
   store.save();
   return plan;
 }
@@ -806,9 +820,7 @@ export function adminLicenseDashboard(store: Store) {
     licenses: store.data.licenses
       .map((license) => licenseDashboardRow(store, license))
       .sort((a, b) => b.generatedAt.localeCompare(a.generatedAt)),
-    plans: store.data.plans
-      .filter((plan) => plan.isActive)
-      .map((plan) => productPlanRow(store, plan)),
+    plans: store.data.plans.map((plan) => productPlanRow(store, plan)),
     bannedHwids: store.data.bannedHwids
   };
 }
@@ -873,6 +885,7 @@ export function publicPlansForProduct(store: Store, productSlug: string) {
 
   return store.data.plans
     .filter((plan) => plan.productId === product.id && plan.isActive)
+    .sort((a, b) => (a.sortOrder ?? 999) - (b.sortOrder ?? 999) || a.price - b.price)
     .map((plan) => ({
       productSlug: product.slug,
       id: plan.code,
@@ -881,8 +894,25 @@ export function publicPlansForProduct(store: Store, productSlug: string) {
       price: plan.price,
       billingPeriod: plan.billingPeriod,
       durationDays: plan.durationDays,
-      isFree: plan.isFree
+      isFree: plan.isFree,
+      badge: plan.badge,
+      highlighted: plan.highlighted ?? false,
+      sortOrder: plan.sortOrder
     }));
+}
+
+export function productLicenseConfig(store: Store, productSlug: string) {
+  const product = findProductBySlug(store, productSlug);
+  const announcement = store.data.announcements.find((item) => item.productId === product.id && item.enabled);
+
+  return {
+    version: 1,
+    product: product.slug,
+    updatedAt: product.updatedAt,
+    plans: publicPlansForProduct(store, productSlug),
+    announcement: announcement ?? null,
+    supportUrl: process.env.TELEGRAM_SUPPORT_URL ?? ''
+  };
 }
 
 export function publicCatalog(store: Store) {

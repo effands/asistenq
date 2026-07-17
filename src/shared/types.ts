@@ -118,6 +118,9 @@ export interface ProductPlan {
   durationDays: number | null;
   isFree: boolean;
   isActive: boolean;
+  badge?: string;
+  highlighted?: boolean;
+  sortOrder?: number;
 }
 
 export interface ToolLicense {

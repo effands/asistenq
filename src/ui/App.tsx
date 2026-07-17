@@ -29,6 +29,7 @@ import type { BillingPeriod, ProductAccessMode, ProductDestinationType, ProductF
 import { buildProductFulfillmentPatch } from './product-form';
 import {
   apiRequest,
+  updateAdminPlan,
   type AdminLicenseDashboard,
   type AdminMemberRow,
   type CourseItem,
@@ -302,6 +303,12 @@ export function App() {
             await loadCatalog();
             await loadAdminSummary();
             setMessage('Produk diperbarui.');
+          }}
+          onUpdatePlan={async (planId, input) => {
+            if (!adminSession) return;
+            await updateAdminPlan(adminSession.token, planId, input);
+            await loadAdminLicenses(adminSession.token);
+            setMessage('Paket lisensi diperbarui.');
           }}
           onImportLandingZip={async (productId, file) => {
             if (!adminSession) return;
@@ -777,6 +784,7 @@ function AdminPanel({
   onLogin,
   onCreateProduct,
   onUpdateProduct,
+  onUpdatePlan,
   onImportLandingZip,
   onImportLandingHtml,
   onUploadProductLogo,
@@ -842,6 +850,7 @@ function AdminPanel({
     description: string;
   }) => Promise<void>;
   onUpdateProduct: (productId: string, input: Partial<PublicProduct>) => Promise<void>;
+  onUpdatePlan: (planId: string, input: { name?: string; price?: number; durationDays?: number | null; isActive?: boolean; badge?: string; highlighted?: boolean; sortOrder?: number }) => Promise<void>;
   onImportLandingZip: (productId: string, file: File) => Promise<void>;
   onImportLandingHtml: (productId: string, file: File) => Promise<void>;
   onUploadProductLogo: (productId: string, file: File) => Promise<void>;
@@ -904,6 +913,7 @@ function AdminPanel({
         onRefresh={onRefreshLicenses}
         onResetLicense={onResetLicense}
         onUnbanLicense={onUnbanLicense}
+        onUpdatePlan={onUpdatePlan}
       />
     );
   }
@@ -1100,7 +1110,7 @@ function licenseStatusLabel(license: LicenseDashboardRow) {
   return license.status;
 }
 
-function AdminLicensePanel({ dashboard, products, onGenerateLicense, onRefresh, onResetLicense, onBanLicense, onUnbanLicense }: {
+function AdminLicensePanel({ dashboard, products, onGenerateLicense, onRefresh, onResetLicense, onBanLicense, onUnbanLicense, onUpdatePlan }: {
   dashboard: AdminLicenseDashboard | null;
   products: PublicProduct[];
   onGenerateLicense: (input: { productSlug: string; planCode: string; email: string; hwid: string }) => Promise<void>;
@@ -1108,12 +1118,14 @@ function AdminLicensePanel({ dashboard, products, onGenerateLicense, onRefresh, 
   onResetLicense: (licenseId: string, newHwid: string) => Promise<void>;
   onBanLicense: (license: LicenseDashboardRow) => Promise<void>;
   onUnbanLicense: (license: LicenseDashboardRow) => Promise<void>;
+  onUpdatePlan: (planId: string, input: { name?: string; price?: number; durationDays?: number | null; isActive?: boolean; badge?: string; highlighted?: boolean; sortOrder?: number }) => Promise<void>;
 }) {
   const licensedSlugs = new Set((dashboard?.plans ?? []).map((plan) => plan.productSlug));
   const licenseProducts = products.filter((product) => licensedSlugs.has(product.slug));
   const vjProduct = licenseProducts.find((product) => product.slug === 'vjstudio') ?? licenseProducts[0];
   const [productSlug, setProductSlug] = useState(vjProduct?.slug ?? 'vjstudio');
-  const productPlans = (dashboard?.plans ?? []).filter((plan) => plan.productSlug === productSlug);
+  const managedPlans = (dashboard?.plans ?? []).filter((plan) => plan.productSlug === productSlug);
+  const productPlans = managedPlans.filter((plan) => plan.isActive);
   const [planCode, setPlanCode] = useState('1M');
   const [email, setEmail] = useState('buyer@email.com');
   const [hwid, setHwid] = useState('');
@@ -1121,6 +1133,7 @@ function AdminLicensePanel({ dashboard, products, onGenerateLicense, onRefresh, 
   const [resetValues, setResetValues] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState('');
+  const [planDrafts, setPlanDrafts] = useState<Record<string, Partial<(typeof managedPlans)[number]>>>({});
 
   useEffect(() => {
     if (!productSlug && vjProduct) {
@@ -1194,6 +1207,54 @@ function AdminLicensePanel({ dashboard, products, onGenerateLicense, onRefresh, 
         </form>
         {licenseProducts.length === 0 && <p className="form-notice">Belum ada produk dengan paket lisensi aktif.</p>}
         {notice && <p className="form-notice">{notice}</p>}
+      </div>
+
+      <div className="panel stack license-plan-panel">
+        <div className="panel-heading">
+          <div>
+            <p className="section-kicker">Harga dari AsistenQ</p>
+            <h2>Manajemen Paket</h2>
+          </div>
+          <span className="soft-badge">Auto update VJ Studio</span>
+        </div>
+        <p className="muted">Kode paket tidak berubah agar lisensi dan transaksi lama tetap terhubung.</p>
+        <div className="license-plan-editor-list">
+          {managedPlans.map((plan) => {
+            const draft = { ...plan, ...(planDrafts[plan.id] ?? {}) };
+            const setPlanDraft = (patch: Partial<typeof plan>) => setPlanDrafts((current) => ({
+              ...current,
+              [plan.id]: { ...(current[plan.id] ?? {}), ...patch }
+            }));
+            return (
+              <div className={`license-plan-editor ${draft.isActive ? 'is-active' : ''}`} key={plan.id}>
+                <div className="license-plan-code"><b>{plan.code}</b><small>{draft.isActive ? 'Aktif' : 'Nonaktif'}</small></div>
+                <input value={draft.name} onChange={(event) => setPlanDraft({ name: event.target.value })} aria-label={`Nama ${plan.code}`} />
+                <input value={draft.price} onChange={(event) => setPlanDraft({ price: Number(event.target.value) })} min="0" type="number" aria-label={`Harga ${plan.code}`} />
+                <input value={draft.durationDays ?? ''} onChange={(event) => setPlanDraft({ durationDays: event.target.value ? Number(event.target.value) : null })} min="1" type="number" aria-label={`Durasi ${plan.code}`} />
+                <input value={draft.badge ?? ''} onChange={(event) => setPlanDraft({ badge: event.target.value })} placeholder="Badge, mis. Best Seller" aria-label={`Badge ${plan.code}`} />
+                <input value={draft.sortOrder ?? 0} onChange={(event) => setPlanDraft({ sortOrder: Number(event.target.value) })} type="number" aria-label={`Urutan ${plan.code}`} />
+                <label className="plan-check"><input checked={draft.isActive} onChange={(event) => setPlanDraft({ isActive: event.target.checked })} type="checkbox" /> Aktif</label>
+                <label className="plan-check"><input checked={draft.highlighted ?? false} onChange={(event) => setPlanDraft({ highlighted: event.target.checked })} type="checkbox" /> Best Seller</label>
+                <button className="ghost-button" disabled={busy} type="button" onClick={() => runAction(async () => {
+                  await onUpdatePlan(plan.id, {
+                    name: draft.name,
+                    price: draft.price,
+                    durationDays: draft.durationDays,
+                    isActive: draft.isActive,
+                    badge: draft.badge?.trim() || '',
+                    highlighted: draft.highlighted ?? false,
+                    sortOrder: draft.sortOrder ?? 0
+                  });
+                  setPlanDrafts((current) => {
+                    const next = { ...current };
+                    delete next[plan.id];
+                    return next;
+                  });
+                }, `Paket ${plan.code} tersimpan.`)}>Simpan Paket</button>
+              </div>
+            );
+          })}
+        </div>
       </div>
 
       <div className="panel stack license-ops-panel">

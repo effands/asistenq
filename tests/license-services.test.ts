@@ -7,6 +7,7 @@ import {
   createMember,
   generateToolLicense,
   memberLicenseDashboard,
+  productLicenseConfig,
   publicPlansForProduct,
   resetLicenseDevice,
   verifyVoucher
@@ -148,10 +149,28 @@ describe('license services', () => {
     });
   });
 
-  it('returns public plans for a product slug', () => {
+  it('publishes only approved VJ Studio plans in display order', () => {
     const plans = publicPlansForProduct(store, 'vjstudio');
 
-    expect(plans.map((item) => item.code)).toContain('1M');
+    expect(plans.map((item) => item.code)).toEqual(['1M', '3M', '6M', '1Y']);
     expect(plans.every((item) => item.productSlug === 'vjstudio')).toBe(true);
+    expect(plans.find((item) => item.code === '6M')).toMatchObject({
+      price: 225900,
+      badge: 'Best Seller',
+      highlighted: true
+    });
+  });
+
+  it('returns a versioned VJ Studio license configuration', () => {
+    expect(productLicenseConfig(store, 'vjstudio')).toMatchObject({
+      version: 1,
+      product: 'vjstudio',
+      plans: [
+        { code: '1M', price: 49900 },
+        { code: '3M', price: 129900 },
+        { code: '6M', price: 225900, badge: 'Best Seller', highlighted: true },
+        { code: '1Y', price: 399000 }
+      ]
+    });
   });
 });

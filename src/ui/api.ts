@@ -40,6 +40,10 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
   return response.json() as Promise<T>;
 }
 
+export function updateAdminPlan(token: string, id: string, patch: Partial<ProductPlan>) {
+  return apiRequest<ProductPlan>(`/admin/plans/${id}`, { token, method: 'PATCH', body: patch });
+}
+
 export interface LandingFeature {
   title: string;
   description: string;
