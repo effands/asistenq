@@ -8,6 +8,7 @@
     "dev:api": "tsx watch src/server/index.ts",
     "dev:web": "vite --host 127.0.0.1",
     "build": "cross-env RAYON_NUM_THREADS=1 tsc --noEmit && cross-env RAYON_NUM_THREADS=1 vite build && tsup src/server/index.ts --platform node --format esm --out-dir server-dist --clean",
+    "build:hosting": "RAYON_NUM_THREADS=1 tsc --noEmit && RAYON_NUM_THREADS=1 vite build && tsup src/server/index.ts --platform node --format esm --out-dir server-dist --clean",
     "start": "node server-dist/index.js",
     "test": "vitest run",
     "test:watch": "vitest",

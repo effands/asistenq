@@ -423,7 +423,7 @@ async function runGitHubDeployUpdate(githubToken: string): Promise<{ stdout: str
     await runCommand('git', deploymentPullArgs(remote, githubBranch), commandOptions),
     await runCommand('npm', deploymentInstallArgs(hasLockfile), commandOptions),
     await runCommand('npm', deploymentAuditArgs(), commandOptions),
-    await runCommand('npm', ['run', 'build'], commandOptions)
+    await runCommand('npm', ['run', 'build:hosting'], commandOptions)
   ];
 
   fs.mkdirSync(path.resolve('tmp'), { recursive: true });
