@@ -3667,8 +3667,8 @@ textarea {
 
 /* Densify dashboard, products, and order history */
 .member-owned-overview { min-height: 0; padding: 18px; }
-.member-owned-grid { grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; }
-.member-owned-card { display: grid; grid-template-columns: 92px 1fr auto; min-height: 110px; align-items: center; overflow: hidden; }
+.member-owned-grid { grid-template-columns: repeat(auto-fill, minmax(360px, 480px)); gap: 12px; }
+.member-owned-card { display: grid; grid-template-columns: 130px minmax(150px, 1fr) auto; min-height: 110px; align-items: center; overflow: hidden; }
 .member-owned-cover { min-height: 110px; height: 100%; }
 .member-owned-card > div:nth-child(2) { padding: 12px; }
 .member-owned-card footer { align-self: stretch; flex-direction: column; justify-content: center; border-left: 1px solid var(--line); border-top: 0; }
