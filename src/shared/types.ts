@@ -3,7 +3,7 @@ export type ProductVisibility = 'public' | 'private' | 'draft';
 export type ProductAccessMode = 'public' | 'free_member' | 'trial' | 'paid' | 'admin';
 export type ProductDestinationType = 'internal' | 'hosted' | 'external';
 export type ProductOpenMode = 'same_tab' | 'new_tab' | 'wrapper';
-export type ProductFulfillmentType = 'license' | 'download';
+export type ProductFulfillmentType = 'license' | 'download' | 'url' | 'course';
 export type BillingPeriod = 'trial' | 'monthly' | 'annual' | 'lifetime' | 'one_time';
 export type LicenseStatus = 'generated' | 'active' | 'expired' | 'suspended' | 'banned';
 export type DiscountType = 'amount' | 'percent';
@@ -97,6 +97,27 @@ export interface Product {
   openMode?: ProductOpenMode;
   fulfillmentType?: ProductFulfillmentType;
   downloadSourceUrl?: string;
+  marketplaceCoverUrl?: string;
+  marketplaceAccent?: string;
+  cardDescription?: string;
+  tags?: string[];
+  badge?: string;
+  gallery?: ProductGalleryItem[];
+  benefits?: LandingFeature[];
+  features?: LandingFeature[];
+  specifications?: Record<string, string>;
+  changelog?: string;
+  productFaqs?: LandingFaq[];
+  targetUsers?: string[];
+  developer?: string;
+  version?: string;
+  fileSize?: string;
+  compatibility?: string;
+  language?: string;
+  latestUpdate?: string;
+  sku?: string;
+  demoUrl?: string;
+  documentationUrl?: string;
   trackLiveUsers?: boolean;
   active: boolean;
   featured?: boolean;
@@ -121,6 +142,27 @@ export interface ProductPlan {
   badge?: string;
   highlighted?: boolean;
   sortOrder?: number;
+}
+
+export interface ProductGalleryItem {
+  id: string;
+  type: 'image' | 'video';
+  url: string;
+  alt?: string;
+  sortOrder: number;
+}
+
+export interface OrderItem {
+  id: string;
+  productId: string;
+  planId: string;
+  productName: string;
+  planName: string;
+  unitAmount: number;
+  fulfillmentType: ProductFulfillmentType;
+  fulfillmentStatus: 'pending' | 'fulfilled' | 'failed';
+  fulfillmentReference?: string;
+  fulfillmentError?: string;
 }
 
 export interface ToolLicense {
@@ -171,6 +213,7 @@ export interface Order {
   memberId: string;
   productId: string;
   planId?: string;
+  orderItems?: OrderItem[];
   telegramId?: string;
   customerEmail?: string;
   customerHwid?: string;
@@ -197,6 +240,35 @@ export interface Order {
   expiresAt?: string;
   reminderSentAt?: string;
   paidAt?: string;
+}
+
+export interface AccessGrant {
+  id: string;
+  orderId: string;
+  orderItemId: string;
+  memberId: string;
+  productId: string;
+  type: 'url' | 'course';
+  resource: string;
+  createdAt: string;
+}
+
+export interface ContentPage {
+  id: string;
+  slug: string;
+  title: string;
+  summary: string;
+  body: string;
+  published: boolean;
+  updatedAt: string;
+}
+
+export interface ProductSubscriber {
+  id: string;
+  email: string;
+  consentedAt: string;
+  status: 'active' | 'unsubscribed';
+  source: string;
 }
 
 export interface DownloadGrant {
@@ -283,5 +355,8 @@ export interface DatabaseShape {
   subscriptions: Subscription[];
   auditLogs: AuditLog[];
   toolAnalyticsEvents: ToolAnalyticsEvent[];
+  accessGrants: AccessGrant[];
+  contentPages: ContentPage[];
+  subscribers: ProductSubscriber[];
   deploymentSettings?: DeploymentSettings;
 }
