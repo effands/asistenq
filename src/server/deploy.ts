@@ -51,6 +51,10 @@ export function deploymentAuditArgs(): string[] {
   return ['audit', '--audit-level=low'];
 }
 
+export function deploymentPullArgs(remote: string, branch: string): string[] {
+  return ['pull', '--autostash', remote, branch];
+}
+
 function shellQuote(value: string): string {
   return `'${value.replace(/'/g, `'\\''`)}'`;
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildGitHubRemote, buildPassengerRestartScript, deploymentAuditArgs, deploymentInstallArgs, parseDeploymentSettings } from '../src/server/deploy';
+import { buildGitHubRemote, buildPassengerRestartScript, deploymentAuditArgs, deploymentInstallArgs, deploymentPullArgs, parseDeploymentSettings } from '../src/server/deploy';
 
 describe('deployment security helpers', () => {
   it('rejects repository names that could inject shell commands', () => {
@@ -32,8 +32,12 @@ describe('deployment security helpers', () => {
 
   it('prefers lockfile-based install commands during deploy', () => {
     expect(deploymentInstallArgs(true)).toEqual(['ci', '--include=dev', '--no-audit', '--no-fund']);
-    expect(deploymentInstallArgs(false)).toEqual(['install', '--include=dev', '--no-audit', '--no-fund']);
-  });
+  expect(deploymentInstallArgs(false)).toEqual(['install', '--include=dev', '--no-audit', '--no-fund']);
+});
+
+it('autostashes server-only edits during deployment pulls', () => {
+  expect(deploymentPullArgs('origin', 'master')).toEqual(['pull', '--autostash', 'origin', 'master']);
+});
 
   it('runs an explicit low-level audit after installing dependencies', () => {
     expect(deploymentAuditArgs()).toEqual(['audit', '--audit-level=low']);
