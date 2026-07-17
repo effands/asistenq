@@ -43,9 +43,16 @@ import { createFileStore } from './store';
 import { sendMail } from './mailer';
 import { analyticsOverview, heartbeatPresence, recordAnalyticsEvent } from './analytics';
 import { validateStaticQrisPayload } from './qris';
+import {
+  createTelegramCheckout,
+  listTelegramCatalog,
+  registerTelegramBuyer
+} from './telegram-commerce';
+import { createMemoryStore } from './store';
 
-const app = express();
-const store = createFileStore();
+export const app = express();
+const isTest = process.env.VITEST === 'true' || process.env.NODE_ENV === 'test';
+export const store = isTest ? createMemoryStore() : createFileStore();
 const port = Number(process.env.API_PORT ?? 4000);
 const isProduction = process.env.NODE_ENV === 'production';
 const publicDir = path.resolve(process.cwd(), 'dist');
@@ -95,6 +102,18 @@ const memberRegisterSchema = loginSchema.extend({
   name: z.string().min(2),
   whatsapp: z.string().min(8),
   telegramId: z.string().min(3)
+});
+
+const telegramBuyerSchema = z.object({
+  telegramId: z.string().min(1),
+  name: z.string().min(2),
+  email: z.string().email(),
+  whatsapp: z.string().min(8)
+});
+
+const telegramCheckoutSchema = z.object({
+  productId: z.string().min(1),
+  planId: z.string().min(1)
 });
 
 const forgotPasswordSchema = z.object({
@@ -271,6 +290,27 @@ function publicOrder(order: typeof store.data.orders[number]) {
     memberName: member?.name,
     memberEmail: member?.email
   };
+}
+
+function publicTelegramOrder(order: typeof store.data.orders[number]) {
+  const {
+    memberId: _memberId,
+    paymentProofFileId: _paymentProofFileId,
+    paymentProofReviewerTelegramId: _paymentProofReviewerTelegramId,
+    ...safeOrder
+  } = order;
+  const product = listTelegramCatalog(store).find((item) => item.id === order.productId);
+  return {
+    ...safeOrder,
+    product,
+    formattedAmount: formatCurrency(order.amount),
+    formattedTotalAmount: formatCurrency(order.totalAmount ?? order.amount)
+  };
+}
+
+function publicTelegramBuyer(member: typeof store.data.members[number]) {
+  const { passwordHash: _passwordHash, ...safeMember } = member;
+  return safeMember;
 }
 
 async function runGitHubDeployUpdate(githubToken: string): Promise<{ stdout: string; stderr: string }> {
@@ -1086,6 +1126,27 @@ function requireBotSecret(req: express.Request, res: express.Response, next: exp
   next();
 }
 
+function telegramUserId(req: express.Request): string {
+  return String(req.header('x-telegram-user-id') ?? '').trim();
+}
+
+function requireTelegramIdentity(req: express.Request, res: express.Response, next: express.NextFunction) {
+  if (!telegramUserId(req)) {
+    res.status(400).json({ message: 'Telegram ID wajib diisi' });
+    return;
+  }
+  next();
+}
+
+function requireBotOwner(req: express.Request, res: express.Response, next: express.NextFunction) {
+  const ownerId = store.data.deploymentSettings?.telegramOwnerId ?? process.env.TELEGRAM_OWNER_ID ?? '';
+  if (!ownerId || telegramUserId(req) !== ownerId) {
+    res.status(403).json({ message: 'owner access required' });
+    return;
+  }
+  next();
+}
+
 app.get('/api/admin/deploy/settings', requireSession, requireAdminScope('products'), (_req, res) => {
   const settings = store.data.deploymentSettings ?? {};
   const token = settings.githubToken ?? process.env.GITHUB_TOKEN ?? '';
@@ -1204,7 +1265,53 @@ app.post('/api/admin/bot/stop', requireSession, requireAdminScope('products'), (
   res.json(stopTelegramBot());
 });
 
-app.get('/api/bot/admin-summary', requireBotSecret, (_req, res) => {
+app.post('/api/bot/buyer/register', requireBotSecret, requireTelegramIdentity, async (req, res) => {
+  try {
+    const body = telegramBuyerSchema.parse({ ...req.body, telegramId: telegramUserId(req) });
+    res.json(publicTelegramBuyer(await registerTelegramBuyer(store, body)));
+  } catch (error) {
+    const message = error instanceof z.ZodError
+      ? error.issues.map((issue) => issue.message).join(', ')
+      : error instanceof Error ? error.message : 'Registrasi pembeli gagal.';
+    res.status(400).json({ message });
+  }
+});
+
+app.get('/api/bot/buyer/products', requireBotSecret, requireTelegramIdentity, (_req, res) => {
+  res.json({ products: listTelegramCatalog(store) });
+});
+
+app.post('/api/bot/buyer/checkout', requireBotSecret, requireTelegramIdentity, async (req, res) => {
+  try {
+    const body = telegramCheckoutSchema.parse(req.body);
+    const order = await createTelegramCheckout(store, {
+      ...body,
+      telegramId: telegramUserId(req)
+    });
+    res.status(201).json(publicTelegramOrder(order));
+  } catch (error) {
+    const message = error instanceof z.ZodError
+      ? error.issues.map((issue) => issue.message).join(', ')
+      : error instanceof Error ? error.message : 'Checkout gagal dibuat.';
+    res.status(400).json({ message });
+  }
+});
+
+app.get('/api/bot/buyer/orders', requireBotSecret, requireTelegramIdentity, (req, res) => {
+  const member = store.data.members.find((item) => item.telegramId === telegramUserId(req));
+  const orders = member
+    ? store.data.orders.filter((item) => item.memberId === member.id).map(publicTelegramOrder)
+    : [];
+  res.json({ orders });
+});
+
+// Establish the authorization boundary now so every current and future owner route
+// rejects non-owner identities before route-specific handlers run.
+app.use('/api/bot/owner', requireBotSecret, requireTelegramIdentity, requireBotOwner);
+
+const ownerBotMiddleware = [requireBotSecret, requireTelegramIdentity, requireBotOwner] as const;
+
+app.get('/api/bot/admin-summary', ...ownerBotMiddleware, (_req, res) => {
   res.json({
     products: store.data.products.length,
     members: store.data.members.length,
@@ -1214,12 +1321,12 @@ app.get('/api/bot/admin-summary', requireBotSecret, (_req, res) => {
   });
 });
 
-app.get('/api/bot/orders', requireBotSecret, (_req, res) => {
+app.get('/api/bot/orders', ...ownerBotMiddleware, (_req, res) => {
   void sendPendingOrderReminders();
   res.json({ orders: listPendingOrders(store, 10) });
 });
 
-app.post('/api/bot/orders/paid', requireBotSecret, (req, res) => {
+app.post('/api/bot/orders/paid', ...ownerBotMiddleware, (req, res) => {
   try {
     const body = z.object({ invoiceNumber: z.string().min(1) }).parse(req.body);
     const result = markOrderPaidByInvoice(store, body.invoiceNumber);
@@ -1229,7 +1336,7 @@ app.post('/api/bot/orders/paid', requireBotSecret, (req, res) => {
   }
 });
 
-app.post('/api/bot/license-generate', requireBotSecret, (req, res) => {
+app.post('/api/bot/license-generate', ...ownerBotMiddleware, (req, res) => {
   try {
     const body = generateLicenseSchema.parse(req.body);
     res.status(201).json(generateToolLicense(store, body));
@@ -1241,7 +1348,7 @@ app.post('/api/bot/license-generate', requireBotSecret, (req, res) => {
   }
 });
 
-app.post('/api/bot/license-send', requireBotSecret, (req, res) => {
+app.post('/api/bot/license-send', ...ownerBotMiddleware, (req, res) => {
   try {
     const body = z.object({
       invoiceNumber: z.string().min(1),
@@ -1260,7 +1367,7 @@ app.post('/api/bot/license-send', requireBotSecret, (req, res) => {
   }
 });
 
-app.get('/api/bot/banned', requireBotSecret, (_req, res) => {
+app.get('/api/bot/banned', ...ownerBotMiddleware, (_req, res) => {
   const rows = store.data.bannedHwids.map((item) => {
     const product = store.data.products.find((candidate) => candidate.id === item.productId);
     return {
@@ -1272,7 +1379,7 @@ app.get('/api/bot/banned', requireBotSecret, (_req, res) => {
   res.json({ bannedHwids: rows });
 });
 
-app.post('/api/bot/ban-hwid', requireBotSecret, (req, res) => {
+app.post('/api/bot/ban-hwid', ...ownerBotMiddleware, (req, res) => {
   try {
     const body = hwidActionSchema.parse(req.body);
     res.status(201).json(banHwid(store, body));
@@ -1284,7 +1391,7 @@ app.post('/api/bot/ban-hwid', requireBotSecret, (req, res) => {
   }
 });
 
-app.post('/api/bot/unban-hwid', requireBotSecret, (req, res) => {
+app.post('/api/bot/unban-hwid', ...ownerBotMiddleware, (req, res) => {
   try {
     const body = z.object({ productSlug: z.string().min(1), hwid: z.string().min(1) }).parse(req.body);
     res.json(unbanHwid(store, body));
@@ -1296,7 +1403,7 @@ app.post('/api/bot/unban-hwid', requireBotSecret, (req, res) => {
   }
 });
 
-app.post('/api/bot/deploy-update', requireBotSecret, async (_req, res) => {
+app.post('/api/bot/deploy-update', ...ownerBotMiddleware, async (_req, res) => {
   const settings = store.data.deploymentSettings ?? {};
   const githubToken = settings.githubToken ?? process.env.GITHUB_TOKEN ?? '';
 
@@ -1600,8 +1707,10 @@ if (shouldServeFrontend) {
   });
 }
 
-seedInitialData(store).then(() => {
-  app.listen(port, () => {
-    console.log(`AsistenQ running on port ${port}`);
+if (!isTest) {
+  seedInitialData(store).then(() => {
+    app.listen(port, () => {
+      console.log(`AsistenQ running on port ${port}`);
+    });
   });
-});
+}
