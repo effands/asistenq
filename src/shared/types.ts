@@ -3,12 +3,14 @@ export type ProductVisibility = 'public' | 'private' | 'draft';
 export type ProductAccessMode = 'public' | 'free_member' | 'trial' | 'paid' | 'admin';
 export type ProductDestinationType = 'internal' | 'hosted' | 'external';
 export type ProductOpenMode = 'same_tab' | 'new_tab' | 'wrapper';
+export type ProductFulfillmentType = 'license' | 'download';
 export type BillingPeriod = 'trial' | 'monthly' | 'annual' | 'lifetime' | 'one_time';
 export type LicenseStatus = 'generated' | 'active' | 'expired' | 'suspended' | 'banned';
 export type DiscountType = 'amount' | 'percent';
 export type AdminRole = 'super_admin' | 'admin';
 export type AdminScope = 'admins' | 'products' | 'members' | 'orders' | 'subscriptions' | 'content';
 export type OrderStatus = 'pending' | 'paid' | 'expired' | 'cancelled';
+export type PaymentProofStatus = 'none' | 'submitted' | 'approved' | 'rejected';
 export type SubscriptionStatus = 'active' | 'expired' | 'suspended';
 
 export interface AdminAccount {
@@ -93,6 +95,8 @@ export interface Product {
   destinationType?: ProductDestinationType;
   externalUrl?: string;
   openMode?: ProductOpenMode;
+  fulfillmentType?: ProductFulfillmentType;
+  downloadSourceUrl?: string;
   trackLiveUsers?: boolean;
   active: boolean;
   featured?: boolean;
@@ -118,6 +122,7 @@ export interface ProductPlan {
 
 export interface ToolLicense {
   id: string;
+  orderId?: string;
   productId: string;
   planId: string;
   email: string;
@@ -162,6 +167,8 @@ export interface Order {
   id: string;
   memberId: string;
   productId: string;
+  planId?: string;
+  telegramId?: string;
   invoiceNumber?: string;
   productName?: string;
   uniqueCode?: number;
@@ -170,10 +177,28 @@ export interface Order {
   status: OrderStatus;
   qrisPayload: string;
   paymentQrUrl?: string;
+  paymentProofFileId?: string;
+  paymentProofStatus?: PaymentProofStatus;
+  paymentProofSubmittedAt?: string;
+  paymentProofReviewedAt?: string;
+  paymentProofRejectionReason?: string;
+  paymentProofReviewerTelegramId?: string;
   createdAt: string;
   expiresAt?: string;
   reminderSentAt?: string;
   paidAt?: string;
+}
+
+export interface DownloadGrant {
+  id: string;
+  orderId: string;
+  memberId: string;
+  productId: string;
+  tokenHash: string;
+  expiresAt: string;
+  maxDownloads: number;
+  downloadCount: number;
+  createdAt: string;
 }
 
 export interface Subscription {
@@ -244,6 +269,7 @@ export interface DatabaseShape {
   announcements: ProductAnnouncement[];
   bannedHwids: BannedHwid[];
   orders: Order[];
+  downloadGrants: DownloadGrant[];
   subscriptions: Subscription[];
   auditLogs: AuditLog[];
   toolAnalyticsEvents: ToolAnalyticsEvent[];
