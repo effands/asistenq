@@ -5,6 +5,7 @@ TELEGRAM_OWNER_ID, and ASISTENQ_BOT_SECRET. When the bot is started from
 the AsistenQ admin panel, those values are passed automatically.
 """
 
+import base64
 import json
 import os
 import subprocess
@@ -82,9 +83,10 @@ def telegram(method: str, body: Optional[Dict[str, Any]] = None) -> Any:
 
 
 def api(path: str, method: str = "GET", body: Optional[Dict[str, Any]] = None,
-        timeout: int = HTTP_TIMEOUT_SECONDS) -> Any:
+        timeout: int = HTTP_TIMEOUT_SECONDS, telegram_id: str = OWNER_ID) -> Any:
     return request_json(f"{API_BASE}{path}", method, body, {
-        "x-asistenq-bot-secret": BOT_SECRET
+        "x-asistenq-bot-secret": BOT_SECRET,
+        "x-telegram-user-id": telegram_id,
     }, timeout=timeout)
 
 
@@ -104,6 +106,7 @@ def main_menu() -> Dict[str, Any]:
     return keyboard([
         [{"text": "📦 Order Pending", "callback_data": "orders"}, {"text": "✅ Cek Pembayaran", "callback_data": "orders"}],
         [{"text": "🔐 Buat/Kirim Lisensi", "callback_data": "license_menu"}],
+        [{"text": "➕ Tambah Produk", "callback_data": "product_add"}],
         [{"text": "🚫 Ban HWID", "callback_data": "ban_start"}, {"text": "♻️ Unban HWID", "callback_data": "unban_menu"}],
         [{"text": "🎟️ Voucher", "callback_data": "voucher_menu"}, {"text": "📊 Status", "callback_data": "status"}],
         [{"text": "🚀 Update Website", "callback_data": "deploy_update"}],
@@ -111,11 +114,64 @@ def main_menu() -> Dict[str, Any]:
     ])
 
 
+def is_owner(chat_id: Any) -> bool:
+    return str(chat_id) == OWNER_ID
+
+
+def buyer_menu() -> Dict[str, Any]:
+    return keyboard([
+        [{"text": "🛍️ Lihat Produk", "callback_data": "shop"}],
+        [{"text": "🧾 Transaksi Saya", "callback_data": "my_orders"},
+         {"text": "💳 Bayar Invoice", "callback_data": "pay_invoice"}],
+        [{"text": "📤 Kirim Bukti Bayar", "callback_data": "proof_menu"}],
+        [{"text": "🔑 Lisensi Saya", "callback_data": "my_licenses"},
+         {"text": "📥 Download Saya", "callback_data": "my_downloads"}],
+        [{"text": "🆘 Bantuan", "callback_data": "buyer_help"}],
+    ])
+
+
+def menu_for(chat_id: Any) -> Dict[str, Any]:
+    return main_menu() if is_owner(chat_id) else buyer_menu()
+
+
 def send(chat_id: int, text: str, reply_markup: Optional[Dict[str, Any]] = None) -> None:
     body: Dict[str, Any] = {"chat_id": chat_id, "text": text}
     if reply_markup:
         body["reply_markup"] = reply_markup
     telegram("sendMessage", body)
+
+
+def send_photo(chat_id: int, photo: str, caption: str,
+               reply_markup: Optional[Dict[str, Any]] = None) -> None:
+    body: Dict[str, Any] = {"chat_id": chat_id, "photo": photo, "caption": caption}
+    if reply_markup:
+        body["reply_markup"] = reply_markup
+    telegram("sendPhoto", body)
+
+
+def send_photo_bytes(chat_id: int, photo: bytes, caption: str,
+                     reply_markup: Optional[Dict[str, Any]] = None) -> None:
+    boundary = "----AsistenQTelegramBoundary"
+    fields = {"chat_id": str(chat_id), "caption": caption}
+    if reply_markup:
+        fields["reply_markup"] = json.dumps(reply_markup)
+    chunks = []
+    for name, value in fields.items():
+        chunks.append(
+            f'--{boundary}\r\nContent-Disposition: form-data; name="{name}"\r\n\r\n{value}\r\n'.encode()
+        )
+    chunks.append(
+        f'--{boundary}\r\nContent-Disposition: form-data; name="photo"; filename="qris.png"\r\n'
+        'Content-Type: image/png\r\n\r\n'.encode() + photo + b"\r\n"
+    )
+    chunks.append(f"--{boundary}--\r\n".encode())
+    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendPhoto"
+    request = urllib.request.Request(
+        url, data=b"".join(chunks),
+        headers={"Content-Type": f"multipart/form-data; boundary={boundary}"}, method="POST"
+    )
+    with urllib.request.urlopen(request, timeout=HTTP_TIMEOUT_SECONDS) as response:
+        parse_json_response(response.read().decode("utf-8"), url)
 
 
 def answer_callback(callback_id: str) -> None:
@@ -226,6 +282,112 @@ def orders_keyboard(orders: List[Dict[str, Any]]) -> Dict[str, Any]:
     return keyboard(rows)
 
 
+def advance_registration(state: Dict[str, Any], text: str) -> Dict[str, Any]:
+    value = text.strip()
+    values = state.get("values") if isinstance(state.get("values"), dict) else {}
+    if state.get("step") == "name":
+        if len(value) < 2:
+            raise ValueError("Nama minimal 2 karakter.")
+        return {**state, "step": "email", "values": {**values, "name": value}}
+    if state.get("step") == "email":
+        if "@" not in value or value.startswith("@") or value.endswith("@"):
+            raise ValueError("Email tidak valid.")
+        return {**state, "step": "whatsapp", "values": {**values, "email": value.lower()}}
+    if state.get("step") != "whatsapp":
+        raise ValueError("Tahap registrasi tidak valid.")
+    digits = "".join(char for char in value if char.isdigit())
+    if len(digits) < 9:
+        raise ValueError("Nomor WhatsApp tidak valid.")
+    return {**state, "step": "complete", "values": {**values, "whatsapp": digits}}
+
+
+def start_registration(chat_id: int, continuation: Optional[Dict[str, Any]] = None) -> None:
+    pending: Dict[str, Any] = {"action": "buyer_register", "step": "name", "values": {}}
+    if continuation:
+        pending["continuation"] = continuation
+    set_pending(chat_id, pending)
+    send(chat_id, "Sebelum belanja, kirim nama lengkap Anda.")
+
+
+def catalog_keyboard(products: List[Dict[str, Any]]) -> Dict[str, Any]:
+    rows = []
+    for product in products:
+        for plan in product.get("plans", []):
+            rows.append([{
+                "text": f"🛒 {product['name']} • {plan['name']} • {plan['formattedPrice']}",
+                "callback_data": f"buy:{product['id']}:{plan['id']}"
+            }])
+    rows.append([{"text": "🏠 Menu", "callback_data": "menu"}])
+    return keyboard(rows)
+
+
+def show_catalog(chat_id: int) -> None:
+    products = api("/bot/buyer/products", telegram_id=str(chat_id)).get("products", [])
+    if not products:
+        send(chat_id, "Belum ada produk yang tersedia.", buyer_menu())
+        return
+    send(chat_id, "Pilih produk dan paket:", catalog_keyboard(products))
+
+
+def checkout_caption(order: Dict[str, Any]) -> str:
+    product = order.get("product") if isinstance(order.get("product"), dict) else {}
+    product_name = order.get("productName") or product.get("name") or "Produk AsistenQ"
+    return (
+        f"Invoice {order['invoiceNumber']}\n{product_name}\n"
+        f"Harga: {order.get('formattedAmount', '-')}\nKode unik: {order.get('uniqueCode', '-')}\n"
+        f"Total: {order.get('formattedTotalAmount', '-')}\n"
+        f"Berlaku sampai: {order.get('expiresAt', '-')}"
+    )
+
+
+def decode_qris_data_url(data_url: str) -> bytes:
+    prefix = "data:image/png;base64,"
+    if not data_url.startswith(prefix):
+        raise ValueError("Format gambar QRIS tidak valid.")
+    try:
+        return base64.b64decode(data_url[len(prefix):], validate=True)
+    except (ValueError, TypeError) as error:
+        raise ValueError("Format gambar QRIS tidak valid.") from error
+
+
+def checkout_keyboard(invoice: str) -> Dict[str, Any]:
+    return keyboard([
+        [{"text": "📤 Kirim Bukti Bayar", "callback_data": f"proof:{invoice}"}],
+        [{"text": "🧾 Transaksi Saya", "callback_data": "my_orders"},
+         {"text": "🏠 Menu", "callback_data": "menu"}],
+    ])
+
+
+def create_buyer_checkout(chat_id: int, product_id: str, plan_id: str) -> None:
+    order = api(
+        "/bot/buyer/checkout", "POST", {"productId": product_id, "planId": plan_id},
+        telegram_id=str(chat_id)
+    )
+    caption = checkout_caption(order)
+    markup = checkout_keyboard(str(order.get("invoiceNumber", "")))
+    payment_qr = str(order.get("paymentQrUrl") or "")
+    if payment_qr.startswith("data:image/png;base64,"):
+        send_photo_bytes(chat_id, decode_qris_data_url(payment_qr), caption, markup)
+    elif payment_qr:
+        send_photo(chat_id, payment_qr, caption, markup)
+    else:
+        send(chat_id, caption, markup)
+
+
+def show_buyer_orders(chat_id: int) -> None:
+    orders = api("/bot/buyer/orders", telegram_id=str(chat_id)).get("orders", [])
+    if not orders:
+        send(chat_id, "Belum ada transaksi.", buyer_menu())
+        return
+    lines = ["Transaksi Anda:"]
+    for order in orders[:10]:
+        lines.append(
+            f"{order.get('invoiceNumber', '-')} • {order.get('formattedTotalAmount', '-')} • "
+            f"{order.get('status', '-')}"
+        )
+    send(chat_id, "\n".join(lines), buyer_menu())
+
+
 def show_orders(chat_id: int) -> None:
     orders = pending_orders()
     if not orders:
@@ -273,6 +435,31 @@ def handle_pending_text(chat_id: int, text: str) -> bool:
         return False
     action = pending.get("action")
     value = text.strip()
+    if action == "buyer_register":
+        try:
+            next_state = advance_registration(pending, value)
+        except ValueError as error:
+            set_pending(chat_id, pending)
+            send(chat_id, str(error))
+            return True
+        if next_state["step"] == "email":
+            set_pending(chat_id, next_state)
+            send(chat_id, "Sekarang kirim alamat email Anda.")
+            return True
+        if next_state["step"] == "whatsapp":
+            set_pending(chat_id, next_state)
+            send(chat_id, "Terakhir, kirim nomor WhatsApp Anda.")
+            return True
+        api("/bot/buyer/register", "POST", next_state["values"], telegram_id=str(chat_id))
+        send(chat_id, "Registrasi berhasil.")
+        continuation = next_state.get("continuation")
+        if isinstance(continuation, dict) and continuation.get("action") == "buy":
+            create_buyer_checkout(chat_id, str(continuation.get("productId")), str(continuation.get("planId")))
+        elif isinstance(continuation, dict) and continuation.get("action") == "shop":
+            show_catalog(chat_id)
+        else:
+            send(chat_id, "Silakan pilih menu:", buyer_menu())
+        return True
     if action == "await_license_hwid":
         invoice = str(pending.get("invoice"))
         if len(value) != 16 or not value.isalnum():
@@ -293,7 +480,28 @@ def handle_pending_text(chat_id: int, text: str) -> bool:
 def handle_callback(chat_id: int, callback_id: str, data: str) -> None:
     answer_callback(callback_id)
     if data == "menu":
-        send(chat_id, "Menu utama AsistenQ:", main_menu())
+        send(chat_id, "Menu utama AsistenQ:", menu_for(chat_id))
+        return
+    if data in {"buyer_help", "pay_invoice", "proof_menu", "my_licenses", "my_downloads"} and not is_owner(chat_id):
+        send(chat_id, "Pilih Lihat Produk untuk belanja atau Transaksi Saya untuk mengecek pesanan.", buyer_menu())
+        return
+    if data == "shop" and not is_owner(chat_id):
+        show_catalog(chat_id)
+        return
+    if data == "my_orders" and not is_owner(chat_id):
+        show_buyer_orders(chat_id)
+        return
+    if data.startswith("buy:") and not is_owner(chat_id):
+        _, product_id, plan_id = data.split(":", 2)
+        try:
+            create_buyer_checkout(chat_id, product_id, plan_id)
+        except RuntimeError as error:
+            if "profil pembeli belum lengkap" not in str(error):
+                raise
+            start_registration(chat_id, {"action": "buy", "productId": product_id, "planId": plan_id})
+        return
+    if not is_owner(chat_id):
+        send(chat_id, "Menu tersebut tidak tersedia untuk akun pembeli.", buyer_menu())
         return
     if data == "help":
         send(chat_id, command_help(), main_menu())
@@ -442,27 +650,30 @@ def main() -> None:
                 if callback:
                     message = callback.get("message") or {}
                     chat_id = int((message.get("chat") or {}).get("id", 0))
-                    if str(chat_id) != OWNER_ID:
-                        continue
                     try:
                         handle_callback(chat_id, str(callback.get("id", "")), str(callback.get("data", "")))
                     except Exception as error:
-                        send(chat_id, f"Gagal: {error}", main_menu())
+                        send(chat_id, f"Gagal: {error}", menu_for(chat_id))
                     continue
 
                 message = update.get("message") or {}
                 chat_id = int((message.get("chat") or {}).get("id", 0))
-                if str(chat_id) != OWNER_ID:
-                    continue
                 text = str(message.get("text", ""))
                 try:
-                    if is_legacy_reply_button(text):
+                    if is_owner(chat_id) and is_legacy_reply_button(text):
                         send(chat_id, "Keyboard lama sudah dihapus.", remove_legacy_keyboard())
                         send(chat_id, "Pilih menu tombol baru:", main_menu())
                         continue
                     if handle_pending_text(chat_id, text):
                         continue
                     command = text.strip().split(" ")[0].split("@")[0].lower()
+                    if not is_owner(chat_id):
+                        reply = (
+                            "Pilih menu AsistenQ:" if command == "/start"
+                            else "Gunakan tombol berikut untuk belanja dan mengecek transaksi."
+                        )
+                        send(chat_id, reply, buyer_menu())
+                        continue
                     reply_markup = main_menu() if command in {"/start", "/help"} else None
                     reply = handle(text)
                     send(chat_id, reply, reply_markup)
@@ -470,7 +681,7 @@ def main() -> None:
                         send(chat_id, "Bot Telegram restart sebentar supaya pakai versi terbaru.")
                         restart_self()
                 except Exception as error:
-                    send(chat_id, f"Gagal: {error}", main_menu())
+                    send(chat_id, f"Gagal: {error}", menu_for(chat_id))
         except Exception as error:
             print(f"Bot polling error: {error}", flush=True)
             time.sleep(5)
