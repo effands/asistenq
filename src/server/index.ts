@@ -70,6 +70,7 @@ import {
 } from './telegram-commerce';
 import { consumeDownloadGrant, issueDownloadGrant, listBuyerDownloadGrants, reissueDownloadGrant } from './digital-downloads';
 import { createMemoryStore } from './store';
+import { fulfillPaidOrder } from './order-fulfillment';
 
 export const app = express();
 const isTest = process.env.VITEST === 'true' || process.env.NODE_ENV === 'test';
@@ -1883,14 +1884,15 @@ app.delete('/api/admin/payment-proofs', requireSession, requireAdminScope('order
 app.post('/api/admin/orders/:id/paid', requireSession, requireAdminScope('orders'), (req, res) => {
   try {
     const result = markOrderPaid(store, String(req.params.id));
-    const license = result.order.customerHwid
+    const fulfillment = result.order.orderItems ? fulfillPaidOrder(store, result.order.id) : undefined;
+    const license = !result.order.orderItems && result.order.customerHwid
       ? generateLicenseForPaidOrder(store, { invoiceNumber: result.order.invoiceNumber ?? result.order.id, hwid: result.order.customerHwid })
       : undefined;
     if (license) {
       result.order.licenseId = license.id;
       store.save();
     }
-    res.json({ ok: true, order: publicOrder(result.order), subscription: result.subscription, license });
+    res.json({ ok: true, order: publicOrder(result.order), subscription: result.subscription, license, fulfillment });
   } catch (error) {
     res.status(400).json({ message: error instanceof Error ? error.message : 'Order gagal diverifikasi.' });
   }

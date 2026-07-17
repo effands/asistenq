@@ -274,6 +274,7 @@ export interface ProductSubscriber {
 export interface DownloadGrant {
   id: string;
   orderId: string;
+  orderItemId?: string;
   memberId: string;
   productId: string;
   tokenHash: string;

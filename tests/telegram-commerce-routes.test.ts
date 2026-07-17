@@ -58,6 +58,11 @@ describe('Telegram commerce API boundaries', () => {
     expect(response.status).toBe(201);
     expect(response.body.orderItems).toHaveLength(2);
     expect(store.data.orders).toHaveLength(1);
+    store.data.orders[0].customerHwid = 'CA00E2C30BA61C8D';
+    const paid = await request(app).post(`/api/admin/orders/${store.data.orders[0].id}/paid`)
+      .set('Authorization', `Bearer ${adminToken}`);
+    expect(paid.status).toBe(200);
+    expect(paid.body.fulfillment).toHaveLength(2);
   });
   it('creates and protects a VJ Studio desktop order', async () => {
     await seedInitialData(store);
