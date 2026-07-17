@@ -147,4 +147,38 @@ describe('Telegram commerce API boundaries', () => {
     expect(response.body.orders.map((order: { invoiceNumber: string }) => order.invoiceNumber))
       .toEqual(['INV-BUYER-1']);
   });
+
+  it('keeps payment proof ownership and owner review boundaries', async () => {
+    store.data.products.push({ id: 'p', name: 'Tool', slug: 'tool', type: 'tool', fulfillmentType: 'license', billingPeriod: 'one_time', price: 1, active: true, headline: '', description: '', coverUrl: '', accessUrl: '', createdAt: '', updatedAt: '' });
+    store.data.orders.push({ id: 'o', memberId: 'member-buyer-1', productId: 'p', invoiceNumber: 'INV-PROOF', amount: 1, status: 'pending', qrisPayload: 'q', expiresAt: '2099-01-01T00:00:00Z', createdAt: '' });
+    const stolen = await botRequest('post', '/api/bot/buyer/payment-proof', 'buyer-2').send({ invoiceNumber: 'INV-PROOF', fileId: 'stolen' });
+    expect(stolen.status).toBe(400);
+    expect(store.data.orders[0].paymentProofFileId).toBeUndefined();
+    expect((await botRequest('post', '/api/bot/buyer/payment-proof').send({ invoiceNumber: 'INV-PROOF', fileId: 'photo-1' })).status).toBe(200);
+    const listed = await botRequest('get', '/api/bot/owner/payment-proofs', ownerId);
+    expect(listed.body.orders[0]).toMatchObject({ invoiceNumber: 'INV-PROOF', paymentProofFileId: 'photo-1' });
+    const reviewed = await botRequest('post', '/api/bot/owner/payment-proofs/INV-PROOF/review', ownerId).send({ decision: 'approve' });
+    expect(reviewed.body.order).not.toHaveProperty('paymentProofFileId');
+    expect(store.data.orders[0].status).toBe('paid');
+  });
+
+  it('fulfills a paid license only for the authenticated order owner', async () => {
+    store.data.products.push({ id: 'p', name: 'Tool', slug: 'tool', type: 'tool', fulfillmentType: 'license', billingPeriod: 'monthly', price: 1, active: true, headline: '', description: '', coverUrl: '', accessUrl: '', createdAt: '', updatedAt: '' });
+    store.data.plans.push({ id: 'plan', productId: 'p', code: 'ONE', name: 'One', price: 1, billingPeriod: 'monthly', durationDays: 30, isFree: false, isActive: true });
+    store.data.orders.push({ id: 'o', memberId: 'member-buyer-1', productId: 'p', planId: 'plan', invoiceNumber: 'INV-LIC', amount: 1, status: 'paid', qrisPayload: 'q', createdAt: '' });
+    expect((await botRequest('post', '/api/bot/buyer/orders/INV-LIC/hwid', 'buyer-2').send({ hwid: 'ABCDEF1234567890' })).status).toBe(400);
+    const issued = await botRequest('post', '/api/bot/buyer/orders/INV-LIC/hwid').send({ hwid: 'ABCDEF1234567890' });
+    expect(issued.status).toBe(201);
+    expect(issued.body).toMatchObject({ orderId: 'o', planId: 'plan' });
+  });
+
+  it('issues a download without exposing its source URL', async () => {
+    store.data.products.push({ id: 'p', name: 'File', slug: 'file', type: 'tool', fulfillmentType: 'download', downloadSourceUrl: 'https://files.example.com/private.zip', billingPeriod: 'one_time', price: 1, active: true, headline: '', description: '', coverUrl: '', accessUrl: '', createdAt: '', updatedAt: '' });
+    store.data.orders.push({ id: 'o', memberId: 'member-buyer-1', productId: 'p', invoiceNumber: 'INV-DL', amount: 1, status: 'paid', qrisPayload: 'q', createdAt: '' });
+    const response = await botRequest('post', '/api/bot/buyer/orders/INV-DL/download');
+    expect(response.status).toBe(201);
+    expect(response.body.downloadUrl).toMatch(/\/api\/download\//);
+    expect(JSON.stringify(response.body)).not.toContain('files.example.com');
+    expect(JSON.stringify(store.data.downloadGrants)).not.toContain(response.body.downloadUrl.split('/').pop());
+  });
 });

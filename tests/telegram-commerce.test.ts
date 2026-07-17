@@ -2,7 +2,11 @@ import { describe, expect, it } from 'vitest';
 import {
   createTelegramCheckout,
   listTelegramCatalog,
-  registerTelegramBuyer
+  listSubmittedPaymentProofs,
+  registerTelegramBuyer,
+  reopenTelegramInvoice,
+  reviewPaymentProof,
+  submitPaymentProof
 } from '../src/server/telegram-commerce';
 import { createMemoryStore } from '../src/server/store';
 import { createProductRecord } from '../src/server/services';
@@ -172,5 +176,33 @@ describe('Telegram buyer commerce', () => {
     expect(second.id).toBe(first.id);
     expect(store.data.orders).toHaveLength(1);
     expect(new Set(store.data.orders.map((order) => order.invoiceNumber)).size).toBe(1);
+  });
+
+  it('accepts proof only from its buyer and reviews identical approval once', () => {
+    const store = createMemoryStore({
+      members: [{ id: 'm1', name: 'Buyer', email: 'b@example.com', passwordHash: 'x', active: true, telegramId: 'buyer-1', createdAt: '2026-07-17T00:00:00Z' }],
+      products: [{ id: 'p1', name: 'Tool', slug: 'tool', type: 'tool', billingPeriod: 'one_time', price: 1000, active: true, headline: '', description: '', coverUrl: '', accessUrl: '', createdAt: '', updatedAt: '' }],
+      orders: [{ id: 'o1', memberId: 'm1', productId: 'p1', invoiceNumber: 'INV-1', amount: 1000, status: 'pending', qrisPayload: 'q', expiresAt: '2026-07-17T08:30:00Z', createdAt: '2026-07-17T08:00:00Z' }]
+    });
+    const submitted = submitPaymentProof(store, { telegramId: 'buyer-1', invoiceNumber: 'INV-1', fileId: 'file-1' }, new Date('2026-07-17T08:10:00Z'));
+    expect(submitted.paymentProofStatus).toBe('submitted');
+    expect(() => submitPaymentProof(store, { telegramId: 'buyer-2', invoiceNumber: 'INV-1', fileId: 'stolen' })).toThrow('order tidak ditemukan');
+    const first = reviewPaymentProof(store, { ownerTelegramId: 'owner', invoiceNumber: 'INV-1', decision: 'approve' }, new Date('2026-07-17T08:11:00Z'));
+    const second = reviewPaymentProof(store, { ownerTelegramId: 'owner', invoiceNumber: 'INV-1', decision: 'approve' }, new Date('2026-07-17T08:12:00Z'));
+    expect(second.order.id).toBe(first.order.id);
+    expect(store.data.subscriptions).toHaveLength(1);
+    expect(listSubmittedPaymentProofs(store)).toHaveLength(0);
+  });
+
+  it('requires reopening an expired submitted invoice before approval', () => {
+    const store = createMemoryStore({
+      members: [{ id: 'm1', name: 'Buyer', email: 'b@example.com', passwordHash: 'x', active: true, telegramId: 'buyer-1', createdAt: '' }],
+      products: [{ id: 'p1', name: 'Tool', slug: 'tool', type: 'tool', billingPeriod: 'one_time', price: 1000, active: true, headline: '', description: '', coverUrl: '', accessUrl: '', createdAt: '', updatedAt: '' }],
+      orders: [{ id: 'o1', memberId: 'm1', productId: 'p1', invoiceNumber: 'INV-X', amount: 1000, status: 'expired', qrisPayload: 'q', paymentProofFileId: 'file', paymentProofStatus: 'submitted', paymentProofSubmittedAt: '2026-07-17T08:20:00Z', createdAt: '' }]
+    });
+    expect(() => reviewPaymentProof(store, { ownerTelegramId: 'owner', invoiceNumber: 'INV-X', decision: 'approve' })).toThrow('invoice harus dibuka kembali');
+    const reopened = reopenTelegramInvoice(store, { ownerTelegramId: 'owner', invoiceNumber: 'INV-X' }, new Date('2026-07-17T09:00:00Z'));
+    expect(reopened.expiresAt).toBe('2026-07-17T09:30:00.000Z');
+    expect(reopened.paymentProofSubmittedAt).toBe('2026-07-17T08:20:00Z');
   });
 });

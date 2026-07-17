@@ -105,6 +105,29 @@ class TelegramCommerceTests(unittest.TestCase):
         )
         self.assertEqual(upload.call_args.args[1], b"hello")
 
+    def test_payment_photo_is_submitted_and_forwarded_to_owner(self):
+        with patch.object(BOT, "load_state", return_value={"offset": 0, "pending": {"2002": {"action": "await_payment_proof", "invoice": "INV-1"}}}), \
+             patch.object(BOT, "save_state"), patch.object(BOT, "api", return_value={"invoiceNumber": "INV-1"}) as api, \
+             patch.object(BOT, "send_photo") as photo, patch.object(BOT, "send"):
+            handled = BOT.handle_pending_photo(2002, [{"file_id": "small"}, {"file_id": "large"}])
+        self.assertTrue(handled)
+        api.assert_called_once_with("/bot/buyer/payment-proof", "POST", {"invoiceNumber": "INV-1", "fileId": "large"}, telegram_id="2002")
+        self.assertEqual(str(photo.call_args.args[0]), "87394692")
+        self.assertEqual(photo.call_args.args[1], "large")
+
+    def test_paid_hwid_state_uses_buyer_fulfillment_route(self):
+        state = {"action": "await_paid_hwid", "invoice": "INV-1"}
+        with patch.object(BOT, "pop_pending", return_value=state), patch.object(BOT, "api", return_value={"email": "b@example.com", "hwid": "ABCDEF1234567890", "key": "KEY", "expiresAt": None}) as api, patch.object(BOT, "send"):
+            self.assertTrue(BOT.handle_pending_text(2002, "ABCDEF1234567890"))
+        api.assert_called_once_with("/bot/buyer/orders/INV-1/hwid", "POST", {"hwid": "ABCDEF1234567890"}, telegram_id="2002")
+
+    def test_download_approval_renders_url_button_for_buyer(self):
+        result = {"order": {"invoiceNumber": "INV-D"}, "buyerTelegramId": "2002", "fulfillmentType": "download", "download": {"downloadUrl": "https://asistenq.com/api/download/token", "expiresAt": "tomorrow", "remainingDownloads": 3}}
+        with patch.object(BOT, "answer_callback"), patch.object(BOT, "api", return_value=result), patch.object(BOT, "send") as send:
+            BOT.handle_callback(87394692, "cb", "proof_ok:INV-D")
+        buyer_call = next(call for call in send.call_args_list if str(call.args[0]) == "2002")
+        self.assertEqual(buyer_call.args[2]["inline_keyboard"][0][0]["url"], result["download"]["downloadUrl"])
+
 
 if __name__ == "__main__":
     unittest.main()

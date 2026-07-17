@@ -988,6 +988,9 @@ export function generateLicenseForPaidOrder(store: Store, input: {
     throw new Error('order belum paid');
   }
 
+  const existing = store.data.licenses.find((item) => item.orderId === order.id);
+  if (existing) return existing;
+
   const product = store.data.products.find((item) => item.id === order.productId);
   const member = store.data.members.find((item) => item.id === order.memberId);
 
@@ -1003,15 +1006,17 @@ export function generateLicenseForPaidOrder(store: Store, input: {
   const activePlans = store.data.plans
     .filter((plan) => plan.productId === product.id && plan.isActive)
     .sort((left, right) => left.price - right.price);
-  const matchingPlan = requestedPlanCode
-    ? activePlans.find((plan) => plan.code === requestedPlanCode)
-    : activePlans.find((plan) => plan.price === order.amount) ?? activePlans[0];
+  const matchingPlan = order.planId
+    ? store.data.plans.find((plan) => plan.id === order.planId && plan.productId === product.id)
+    : requestedPlanCode
+      ? activePlans.find((plan) => plan.code === requestedPlanCode)
+      : activePlans.find((plan) => plan.price === order.amount) ?? activePlans[0];
 
   if (!matchingPlan) {
     throw new Error('plan not found');
   }
 
-  return generateToolLicense(store, {
+  const license = generateToolLicense(store, {
     productSlug: product.slug,
     planCode: matchingPlan.code,
     email: member.email,
@@ -1019,6 +1024,9 @@ export function generateLicenseForPaidOrder(store: Store, input: {
     now: input.now,
     salt: input.salt
   });
+  license.orderId = order.id;
+  store.save();
+  return license;
 }
 
 export function formatInvoiceHtml(store: Store, orderIdOrInvoice: string, memberId?: string): string {

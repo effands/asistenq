@@ -335,6 +335,21 @@ describe('server services', () => {
     });
   });
 
+  it('returns one plan-bound license for repeated fulfillment of a paid order', async () => {
+    const member = await createMember(store, { name: 'Buyer', email: 'once@asistenq.com', password: 'secret123' });
+    const product = createProductRecord(store, { name: 'Once', slug: 'once', type: 'tool', billingPeriod: 'monthly', price: 1000 });
+    store.data.plans.push({ id: 'plan-once', productId: product.id, code: 'ONE', name: 'One', price: 1000, billingPeriod: 'monthly', durationDays: 30, isFree: false, isActive: true });
+    const plan = store.data.plans.find((item) => item.productId === product.id)!;
+    const order = await createCheckout(store, member.id, product.id, new Date(), { planId: plan.id, price: plan.price });
+    markOrderPaid(store, order.id);
+    const input = { invoiceNumber: order.invoiceNumber!, hwid: 'ABCDEF1234567890', salt: 'test' };
+    const first = generateLicenseForPaidOrder(store, input);
+    const second = generateLicenseForPaidOrder(store, input);
+    expect(second.id).toBe(first.id);
+    expect(first).toMatchObject({ orderId: order.id, planId: plan.id });
+    expect(store.data.licenses).toHaveLength(1);
+  });
+
   it('renders a downloadable invoice html for a member order', async () => {
     const member = await createMember(store, { name: 'Buyer', email: 'buyer@asistenq.com', password: 'secret123' });
     const product = createProductRecord(store, {

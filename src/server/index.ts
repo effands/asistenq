@@ -44,10 +44,17 @@ import { sendMail } from './mailer';
 import { analyticsOverview, heartbeatPresence, recordAnalyticsEvent } from './analytics';
 import { validateStaticQrisPayload } from './qris';
 import {
+  assertTelegramOrderOwner,
   createTelegramCheckout,
   listTelegramCatalog,
+  listSubmittedPaymentProofs,
+  listTelegramBuyerLicenses,
+  reopenTelegramInvoice,
+  reviewPaymentProof,
+  submitPaymentProof,
   registerTelegramBuyer
 } from './telegram-commerce';
+import { consumeDownloadGrant, issueDownloadGrant, listBuyerDownloadGrants, reissueDownloadGrant } from './digital-downloads';
 import { createMemoryStore } from './store';
 
 export const app = express();
@@ -115,6 +122,15 @@ const telegramCheckoutSchema = z.object({
   productId: z.string().min(1),
   planId: z.string().min(1)
 });
+
+const paymentProofSchema = z.object({ invoiceNumber: z.string().min(1), fileId: z.string().min(1) });
+const paymentReviewSchema = z.object({
+  decision: z.enum(['approve', 'reject']),
+  reason: z.string().trim().min(1).optional()
+}).superRefine((value, context) => {
+  if (value.decision === 'reject' && !value.reason) context.addIssue({ code: 'custom', message: 'alasan penolakan wajib diisi' });
+});
+const hwidOnlySchema = z.object({ hwid: z.string().trim().regex(/^[A-Za-z0-9]{16}$/, 'HWID harus tepat 16 karakter huruf/angka.') });
 
 const forgotPasswordSchema = z.object({
   email: z.string().email(),
@@ -1318,9 +1334,103 @@ app.get('/api/bot/buyer/orders', requireBotSecret, requireTelegramIdentity, (req
   res.json({ orders });
 });
 
+app.post('/api/bot/buyer/payment-proof', requireBotSecret, requireTelegramIdentity, (req, res) => {
+  try {
+    const body = paymentProofSchema.parse(req.body);
+    res.json(publicTelegramOrder(submitPaymentProof(store, { ...body, telegramId: telegramUserId(req) })));
+  } catch (error) {
+    res.status(400).json({ message: publicTelegramError(error, 'Bukti pembayaran gagal dikirim.') });
+  }
+});
+
+app.post('/api/bot/buyer/orders/:invoice/hwid', requireBotSecret, requireTelegramIdentity, (req, res) => {
+  try {
+    const body = hwidOnlySchema.parse(req.body);
+    assertTelegramOrderOwner(store, telegramUserId(req), String(req.params.invoice));
+    const license = generateLicenseForPaidOrder(store, { invoiceNumber: String(req.params.invoice), hwid: body.hwid });
+    void emailLicense(license, String(req.params.invoice));
+    res.status(201).json(license);
+  } catch (error) {
+    res.status(400).json({ message: publicTelegramError(error, 'Lisensi gagal dibuat.') });
+  }
+});
+
+app.get('/api/bot/buyer/licenses', requireBotSecret, requireTelegramIdentity, (req, res) => {
+  res.json({ licenses: listTelegramBuyerLicenses(store, telegramUserId(req)) });
+});
+
+app.post('/api/bot/buyer/orders/:invoice/download', requireBotSecret, requireTelegramIdentity, (req, res) => {
+  try {
+    const order = assertTelegramOrderOwner(store, telegramUserId(req), String(req.params.invoice));
+    const active = store.data.downloadGrants.some((grant) => grant.orderId === order.id && new Date(grant.expiresAt) > new Date() && grant.downloadCount < grant.maxDownloads);
+    const issued = active ? reissueDownloadGrant(store, order.id) : issueDownloadGrant(store, order.id);
+    const baseUrl = `${req.protocol}://${req.get('host')}`;
+    res.status(201).json({
+      grant: { id: issued.grant.id, orderId: issued.grant.orderId, productId: issued.grant.productId, expiresAt: issued.grant.expiresAt, remainingDownloads: issued.grant.maxDownloads },
+      downloadUrl: `${baseUrl}/api/download/${encodeURIComponent(issued.token)}`
+    });
+  } catch (error) {
+    res.status(400).json({ message: publicTelegramError(error, 'Link download gagal dibuat.') });
+  }
+});
+
+app.get('/api/bot/buyer/downloads', requireBotSecret, requireTelegramIdentity, (req, res) => {
+  const baseUrl = `${req.protocol}://${req.get('host')}`;
+  res.json({ grants: listBuyerDownloadGrants(store, telegramUserId(req), baseUrl) });
+});
+
+app.get('/api/download/:token', (req, res) => {
+  try {
+    const { source } = consumeDownloadGrant(store, String(req.params.token));
+    if (source.kind === 'local') {
+      res.download(source.value);
+      return;
+    }
+    res.redirect(302, source.value);
+  } catch (error) {
+    res.status(404).json({ message: publicTelegramError(error, 'Link download tidak tersedia.') });
+  }
+});
+
 // Establish the authorization boundary now so every current and future owner route
 // rejects non-owner identities before route-specific handlers run.
 app.use('/api/bot/owner', requireBotSecret, requireTelegramIdentity, requireBotOwner);
+
+app.get('/api/bot/owner/payment-proofs', (_req, res) => {
+  res.json({ orders: listSubmittedPaymentProofs(store).map((order) => ({
+    ...publicTelegramOrder(order),
+    paymentProofFileId: order.paymentProofFileId
+  })) });
+});
+
+app.post('/api/bot/owner/payment-proofs/:invoice/review', (req, res) => {
+  try {
+    const body = paymentReviewSchema.parse(req.body);
+    const currentOrder = store.data.orders.find((item) => item.invoiceNumber === String(req.params.invoice) || item.id === String(req.params.invoice));
+    const wasAlreadyApproved = currentOrder?.paymentProofStatus === 'approved' && currentOrder.status === 'paid';
+    const result = reviewPaymentProof(store, { ...body, invoiceNumber: String(req.params.invoice), ownerTelegramId: telegramUserId(req) });
+    const order = result.order;
+    const product = store.data.products.find((item) => item.id === order.productId);
+    const member = store.data.members.find((item) => item.id === order.memberId);
+    let download;
+    if (body.decision === 'approve' && !wasAlreadyApproved && product?.fulfillmentType === 'download') {
+      const issued = issueDownloadGrant(store, order.id);
+      const baseUrl = `${req.protocol}://${req.get('host')}`;
+      download = { expiresAt: issued.grant.expiresAt, remainingDownloads: issued.grant.maxDownloads, downloadUrl: `${baseUrl}/api/download/${encodeURIComponent(issued.token)}` };
+    }
+    res.json({ order: publicTelegramOrder(order), fulfillmentType: product?.fulfillmentType ?? 'license', buyerTelegramId: member?.telegramId, download });
+  } catch (error) {
+    res.status(400).json({ message: publicTelegramError(error, 'Bukti pembayaran gagal ditinjau.') });
+  }
+});
+
+app.post('/api/bot/owner/orders/:invoice/reopen', (req, res) => {
+  try {
+    res.json(publicTelegramOrder(reopenTelegramInvoice(store, { invoiceNumber: String(req.params.invoice), ownerTelegramId: telegramUserId(req) })));
+  } catch (error) {
+    res.status(400).json({ message: publicTelegramError(error, 'Invoice gagal dibuka kembali.') });
+  }
+});
 
 const ownerBotMiddleware = [requireBotSecret, requireTelegramIdentity, requireBotOwner] as const;
 

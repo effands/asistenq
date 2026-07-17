@@ -104,7 +104,7 @@ def remove_legacy_keyboard() -> Dict[str, bool]:
 
 def main_menu() -> Dict[str, Any]:
     return keyboard([
-        [{"text": "📦 Order Pending", "callback_data": "orders"}, {"text": "✅ Cek Pembayaran", "callback_data": "orders"}],
+        [{"text": "📦 Order Pending", "callback_data": "orders"}, {"text": "✅ Cek Pembayaran", "callback_data": "proof_reviews"}],
         [{"text": "🔐 Buat/Kirim Lisensi", "callback_data": "license_menu"}],
         [{"text": "➕ Tambah Produk", "callback_data": "product_add"}],
         [{"text": "🚫 Ban HWID", "callback_data": "ban_start"}, {"text": "♻️ Unban HWID", "callback_data": "unban_menu"}],
@@ -388,12 +388,69 @@ def show_buyer_orders(chat_id: int) -> None:
     send(chat_id, "\n".join(lines), buyer_menu())
 
 
+def show_payment_proof_choices(chat_id: int) -> None:
+    orders = api("/bot/buyer/orders", telegram_id=str(chat_id)).get("orders", [])
+    pending = [order for order in orders if order.get("status") == "pending"]
+    rows = [[{"text": f"📤 {order.get('invoiceNumber')}", "callback_data": f"proof:{order.get('invoiceNumber')}"}] for order in pending[:10]]
+    rows.append([{"text": "🏠 Menu", "callback_data": "menu"}])
+    send(chat_id, "Pilih invoice untuk mengirim bukti:" if pending else "Tidak ada invoice pending.", keyboard(rows))
+
+
+def show_buyer_licenses(chat_id: int) -> None:
+    licenses = api("/bot/buyer/licenses", telegram_id=str(chat_id)).get("licenses", [])
+    lines = ["Lisensi Anda:"] + [f"{item.get('email')} • {item.get('hwid')}\n{item.get('key')}" for item in licenses[:10]]
+    send(chat_id, "\n".join(lines) if licenses else "Belum ada lisensi.", buyer_menu())
+
+
+def show_buyer_downloads(chat_id: int) -> None:
+    grants = api("/bot/buyer/downloads", telegram_id=str(chat_id)).get("grants", [])
+    lines = ["Download aktif:"] + [f"Order {item.get('orderId')} • sisa {item.get('remainingDownloads')} • sampai {item.get('expiresAt')}" for item in grants[:10]]
+    send(chat_id, "\n".join(lines) if grants else "Belum ada download aktif.", buyer_menu())
+
+
+def handle_pending_photo(chat_id: int, photos: List[Dict[str, Any]]) -> bool:
+    pending = pop_pending(chat_id)
+    if not pending:
+        return False
+    if pending.get("action") != "await_payment_proof":
+        set_pending(chat_id, pending)
+        return False
+    if not photos:
+        set_pending(chat_id, pending)
+        send(chat_id, "Kirim bukti sebagai foto.")
+        return True
+    invoice = str(pending.get("invoice"))
+    file_id = str(photos[-1].get("file_id", ""))
+    api("/bot/buyer/payment-proof", "POST", {"invoiceNumber": invoice, "fileId": file_id}, telegram_id=str(chat_id))
+    send_photo(int(OWNER_ID), file_id, f"Bukti pembayaran {invoice}", keyboard([
+        [{"text": "✅ Verifikasi", "callback_data": f"proof_ok:{invoice}"}],
+        [{"text": "❌ Tolak", "callback_data": f"proof_no:{invoice}"}],
+        [{"text": "🔍 Detail", "callback_data": f"order:{invoice}"}],
+    ]))
+    send(chat_id, "Bukti pembayaran sudah dikirim ke admin.", buyer_menu())
+    return True
+
+
 def show_orders(chat_id: int) -> None:
     orders = pending_orders()
     if not orders:
         send(chat_id, "Belum ada order pending.", main_menu())
         return
     send(chat_id, "Pilih invoice yang mau diproses:", orders_keyboard(orders))
+
+
+def show_payment_proof_reviews(chat_id: int) -> None:
+    orders = api("/bot/owner/payment-proofs").get("orders", [])
+    if not orders:
+        send(chat_id, "Belum ada bukti pembayaran untuk ditinjau.", main_menu())
+        return
+    for order in orders[:10]:
+        invoice = str(order.get("invoiceNumber"))
+        send_photo(chat_id, str(order.get("paymentProofFileId")), f"Bukti pembayaran {invoice}\nTotal: {order.get('formattedTotalAmount', '-')}", keyboard([
+            [{"text": "✅ Verifikasi", "callback_data": f"proof_ok:{invoice}"}],
+            [{"text": "❌ Tolak", "callback_data": f"proof_no:{invoice}"}],
+            [{"text": "🔍 Detail", "callback_data": f"order:{invoice}"}],
+        ]))
 
 
 def find_order(invoice: str) -> Optional[Dict[str, Any]]:
@@ -467,6 +524,30 @@ def handle_pending_text(chat_id: int, text: str) -> bool:
             return True
         send_plan_choices(chat_id, invoice, value)
         return True
+    if action == "await_paid_hwid":
+        invoice = str(pending.get("invoice"))
+        if len(value) != 16 or not value.isalnum():
+            set_pending(chat_id, pending)
+            send(chat_id, "HWID harus tepat 16 karakter huruf/angka.")
+            return True
+        result = api(f"/bot/buyer/orders/{invoice}/hwid", "POST", {"hwid": value}, telegram_id=str(chat_id))
+        send(chat_id, (
+            f"Lisensi berhasil dibuat\nInvoice: {invoice}\nEmail: {result.get('email', '-')}\n"
+            f"HWID: {result.get('hwid', '-')}\nToken: {result.get('key', '-')}\nKedaluwarsa: {result.get('expiresAt') or 'Lifetime'}"
+        ), buyer_menu())
+        return True
+    if action == "await_rejection_reason":
+        invoice = str(pending.get("invoice"))
+        if not value:
+            set_pending(chat_id, pending)
+            send(chat_id, "Alasan penolakan wajib diisi.")
+            return True
+        result = api(f"/bot/owner/payment-proofs/{invoice}/review", "POST", {"decision": "reject", "reason": value})
+        buyer_id = result.get("buyerTelegramId")
+        if buyer_id:
+            send(int(buyer_id), f"Bukti pembayaran {invoice} ditolak. Alasan: {value}", buyer_menu())
+        send(chat_id, f"Bukti {invoice} ditolak.", main_menu())
+        return True
     if action == "await_ban_hwid":
         if not value:
             send(chat_id, "HWID kosong. Silakan ulangi dari menu Ban HWID.", main_menu())
@@ -482,8 +563,27 @@ def handle_callback(chat_id: int, callback_id: str, data: str) -> None:
     if data == "menu":
         send(chat_id, "Menu utama AsistenQ:", menu_for(chat_id))
         return
-    if data in {"buyer_help", "pay_invoice", "proof_menu", "my_licenses", "my_downloads"} and not is_owner(chat_id):
+    if data in {"buyer_help", "pay_invoice"} and not is_owner(chat_id):
         send(chat_id, "Pilih Lihat Produk untuk belanja atau Transaksi Saya untuk mengecek pesanan.", buyer_menu())
+        return
+    if data == "proof_menu" and not is_owner(chat_id):
+        show_payment_proof_choices(chat_id)
+        return
+    if data.startswith("proof:") and not is_owner(chat_id):
+        invoice = data.split(":", 1)[1]
+        set_pending(chat_id, {"action": "await_payment_proof", "invoice": invoice})
+        send(chat_id, f"Kirim foto bukti pembayaran untuk {invoice}.")
+        return
+    if data == "my_licenses" and not is_owner(chat_id):
+        show_buyer_licenses(chat_id)
+        return
+    if data == "my_downloads" and not is_owner(chat_id):
+        show_buyer_downloads(chat_id)
+        return
+    if data.startswith("paid_hwid:") and not is_owner(chat_id):
+        invoice = data.split(":", 1)[1]
+        set_pending(chat_id, {"action": "await_paid_hwid", "invoice": invoice})
+        send(chat_id, f"Kirim HWID 16 karakter untuk invoice {invoice}.")
         return
     if data == "shop" and not is_owner(chat_id):
         show_catalog(chat_id)
@@ -517,6 +617,31 @@ def handle_callback(chat_id: int, callback_id: str, data: str) -> None:
         return
     if data == "orders":
         show_orders(chat_id)
+        return
+    if data == "proof_reviews":
+        show_payment_proof_reviews(chat_id)
+        return
+    if data.startswith("proof_ok:"):
+        invoice = data.split(":", 1)[1]
+        result = api(f"/bot/owner/payment-proofs/{invoice}/review", "POST", {"decision": "approve"})
+        buyer_id = result.get("buyerTelegramId")
+        if buyer_id and result.get("fulfillmentType") == "download" and result.get("download"):
+            download = result["download"]
+            send(int(buyer_id), f"Pembayaran {invoice} disetujui. Link berlaku sampai {download.get('expiresAt')} dan maksimal {download.get('remainingDownloads')} kali.", keyboard([
+                [{"text": "📥 Download Sekarang", "url": download["downloadUrl"]}],
+                [{"text": "🏠 Menu", "callback_data": "menu"}],
+            ]))
+        elif buyer_id and result.get("fulfillmentType") != "download":
+            send(int(buyer_id), f"Pembayaran {invoice} disetujui. Masukkan HWID untuk membuat lisensi.", keyboard([
+                [{"text": "🔑 Masukkan HWID", "callback_data": f"paid_hwid:{invoice}"}],
+                [{"text": "🏠 Menu", "callback_data": "menu"}],
+            ]))
+        send(chat_id, f"Pembayaran {invoice} disetujui.", main_menu())
+        return
+    if data.startswith("proof_no:"):
+        invoice = data.split(":", 1)[1]
+        set_pending(chat_id, {"action": "await_rejection_reason", "invoice": invoice})
+        send(chat_id, f"Kirim alasan penolakan untuk {invoice}.")
         return
     if data.startswith("order:"):
         show_order_detail(chat_id, data.split(":", 1)[1])
@@ -660,6 +785,9 @@ def main() -> None:
                 chat_id = int((message.get("chat") or {}).get("id", 0))
                 text = str(message.get("text", ""))
                 try:
+                    photos = message.get("photo") or []
+                    if photos and handle_pending_photo(chat_id, photos):
+                        continue
                     if is_owner(chat_id) and is_legacy_reply_button(text):
                         send(chat_id, "Keyboard lama sudah dihapus.", remove_legacy_keyboard())
                         send(chat_id, "Pilih menu tombol baru:", main_menu())
