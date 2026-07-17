@@ -172,6 +172,13 @@ export interface Order {
   productId: string;
   planId?: string;
   telegramId?: string;
+  customerEmail?: string;
+  customerHwid?: string;
+  idempotencyKey?: string;
+  accessTokenHash?: string;
+  voucherId?: string;
+  discountAmount?: number;
+  licenseId?: string;
   invoiceNumber?: string;
   productName?: string;
   uniqueCode?: number;

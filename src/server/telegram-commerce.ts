@@ -4,7 +4,7 @@ import path from 'node:path';
 import { formatCurrency } from '../shared/domain';
 import type { MemberAccount, Order, ProductFulfillmentType, ProductVisibility } from '../shared/types';
 import type { Store } from './store';
-import { createCheckout, createMember, createPlanRecord, createProductRecord, expirePendingOrders, markOrderPaidByInvoice, updatePlanRecord, updateProductRecord } from './services';
+import { createCheckout, createMember, createPlanRecord, createProductRecord, expirePendingOrders, generateLicenseForPaidOrder, markOrderPaidByInvoice, updatePlanRecord, updateProductRecord } from './services';
 
 export type TelegramProductInput = {
   name: string;
@@ -254,7 +254,8 @@ export function reviewPaymentProof(store: Store, input: {
   if (order.status === 'expired') throw new Error('invoice harus dibuka kembali');
   if (input.decision === 'approve' && order.paymentProofStatus === 'approved' && order.status === 'paid') {
     const subscription = store.data.subscriptions.find((item) => item.memberId === order.memberId && item.productId === order.productId);
-    return { order, subscription };
+    const license = store.data.licenses.find((item) => item.orderId === order.id);
+    return { order, subscription, license };
   }
   const reason = input.reason?.trim();
   if (input.decision === 'reject' && !reason) throw new Error('alasan penolakan wajib diisi');
@@ -262,8 +263,17 @@ export function reviewPaymentProof(store: Store, input: {
   if (order.status !== 'pending' || order.paymentProofStatus !== 'submitted') throw new Error('bukti pembayaran tidak dapat ditinjau');
 
   let subscription;
+  let license;
   if (input.decision === 'approve') {
     ({ subscription } = markOrderPaidByInvoice(store, input.invoiceNumber, now));
+    if (order.customerHwid) {
+      license = generateLicenseForPaidOrder(store, {
+        invoiceNumber: input.invoiceNumber,
+        hwid: order.customerHwid,
+        now
+      });
+      order.licenseId = license.id;
+    }
     order.paymentProofStatus = 'approved';
   } else {
     order.paymentProofStatus = 'rejected';
@@ -273,7 +283,7 @@ export function reviewPaymentProof(store: Store, input: {
   order.paymentProofReviewerTelegramId = input.ownerTelegramId;
   audit(store, input.ownerTelegramId, `telegram.payment_proof.${input.decision === 'approve' ? 'approved' : 'rejected'}`, 'order', order.id, now);
   store.save();
-  return { order, subscription };
+  return { order, subscription, license };
 }
 
 export function reopenTelegramInvoice(store: Store, input: {

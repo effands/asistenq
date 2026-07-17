@@ -34,7 +34,7 @@ OWNER_ID = (os.environ.get("TELEGRAM_OWNER_ID") or LOCAL_SETTINGS.get("telegramO
 BOT_SECRET = (os.environ.get("ASISTENQ_BOT_SECRET") or LOCAL_SETTINGS.get("botApiSecret") or "").strip()
 STATE_FILE = Path(os.environ.get("ASISTENQ_BOT_STATE", "data/telegram-bot-state.json"))
 DEFAULT_PRODUCT = os.environ.get("ASISTENQ_DEFAULT_PRODUCT", "vjstudio")
-PLAN_CHOICES = ["1M", "3M", "6M", "12M", "LIFETIME"]
+PLAN_CHOICES = ["1M", "3M", "6M", "1Y"]
 TELEGRAM_POLL_TIMEOUT_SECONDS = 25
 HTTP_TIMEOUT_SECONDS = 40
 DEPLOY_HTTP_TIMEOUT_SECONDS = 240
@@ -107,6 +107,16 @@ def api(path: str, method: str = "GET", body: Optional[Dict[str, Any]] = None,
         "x-asistenq-bot-secret": BOT_SECRET,
         "x-telegram-user-id": telegram_id,
     }, timeout=timeout)
+
+
+def api_bytes(path: str, telegram_id: str = OWNER_ID) -> bytes:
+    request = urllib.request.Request(f"{API_BASE}{path}", headers={
+        "x-asistenq-bot-secret": BOT_SECRET,
+        "x-telegram-user-id": telegram_id,
+        "User-Agent": "AsistenQ-Telegram-Bot",
+    })
+    with urllib.request.urlopen(request, timeout=HTTP_TIMEOUT_SECONDS) as response:
+        return response.read()
 
 
 def api_file(path: str, file_path: Path, telegram_id: str = OWNER_ID) -> Any:
@@ -562,11 +572,21 @@ def show_payment_proof_reviews(chat_id: int) -> None:
         return
     for order in orders[:10]:
         invoice = str(order.get("invoiceNumber"))
-        send_photo(chat_id, str(order.get("paymentProofFileId")), f"Bukti pembayaran {invoice}\nTotal: {order.get('formattedTotalAmount', '-')}", keyboard([
+        caption = (
+            f"Bukti pembayaran {invoice}\n"
+            f"Total: {order.get('formattedTotalAmount', '-')}\n"
+            f"Email: {order.get('customerEmail', '-')}\n"
+            f"HWID: {order.get('customerHwid', '-')}"
+        )
+        actions = keyboard([
             [{"text": "✅ Verifikasi", "callback_data": f"proof_ok:{invoice}"}],
             [{"text": "❌ Tolak", "callback_data": f"proof_no:{invoice}"}],
             [{"text": "🔍 Detail", "callback_data": f"order:{invoice}"}],
-        ]))
+        ])
+        if order.get("paymentProofSource") == "desktop":
+            send_photo_bytes(chat_id, api_bytes(f"/bot/owner/payment-proofs/{urllib.parse.quote(invoice, safe='')}/file"), caption, actions)
+        else:
+            send_photo(chat_id, str(order.get("paymentProofFileId")), caption, actions)
 
 
 def find_order(invoice: str) -> Optional[Dict[str, Any]]:

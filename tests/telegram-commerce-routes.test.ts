@@ -2,6 +2,7 @@ import request from 'supertest';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { app, store } from '../src/server/index';
 import { createProductRecord } from '../src/server/services';
+import { seedInitialData } from '../src/server/seed';
 
 const botSecret = 'test-bot-secret';
 const ownerId = 'owner-1';
@@ -36,6 +37,24 @@ beforeEach(() => {
 });
 
 describe('Telegram commerce API boundaries', () => {
+  it('creates and protects a VJ Studio desktop order', async () => {
+    await seedInitialData(store);
+    const created = await request(app).post('/api/license/orders').send({
+      productSlug: 'vjstudio', planCode: '1M', email: 'desktop@example.com',
+      hwid: 'CA00E2C30BA61C8D', idempotencyKey: 'desktop-route-001'
+    });
+    expect(created.status).toBe(201);
+    expect(created.body.totalAmount).toBe(49900 + created.body.uniqueCode);
+    expect(created.body.uniqueCode).toBeGreaterThanOrEqual(100);
+    expect(created.body).not.toHaveProperty('qrisPayload');
+
+    const invoice = created.body.invoiceNumber;
+    await request(app).get(`/api/license/orders/${invoice}/status`).expect(404);
+    const status = await request(app).get(`/api/license/orders/${invoice}/status`)
+      .set('x-order-token', created.body.accessToken);
+    expect(status.status).toBe(200);
+    expect(status.body.status).toBe('pending');
+  });
   it('lets only the owner create products without exposing a download source', async () => {
     const payload = {
       name: 'Digital Pack', slug: 'digital-pack', fulfillmentType: 'download',

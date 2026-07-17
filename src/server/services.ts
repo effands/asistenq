@@ -545,6 +545,87 @@ export async function createCheckout(
   return serializeCheckout(store, () => createCheckoutLocked(store, memberId, productId, now, options));
 }
 
+function orderAccessToken(orderId: string, idempotencyKey: string): string {
+  const secret = process.env.ORDER_ACCESS_SECRET ?? process.env.SESSION_SECRET ?? 'asistenq-local-order-access';
+  return crypto.createHmac('sha256', secret).update(`${orderId}:${idempotencyKey}`).digest('hex');
+}
+
+export function canAccessLicenseOrder(order: Order, token: string): boolean {
+  if (!order.accessTokenHash || !token) return false;
+  const candidate = crypto.createHash('sha256').update(token).digest('hex');
+  const left = Buffer.from(candidate, 'hex');
+  const right = Buffer.from(order.accessTokenHash, 'hex');
+  return left.length === right.length && crypto.timingSafeEqual(left, right);
+}
+
+export async function createLicenseCheckout(store: Store, input: {
+  productSlug: string;
+  planCode: string;
+  email: string;
+  hwid: string;
+  idempotencyKey: string;
+  voucherCode?: string;
+}, now = new Date()): Promise<{ order: Order; accessToken: string }> {
+  expirePendingOrders(store, now);
+  const product = findProductBySlug(store, input.productSlug);
+  const plan = findPlanByCode(store, product.id, input.planCode);
+  if (!plan.isActive) throw new Error('paket tidak aktif');
+  const email = normalizeEmail(input.email);
+  const hwid = normalizeHwid(input.hwid);
+  const idempotencyKey = input.idempotencyKey.trim();
+  if (!idempotencyKey) throw new Error('idempotency key wajib diisi');
+
+  const reusable = store.data.orders.find((item) => (
+    item.productId === product.id &&
+    item.planId === plan.id &&
+    item.idempotencyKey === idempotencyKey &&
+    item.customerEmail === email &&
+    item.customerHwid === hwid &&
+    item.status === 'pending' &&
+    Boolean(item.expiresAt && new Date(item.expiresAt) > now)
+  ));
+  if (reusable) return { order: reusable, accessToken: orderAccessToken(reusable.id, idempotencyKey) };
+
+  let member = store.data.members.find((item) => item.email === email);
+  if (!member) {
+    member = await createMember(store, {
+      name: email.split('@')[0] || 'VJ Studio Buyer',
+      email,
+      password: crypto.randomBytes(24).toString('base64url')
+    });
+  }
+
+  let price = plan.price;
+  let voucherId: string | undefined;
+  let discountAmount = 0;
+  if (input.voucherCode?.trim()) {
+    const result = verifyVoucher(store, { productSlug: product.slug, code: input.voucherCode });
+    if (!result.valid || !result.voucher) throw new Error(result.message ?? 'Voucher tidak valid.');
+    voucherId = result.voucher.id;
+    discountAmount = result.voucher.discountType === 'percent'
+      ? Math.floor(price * Math.min(result.voucher.discountValue, 100) / 100)
+      : Math.min(price, result.voucher.discountValue);
+    price -= discountAmount;
+  }
+
+  const order = await createCheckout(store, member.id, product.id, now, {
+    planId: plan.id,
+    price,
+    lifetimeMinutes: 30
+  });
+  const accessToken = orderAccessToken(order.id, idempotencyKey);
+  Object.assign(order, {
+    customerEmail: email,
+    customerHwid: hwid,
+    idempotencyKey,
+    accessTokenHash: crypto.createHash('sha256').update(accessToken).digest('hex'),
+    voucherId,
+    discountAmount
+  });
+  store.save();
+  return { order, accessToken };
+}
+
 async function createCheckoutLocked(
   store: Store,
   memberId: string,

@@ -379,6 +379,7 @@ export function App() {
               method: 'DELETE'
             });
             await loadAdminOrders(adminSession.token);
+            await loadAdminLicenses(adminSession.token);
             await loadAdminSummary(adminSession.token);
             setMessage(result.message);
           }}
@@ -1072,10 +1073,16 @@ function AdminOrderPanel({ orders, onClearExpired, onExportOrders, onMarkPaid }:
             <strong>{order.invoiceNumber ?? order.id}</strong>
             <div className="order-member-col">
               <b>{order.memberName || 'Unknown Member'}</b>
-              <span>{order.memberEmail || order.memberId}</span>
+              <span>{order.customerEmail || order.memberEmail || order.memberId}</span>
+              {order.customerHwid && <small>HWID: {order.customerHwid}</small>}
             </div>
-            <span>{order.product?.name ?? order.productName ?? order.productId}</span>
-            <b>{order.formattedTotalAmount}</b>
+            <span>
+              {order.product?.name ?? order.productName ?? order.productId}
+              {order.paymentProofStatus === 'submitted' && order.customerHwid && (
+                <a href={`/api/admin/orders/${order.id}/payment-proof`} rel="noreferrer" target="_blank">Lihat bukti</a>
+              )}
+            </span>
+            <b>{order.formattedTotalAmount}<small>Kode: {(order.uniqueCode ?? 0).toString().padStart(3, '0')}</small></b>
             <span className={`status-dot status-${order.status}`}>{order.status}</span>
             <span>{formatDate(order.createdAt)}</span>
             <div className="order-admin-actions">

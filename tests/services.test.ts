@@ -3,6 +3,7 @@ import { createMemoryStore } from '../src/server/store';
 import {
   createAdmin,
   createCheckout,
+  createLicenseCheckout,
   createMember,
   createProductRecord,
   formatInvoiceHtml,
@@ -369,6 +370,29 @@ describe('server services', () => {
     expect(html).toContain('VJ Studio Pro');
     expect(html).toContain('buyer@asistenq.com');
     expect(html).toContain('Total Bayar');
+  });
+
+  it('creates one idempotent VJ Studio checkout with a three digit code', async () => {
+    const product = createProductRecord(store, {
+      name: 'VJ Studio Pro', slug: 'vjstudio', type: 'tool', billingPeriod: 'monthly', price: 49900
+    });
+    store.data.plans.push({
+      id: 'plan-vj-1m', productId: product.id, code: '1M', name: '1 Bulan', price: 49900,
+      billingPeriod: 'monthly', durationDays: 30, isFree: false, isActive: true
+    });
+    const input = {
+      productSlug: 'vjstudio', planCode: '1M', email: 'buyer@example.com',
+      hwid: 'CA00E2C30BA61C8D', idempotencyKey: 'desktop-001'
+    };
+    const first = await createLicenseCheckout(store, input, new Date('2026-07-17T10:00:00.000Z'));
+    const second = await createLicenseCheckout(store, input, new Date('2026-07-17T10:01:00.000Z'));
+
+    expect(second.order.id).toBe(first.order.id);
+    expect(first.accessToken).toBe(second.accessToken);
+    expect(first.order.uniqueCode).toBeGreaterThanOrEqual(100);
+    expect(first.order.uniqueCode).toBeLessThanOrEqual(999);
+    expect(first.order.totalAmount).toBe(49900 + first.order.uniqueCode!);
+    expect(first.order.customerHwid).toBe('CA00E2C30BA61C8D');
   });
 
   it('resets member password with a valid reset token', async () => {

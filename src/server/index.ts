@@ -17,6 +17,8 @@ import {
   banHwid,
   createAdmin,
   createCheckout,
+  createLicenseCheckout,
+  canAccessLicenseOrder,
   createMember,
   expirePendingOrders,
   formatInvoiceHtml,
@@ -85,6 +87,7 @@ app.use(express.json());
 const landingImportDir = path.resolve('data/landing-imports');
 const productAssetDir = path.resolve('data/product-assets');
 const digitalProductDir = path.resolve('data/digital-products');
+const paymentProofDir = path.resolve('data/payment-proofs');
 const bundledLandingDir = path.resolve('landings');
 const bundledToolDir = path.resolve('tools-dist');
 const retiredLandingPaths = new Set(['/jadwalinaja']);
@@ -139,6 +142,14 @@ const paymentReviewSchema = z.object({
   reason: z.string().trim().min(1).optional()
 }).superRefine((value, context) => {
   if (value.decision === 'reject' && !value.reason) context.addIssue({ code: 'custom', message: 'alasan penolakan wajib diisi' });
+});
+const desktopOrderSchema = z.object({
+  productSlug: z.literal('vjstudio'),
+  planCode: z.enum(['1M', '3M', '6M', '1Y']),
+  email: z.string().email(),
+  hwid: z.string().trim().regex(/^[A-Za-z0-9]{16}$/, 'HWID harus tepat 16 karakter huruf/angka.'),
+  idempotencyKey: z.string().trim().min(8).max(128),
+  voucherCode: z.string().trim().max(40).optional()
 });
 const hwidOnlySchema = z.object({ hwid: z.string().trim().regex(/^[A-Za-z0-9]{16}$/, 'HWID harus tepat 16 karakter huruf/angka.') });
 
@@ -623,6 +634,85 @@ app.get('/api/license/products/:slug/config', (req, res) => {
   } catch (error) {
     res.status(404).json({ message: error instanceof Error ? error.message : 'product not found' });
   }
+});
+
+function desktopOrderDto(order: typeof store.data.orders[number]) {
+  const product = store.data.products.find((item) => item.id === order.productId);
+  const plan = store.data.plans.find((item) => item.id === order.planId);
+  const license = store.data.licenses.find((item) => item.id === order.licenseId || item.orderId === order.id);
+  return {
+    invoiceNumber: order.invoiceNumber,
+    product: product ? { slug: product.slug, name: product.name } : undefined,
+    plan: plan ? { code: plan.code, name: plan.name, durationDays: plan.durationDays } : undefined,
+    amount: order.amount,
+    discountAmount: order.discountAmount ?? 0,
+    uniqueCode: order.uniqueCode ?? 0,
+    totalAmount: order.totalAmount ?? order.amount,
+    paymentQrUrl: order.paymentQrUrl,
+    expiresAt: order.expiresAt,
+    status: order.status,
+    paymentProofStatus: order.paymentProofStatus ?? 'none',
+    paymentProofRejectionReason: order.paymentProofRejectionReason,
+    license: license && order.status === 'paid'
+      ? { key: license.key, status: license.status, expiresAt: license.expiresAt, hwid: license.hwid }
+      : undefined
+  };
+}
+
+function accessibleDesktopOrder(req: express.Request) {
+  const invoice = String(req.params.invoice);
+  const order = store.data.orders.find((item) => item.invoiceNumber === invoice || item.id === invoice);
+  const accessToken = req.get('x-order-token') ?? '';
+  return order && canAccessLicenseOrder(order, accessToken) ? order : undefined;
+}
+
+const desktopPaymentProofUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024, files: 1 },
+  fileFilter: (_req, file, callback) => callback(null, ['image/jpeg', 'image/png', 'image/webp'].includes(file.mimetype))
+});
+
+app.post('/api/license/orders', async (req, res) => {
+  try {
+    const result = await createLicenseCheckout(store, desktopOrderSchema.parse(req.body));
+    res.status(201).json({ ...desktopOrderDto(result.order), accessToken: result.accessToken });
+  } catch (error) {
+    const message = error instanceof z.ZodError
+      ? error.issues.map((issue) => issue.message).join(', ')
+      : error instanceof Error ? error.message : 'Order tidak dapat dibuat.';
+    res.status(400).json({ message });
+  }
+});
+
+app.get('/api/license/orders/:invoice/status', (req, res) => {
+  expirePendingOrders(store);
+  const order = accessibleDesktopOrder(req);
+  if (!order) {
+    res.status(404).json({ message: 'Order tidak ditemukan.' });
+    return;
+  }
+  res.json(desktopOrderDto(order));
+});
+
+app.post('/api/license/orders/:invoice/payment-proof', desktopPaymentProofUpload.single('file'), (req, res) => {
+  const order = accessibleDesktopOrder(req);
+  if (!order) {
+    res.status(404).json({ message: 'Order tidak ditemukan.' });
+    return;
+  }
+  if (order.status !== 'pending' || !req.file) {
+    res.status(400).json({ message: req.file ? 'Invoice tidak dapat menerima bukti.' : 'Bukti gambar wajib diunggah.' });
+    return;
+  }
+  fs.mkdirSync(paymentProofDir, { recursive: true });
+  const extension = req.file.mimetype === 'image/png' ? '.png' : req.file.mimetype === 'image/webp' ? '.webp' : '.jpg';
+  const fileName = `${order.id.replace(/[^a-zA-Z0-9_-]/g, '')}-${Date.now()}${extension}`;
+  fs.writeFileSync(path.join(paymentProofDir, fileName), req.file.buffer);
+  order.paymentProofFileId = fileName;
+  order.paymentProofStatus = 'submitted';
+  order.paymentProofSubmittedAt = new Date().toISOString();
+  store.save();
+  res.json(desktopOrderDto(order));
 });
 
 app.get('/announcement', (_req, res) => {
@@ -1514,8 +1604,20 @@ app.post('/api/bot/owner/products/:id/digital-file', (req, res, next) => {
 app.get('/api/bot/owner/payment-proofs', (_req, res) => {
   res.json({ orders: listSubmittedPaymentProofs(store).map((order) => ({
     ...publicTelegramOrder(order),
-    paymentProofFileId: order.paymentProofFileId
+    paymentProofFileId: order.paymentProofFileId,
+    paymentProofSource: order.customerHwid ? 'desktop' : 'telegram'
   })) });
+});
+
+app.get('/api/bot/owner/payment-proofs/:invoice/file', (req, res) => {
+  const order = store.data.orders.find((item) => item.invoiceNumber === String(req.params.invoice) || item.id === String(req.params.invoice));
+  const fileName = order?.paymentProofFileId ? path.basename(order.paymentProofFileId) : '';
+  const filePath = fileName ? path.join(paymentProofDir, fileName) : '';
+  if (!filePath || !fs.existsSync(filePath)) {
+    res.status(404).json({ message: 'Bukti pembayaran tidak ditemukan.' });
+    return;
+  }
+  res.sendFile(filePath);
 });
 
 app.post('/api/bot/owner/payment-proofs/:invoice/review', (req, res) => {
@@ -1533,7 +1635,13 @@ app.post('/api/bot/owner/payment-proofs/:invoice/review', (req, res) => {
       const baseUrl = `${req.protocol}://${req.get('host')}`;
       download = { expiresAt: issued.grant.expiresAt, remainingDownloads: issued.grant.maxDownloads, downloadUrl: `${baseUrl}/api/download/${encodeURIComponent(issued.token)}` };
     }
-    res.json({ order: publicTelegramOrder(order), fulfillmentType: product?.fulfillmentType ?? 'license', buyerTelegramId: member?.telegramId, download });
+    res.json({
+      order: publicTelegramOrder(order),
+      fulfillmentType: product?.fulfillmentType ?? 'license',
+      buyerTelegramId: member?.telegramId,
+      license: result.license,
+      download
+    });
   } catch (error) {
     res.status(400).json({ message: publicTelegramError(error, 'Bukti pembayaran gagal ditinjau.') });
   }
@@ -1694,10 +1802,28 @@ app.get('/api/admin/orders', requireSession, requireAdminScope('orders'), (_req,
   res.json(store.data.orders.map(publicOrder));
 });
 
+app.get('/api/admin/orders/:id/payment-proof', requireSession, requireAdminScope('orders'), (req, res) => {
+  const order = store.data.orders.find((item) => item.id === String(req.params.id));
+  const fileName = order?.paymentProofFileId ? path.basename(order.paymentProofFileId) : '';
+  const filePath = fileName ? path.join(paymentProofDir, fileName) : '';
+  if (!filePath || !fs.existsSync(filePath)) {
+    res.status(404).json({ message: 'Bukti pembayaran tidak ditemukan.' });
+    return;
+  }
+  res.sendFile(filePath);
+});
+
 app.post('/api/admin/orders/:id/paid', requireSession, requireAdminScope('orders'), (req, res) => {
   try {
     const result = markOrderPaid(store, String(req.params.id));
-    res.json({ ok: true, order: publicOrder(result.order), subscription: result.subscription });
+    const license = result.order.customerHwid
+      ? generateLicenseForPaidOrder(store, { invoiceNumber: result.order.invoiceNumber ?? result.order.id, hwid: result.order.customerHwid })
+      : undefined;
+    if (license) {
+      result.order.licenseId = license.id;
+      store.save();
+    }
+    res.json({ ok: true, order: publicOrder(result.order), subscription: result.subscription, license });
   } catch (error) {
     res.status(400).json({ message: error instanceof Error ? error.message : 'Order gagal diverifikasi.' });
   }
