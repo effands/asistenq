@@ -10,7 +10,7 @@ const initialPages: Array<Omit<ContentPage, 'id' | 'updatedAt'>> = [
   { slug: 'kebijakan-privasi', title: 'Kebijakan Privasi', summary: 'Cara AsistenQ memproses data pengguna.', body: 'AsistenQ menggunakan data akun dan transaksi untuk menyediakan layanan, memproses pembayaran, dukungan, serta keamanan. Data tidak dijual dan hanya dibagikan kepada penyedia layanan yang diperlukan untuk operasional.', published: true },
   { slug: 'faq', title: 'Pertanyaan Umum', summary: 'Jawaban singkat mengenai pembelian dan akses.', body: 'Pembayaran menggunakan QRIS dengan nominal unik. Verifikasi dilakukan admin. Seluruh produk yang berhasil diproses dapat dilihat melalui akun member.', published: true },
   { slug: 'tentang-asistenq', title: 'Tentang AsistenQ', summary: 'Marketplace tools bantu creator.', body: 'AsistenQ menyediakan aplikasi, file digital, web tools, dan kelas untuk membantu creator bekerja lebih cepat, produktif, dan konsisten.', published: true },
-  { slug: 'kontak', title: 'Kontak & Bantuan', summary: 'Hubungi tim AsistenQ.', body: 'Gunakan kanal Telegram atau informasi kontak resmi yang tersedia di website untuk bantuan pembelian, aktivasi, dan penggunaan produk.', published: true }
+  { slug: 'kontak', title: 'Kontak & Bantuan', summary: 'Hubungi tim AsistenQ.', body: 'Email: cs@ziqva.com\nTelegram: @effands\n\nHubungi kami untuk bantuan pembelian, aktivasi, dan penggunaan produk.', published: true }
 ];
 
 export function seedSiteContent(store: Store, now = new Date()): void {

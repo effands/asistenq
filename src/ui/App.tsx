@@ -29,6 +29,7 @@ import type { BillingPeriod, ContentPage, ProductAccessMode, ProductDestinationT
 import { paymentProofCleanupMessage, type PaymentProofCleanupResult } from './payment-proof-cleanup';
 import { buildProductFulfillmentPatch } from './product-form';
 import { addCartItem, readCart, removeCartItem, writeCart, type MarketplaceCartItem } from './cart-store';
+import { clearMemberSession, readMemberSession, writeMemberSession } from './member-session';
 import { ManagedContent, MarketplaceCart, MarketplaceHome, MarketplaceProductDetail } from './MarketplaceStorefront';
 import {
   apiRequest,
@@ -121,7 +122,7 @@ export function App() {
   const [products, setProducts] = useState<PublicProduct[]>([]);
   const [catalog, setCatalog] = useState<PublicCatalog>(emptyCatalog);
   const [adminSession, setAdminSession] = useState<LoginResult | null>(null);
-  const [memberSession, setMemberSession] = useState<LoginResult | null>(null);
+  const [memberSession, setMemberSession] = useState<LoginResult | null>(() => readMemberSession(window.localStorage));
   const [summary, setSummary] = useState<Summary | null>(null);
   const [memberDashboard, setMemberDashboard] = useState<MemberLicenseDashboard | null>(null);
   const [memberOrders, setMemberOrders] = useState<PublicOrder[]>([]);
@@ -268,6 +269,17 @@ export function App() {
   }, []);
 
   useEffect(() => { writeCart(window.localStorage, cart); }, [cart]);
+
+  useEffect(() => {
+    if (memberSession) writeMemberSession(window.localStorage, memberSession);
+    else clearMemberSession(window.localStorage);
+  }, [memberSession]);
+
+  useEffect(() => {
+    if (!memberSession) return;
+    Promise.all([loadLicenses(memberSession.token), loadMemberOrders(memberSession.token)])
+      .catch((error) => setMessage(error instanceof Error ? error.message : 'Data member gagal dimuat.'));
+  }, [memberSession?.token]);
 
   useEffect(() => {
     const slug = contentSlugFromPath(window.location.pathname);

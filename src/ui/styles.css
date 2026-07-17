@@ -1953,6 +1953,70 @@ textarea {
 @media(max-width:980px){.market-grid{grid-template-columns:repeat(2,1fr)}.market-hero{grid-template-columns:1fr}.detail-top{grid-template-columns:1fr 1fr}.detail-buy{grid-column:1/-1}.market-footer-grid{grid-template-columns:repeat(2,1fr)}.market-benefit-bar{grid-template-columns:1fr 1fr;gap:20px}.market-benefit-bar span{border:0}.public-nav nav{display:none}}
 @media(max-width:620px){.market-shell,.public-nav{width:min(100% - 20px,1180px)}.public-nav{padding:10px}.public-cta small{display:none}.market-hero{padding:30px 22px;border-radius:20px}.market-hero h1{font-size:35px}.market-promises{grid-template-columns:1fr}.market-filter>span{display:none}.market-grid{grid-template-columns:1fr}.market-card-cover{height:210px}.market-benefit-bar,.market-footer-grid,.detail-top,.detail-content,.detail-feature-grid{grid-template-columns:1fr}.market-benefit-bar{margin-top:35px}.market-footer{padding:35px 24px}.footer-bottom{gap:12px;flex-direction:column}.detail-main-media{height:270px}.detail-summary h1{font-size:29px}.detail-content{padding:16px}.nav-actions .public-cta{padding:8px 12px}.brand span{display:none}}
 
+/* Marketplace polish: soft thumbnail corners and stable product metadata. */
+.market-card-cover {
+  border-radius: 8px;
+}
+
+.detail-content {
+  grid-template-columns: minmax(0, 1fr) 320px;
+  align-items: start;
+  border: 0;
+  background: transparent;
+  padding: 0;
+}
+
+.detail-content > div:first-child,
+.detail-content > aside {
+  border: 1px solid #e3ece9;
+  border-radius: 18px;
+  background: #fff;
+  padding: 24px;
+}
+
+.detail-content > aside {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.detail-content > aside h3 {
+  margin: 0 0 14px;
+}
+
+.detail-content > aside span {
+  display: grid;
+  grid-template-columns: minmax(92px, .8fr) minmax(0, 1.2fr);
+  gap: 16px;
+  align-items: start;
+  margin: 0;
+  padding: 12px 0;
+}
+
+.detail-content > aside span small {
+  color: #345a52;
+  line-height: 1.35;
+}
+
+.detail-content > aside span b {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  line-height: 1.35;
+  text-align: right;
+}
+
+@media(max-width:620px) {
+  .detail-content {
+    grid-template-columns: 1fr;
+    padding: 0;
+  }
+
+  .detail-content > div:first-child,
+  .detail-content > aside {
+    border-radius: 14px;
+    padding: 18px;
+  }
+}
+
 .license-plan-panel {
   grid-column: 1 / -1;
 }
