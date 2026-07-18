@@ -11,7 +11,8 @@ describe('member product and help hubs', () => {
     expect(app).toContain('member-product-library');
     expect(app).toContain('member-product-meta');
     expect(css).toContain('.member-quick-grid');
-    expect(css).toContain('grid-template-columns: repeat(3, minmax(0, 1fr))');
+    expect(css).toContain('repeat(auto-fit, minmax(min(100%, 300px), 1fr))');
+    expect(css).toContain('display: flex; flex-direction: column;');
   });
 
   it('renders a searchable help flow, faq, and actionable contacts', () => {

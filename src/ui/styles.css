@@ -5443,8 +5443,8 @@ textarea {
 .member-products-panel { padding: 28px; }
 .member-products-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; margin-bottom: 24px; }
 .member-products-head h2 { margin: 4px 0; font-size: clamp(1.65rem, 2vw, 2.2rem); }
-.member-product-library { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
-.member-product-library .member-product-card { display: flex; min-width: 0; overflow: hidden; border-radius: 20px; background: #fff; }
+.member-product-library { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: 16px; }
+.member-product-library .member-product-card { display: flex; flex-direction: column; min-width: 0; overflow: hidden; border-radius: 20px; background: #fff; }
 .member-product-library .member-product-cover { min-height: 142px; max-height: 142px; }
 .member-product-content { display: grid; gap: 8px; padding: 16px 17px 13px; }
 .member-product-content > strong { font-size: 1.1rem; }
