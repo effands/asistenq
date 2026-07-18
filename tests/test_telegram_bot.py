@@ -168,6 +168,20 @@ class TelegramCommerceTests(unittest.TestCase):
         buyer_call = next(call for call in send.call_args_list if str(call.args[0]) == "2002")
         self.assertEqual(buyer_call.args[2]["inline_keyboard"][0][0]["url"], result["download"]["downloadUrl"])
 
+    def test_license_approval_offers_one_click_delivery_to_owner(self):
+        result = {
+            "order": {"invoiceNumber": "INV-L"},
+            "buyerTelegramId": "2002",
+            "fulfillmentType": "license",
+            "license": {"id": "license-1", "key": "TOKEN-1", "hwid": "CA00E2C30BA61C8D"},
+        }
+        with patch.object(BOT, "answer_callback"), patch.object(BOT, "api", return_value=result), patch.object(BOT, "send") as send:
+            BOT.handle_callback(87394692, "cb", "proof_ok:INV-L")
+        owner_call = next(call for call in send.call_args_list if str(call.args[0]) == "87394692")
+        button = owner_call.args[2]["inline_keyboard"][0][0]
+        self.assertEqual(button["text"], "🚀 Generate & Kirim Lisensi")
+        self.assertEqual(button["callback_data"], "direct_send:license-1")
+
     def test_owner_product_wizard_reaches_confirmation(self):
         state = BOT.new_product_state()
         for value in ["Mixer Pro", "mixer-pro", "license", "Mixer audio", "1M", "1 Bulan", "59000", "30", "draft"]:
