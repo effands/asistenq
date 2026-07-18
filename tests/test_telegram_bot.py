@@ -30,6 +30,14 @@ class TelegramKeyboardMigrationTests(unittest.TestCase):
 
 
 class TelegramCommerceTests(unittest.TestCase):
+    def test_invoice_start_payload_opens_matching_buyer_proof_flow(self):
+        orders = {"orders": [{"invoiceNumber": "INV-20260718-0010", "status": "pending"}]}
+        with patch.object(BOT, "api", return_value=orders) as api, patch.object(BOT, "set_pending") as pending, patch.object(BOT, "send") as send:
+            self.assertTrue(BOT.handle_start_payload(2002, "/start invoice_INV-20260718-0010"))
+        api.assert_called_once_with("/bot/buyer/orders", telegram_id="2002")
+        pending.assert_called_once_with(2002, {"action": "await_payment_proof", "invoice": "INV-20260718-0010"})
+        self.assertIn("kirim foto bukti", send.call_args.args[1].lower())
+
     def setUp(self):
         self.owner_id = BOT.OWNER_ID
         BOT.OWNER_ID = "87394692"

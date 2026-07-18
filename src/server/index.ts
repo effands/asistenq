@@ -758,6 +758,28 @@ app.post('/api/license/orders/:invoice/payment-proof', desktopPaymentProofUpload
   res.json(desktopOrderDto(order));
 });
 
+app.get('/api/telegram/confirm/:invoice', async (req, res) => {
+  const invoice = String(req.params.invoice);
+  if (!/^[A-Za-z0-9_-]+$/.test(invoice)) {
+    res.status(400).send('Invoice tidak valid.');
+    return;
+  }
+  const token = store.data.deploymentSettings?.telegramBotToken ?? process.env.TELEGRAM_BOT_TOKEN ?? '';
+  if (!token) {
+    res.status(503).send('Bot Telegram belum dikonfigurasi.');
+    return;
+  }
+  try {
+    const response = await fetch(`https://api.telegram.org/bot${token}/getMe`);
+    const result = await response.json() as { ok?: boolean; result?: { username?: string } };
+    const username = result.result?.username;
+    if (!response.ok || !result.ok || !username) throw new Error('username bot tidak tersedia');
+    res.redirect(`https://t.me/${username}?start=invoice_${invoice}`);
+  } catch {
+    res.status(503).send('Bot Telegram sedang tidak tersedia. Silakan coba lagi.');
+  }
+});
+
 app.get('/announcement', (_req, res) => {
   const product = store.data.products.find((item) => item.slug === 'vjstudio');
   const announcement = store.data.announcements.find((item) => item.productId === product?.id && item.enabled);
@@ -1933,19 +1955,17 @@ app.post('/api/bot/license-generate', ...ownerBotMiddleware, (req, res) => {
   }
 });
 
-app.get('/api/bot/owner/licenses/:id/delivery', ...ownerBotMiddleware, (req, res) => {
+app.get('/api/bot/owner/licenses/:id/delivery', ...ownerBotMiddleware, async (req, res) => {
   const license = store.data.licenses.find((item) => item.id === String(req.params.id));
   if (!license) {
     res.status(404).json({ message: 'Lisensi tidak ditemukan.' });
     return;
   }
   const email = license.email.trim().toLowerCase();
-  const member = store.data.members.find((item) => item.active && item.email === email && item.telegramId);
-  if (!member?.telegramId) {
-    res.status(404).json({ message: 'Email pembeli belum terhubung ke Telegram.' });
-    return;
-  }
-  res.json({ license, buyerTelegramId: member.telegramId });
+  const member = store.data.members.find((item) => item.active && item.email === email);
+  const order = store.data.orders.find((item) => item.id === license.orderId);
+  await emailLicense(license, order?.invoiceNumber);
+  res.json({ license, buyerTelegramId: member?.telegramId, emailed: true });
 });
 
 app.post('/api/bot/license-send', ...ownerBotMiddleware, (req, res) => {
@@ -2102,6 +2122,7 @@ app.post('/api/admin/orders/:id/paid', requireSession, requireAdminScope('orders
     if (license) {
       result.order.licenseId = license.id;
       store.save();
+      void emailLicense(license, result.order.invoiceNumber ?? result.order.id);
     }
     res.json({ ok: true, order: publicOrder(result.order), subscription: result.subscription, license, fulfillment });
   } catch (error) {

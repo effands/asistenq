@@ -552,6 +552,27 @@ def show_payment_proof_choices(chat_id: int) -> None:
     send(chat_id, "Pilih invoice untuk mengirim bukti:" if pending else "Tidak ada invoice pending.", keyboard(rows))
 
 
+def handle_start_payload(chat_id: int, text: str) -> bool:
+    parts = text.strip().split(maxsplit=1)
+    if len(parts) != 2 or parts[0].split("@")[0].lower() != "/start" or not parts[1].startswith("invoice_"):
+        return False
+    invoice = parts[1][len("invoice_"):]
+    if not invoice or any(character not in "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_" for character in invoice):
+        send(chat_id, "Link invoice tidak valid.", menu_for(chat_id))
+        return True
+    orders = api("/bot/buyer/orders", telegram_id=str(chat_id)).get("orders", [])
+    order = next((item for item in orders if item.get("invoiceNumber") == invoice), None)
+    if not order:
+        send(chat_id, "Invoice tidak ditemukan pada akun Telegram ini. Hubungkan ID Telegram yang sama pada Profil AsistenQ.", menu_for(chat_id))
+        return True
+    if order.get("status") != "pending":
+        send(chat_id, f"Status {invoice}: {order.get('status', '-')}", menu_for(chat_id))
+        return True
+    set_pending(chat_id, {"action": "await_payment_proof", "invoice": invoice})
+    send(chat_id, f"Invoice {invoice} ditemukan. Silakan kirim foto bukti pembayaran sekarang.")
+    return True
+
+
 def show_buyer_licenses(chat_id: int) -> None:
     licenses = api("/bot/buyer/licenses", telegram_id=str(chat_id)).get("licenses", [])
     lines = ["Lisensi Anda:"] + [f"{item.get('email')} • {item.get('hwid')}\n{item.get('key')}" for item in licenses[:10]]
@@ -1004,11 +1025,11 @@ def handle_callback(chat_id: int, callback_id: str, data: str) -> None:
         result = api(f"/bot/owner/licenses/{license_id}/delivery")
         buyer_id = str(result.get("buyerTelegramId") or "")
         license_data = result.get("license", {})
-        if not buyer_id:
-            send(chat_id, "Email pembeli belum terhubung ke Telegram.", main_menu())
-            return
-        send(int(buyer_id), "Lisensi Anda telah dibuat\n" + direct_license_result_text(license_data), buyer_menu())
-        send(chat_id, f"Lisensi dikirim ke Telegram pembeli {buyer_id}.", main_menu())
+        if buyer_id:
+            send(int(buyer_id), "Lisensi Anda telah dibuat\n" + direct_license_result_text(license_data), buyer_menu())
+            send(chat_id, f"Lisensi dikirim ke email dan Telegram pembeli {buyer_id}.", main_menu())
+        else:
+            send(chat_id, f"Lisensi dikirim ke email {license_data.get('email', '-')}.", main_menu())
         return
     if data.startswith("license:"):
         invoice = data.split(":", 1)[1]
@@ -1143,6 +1164,8 @@ def main() -> None:
                     if is_owner(chat_id) and is_legacy_reply_button(text):
                         send(chat_id, "Keyboard lama sudah dihapus.", remove_legacy_keyboard())
                         send(chat_id, "Pilih menu tombol baru:", main_menu())
+                        continue
+                    if handle_start_payload(chat_id, text):
                         continue
                     if handle_pending_text(chat_id, text):
                         continue

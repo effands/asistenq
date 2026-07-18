@@ -1232,7 +1232,7 @@ function AdminOrderPanel({ orders, onClearExpired, onClearPaymentProofs, onDelet
             </div>
             <span>
               {order.product?.name ?? order.productName ?? order.productId}
-              {order.paymentProofStatus === 'submitted' && order.customerHwid && (
+              {order.paymentProofStatus === 'submitted' && (
                 <a href={`/api/admin/orders/${order.id}/payment-proof`} rel="noreferrer" target="_blank">Lihat bukti</a>
               )}
             </span>
@@ -3364,6 +3364,9 @@ function MemberPanel({ session, products, dashboard, orders, onRegister, onLogin
                   <div className="order-history-detail">
                     <b>{order.product?.name ?? order.productName ?? order.productId}</b>
                     <small>{formatDate(order.createdAt)} · Sisa bayar: {formatRemaining(order.expiresAt)}</small>
+                    {order.paymentProofStatus === 'submitted' && <small>Bukti sedang diperiksa admin.</small>}
+                    {order.paymentProofStatus === 'approved' && <small>Pembayaran dan bukti telah disetujui.</small>}
+                    {order.paymentProofStatus === 'rejected' && <small>Bukti ditolak: {order.paymentProofRejectionReason || 'Silakan unggah bukti yang benar.'}</small>}
                   </div>
                   <div className="order-history-total">
                     <span>Total bayar</span>
@@ -3569,16 +3572,7 @@ function MemberPanel({ session, products, dashboard, orders, onRegister, onLogin
 }
 
 function InvoiceModal({ order, onClose }: { order: PublicOrder; onClose: () => void }) {
-  const telegramText = [
-    'Konfirmasi pembayaran AsistenQ',
-    `Invoice: ${order.invoiceNumber ?? order.id}`,
-    `Produk: ${order.product?.name ?? order.productName ?? order.productId}`,
-    `Email: ${order.memberEmail ?? '-'}`,
-    `Total: ${order.formattedTotalAmount}`,
-    '',
-    'Saya sudah transfer sesuai total invoice. Bukti transfer saya lampirkan di chat ini.'
-  ].join('\n');
-  const telegramConfirmUrl = `https://t.me/share/url?url=${encodeURIComponent('https://asistenq.com')}&text=${encodeURIComponent(telegramText)}`;
+  const telegramConfirmUrl = `/api/telegram/confirm/${encodeURIComponent(order.invoiceNumber ?? order.id)}`;
 
   return (
     <div className="invoice-backdrop" role="dialog" aria-modal="true">
