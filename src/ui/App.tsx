@@ -3357,9 +3357,11 @@ function MemberPanel({ session, products, dashboard, orders, onRegister, onLogin
             <div className="order-history-list">
               {orders.map((order) => (
                 <article className="order-history-card" key={order.id}>
-                  <div className="order-history-main">
+                  <div className="order-history-invoice">
                     <span className={`status-dot status-${order.status}`}>{order.status}</span>
                     <strong>{order.invoiceNumber ?? order.id}</strong>
+                  </div>
+                  <div className="order-history-detail">
                     <b>{order.product?.name ?? order.productName ?? order.productId}</b>
                     <small>{formatDate(order.createdAt)} · Sisa bayar: {formatRemaining(order.expiresAt)}</small>
                   </div>

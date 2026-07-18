@@ -2690,8 +2690,8 @@ textarea {
 
 .order-history-card {
   display: grid;
-  grid-template-columns: minmax(0, 1.2fr) minmax(150px, auto) auto;
-  gap: 10px;
+  grid-template-columns: minmax(180px, 1.05fr) minmax(220px, 1.35fr) minmax(150px, .8fr) auto;
+  gap: 18px;
   align-items: center;
   border: 1px solid var(--line);
   border-radius: 18px;
@@ -2715,24 +2715,25 @@ textarea {
   font-weight: 850;
 }
 
-.order-history-main,
+.order-history-invoice,
+.order-history-detail,
 .order-history-total,
 .order-history-actions {
   display: grid;
   gap: 5px;
 }
 
-.order-history-main strong {
+.order-history-invoice strong {
   color: var(--ink);
   font-size: 15px;
 }
 
-.order-history-main b {
+.order-history-detail b {
   color: var(--ink);
-  font-size: 12px;
+  font-size: 14px;
 }
 
-.order-history-main small,
+.order-history-detail small,
 .order-history-total small {
   color: var(--muted);
   font-size: 11px;
@@ -2757,6 +2758,8 @@ textarea {
   padding: 8px 12px;
   white-space: nowrap;
 }
+
+.order-history-card > .member-reset-box { grid-column: 1 / -1; }
 
 .course-access-list {
   display: grid;
@@ -3675,7 +3678,7 @@ textarea {
 .member-product-list { grid-template-columns: repeat(auto-fill, minmax(280px, 360px)); gap: 14px; align-items: start; }
 .member-product-cover { min-height: 150px; max-height: 180px; }
 .order-history-list { gap: 8px; }
-.order-history-card { grid-template-columns: minmax(260px,1.5fr) minmax(140px,.5fr) auto; min-height: 0; padding: 12px 15px; border-radius: 15px; }
+.order-history-card { grid-template-columns: minmax(180px, 1.05fr) minmax(220px, 1.35fr) minmax(150px, .8fr) auto; min-height: 0; padding: 12px 15px; border-radius: 15px; }
 .order-history-actions { display: flex; flex-direction: row; gap: 7px; }
 
 @media (max-width: 900px) {
@@ -3683,7 +3686,16 @@ textarea {
   .license-compact-summary { grid-template-columns: 1fr auto; }
   .license-compact-summary > code, .license-compact-summary > span:nth-child(3) { display: none; }
   .profile-form-grid, .download-steps { grid-template-columns: 1fr; }
-  .order-history-card { grid-template-columns: 1fr; }
+  .order-history-card { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .order-history-total { justify-items: start; }
+  .order-history-actions { justify-content: start; }
+}
+
+@media (max-width: 640px) {
+  .order-history-card {
+    grid-template-columns: 1fr;
+  }
+  .order-history-actions { display: grid; grid-template-columns: 1fr 1fr; }
 }
 
 .member-coming-soon {
