@@ -145,8 +145,8 @@ describe('Telegram buyer commerce', () => {
     expect(second.id).toBe(first.id);
     expect(first.expiresAt).toBe('2026-07-17T08:30:00.000Z');
     expect(first.amount).toBe(249000);
-    expect(first.uniqueCode).toBeGreaterThanOrEqual(100);
-    expect(first.uniqueCode).toBeLessThanOrEqual(999);
+    expect(first.uniqueCode).toBeGreaterThanOrEqual(1);
+    expect(first.uniqueCode).toBeLessThanOrEqual(99);
     expect(first).toMatchObject({
       planId: plan.id,
       telegramId: '1001',

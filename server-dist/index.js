@@ -813,9 +813,9 @@ function allocateUniquePaymentCode(store2, now) {
     const expiresAt = order.expiresAt ? new Date(order.expiresAt) : new Date(new Date(order.createdAt).getTime() + invoiceLifetimeHours * 60 * 60 * 1e3);
     return expiresAt > now;
   }).map((order) => order.uniqueCode));
-  const firstCode = Math.floor(Math.random() * 900) + 100;
-  for (let offset = 0; offset < 900; offset += 1) {
-    const candidate = 100 + (firstCode - 100 + offset) % 900;
+  const firstCode = Math.floor(Math.random() * 99) + 1;
+  for (let offset = 0; offset < 99; offset += 1) {
+    const candidate = 1 + (firstCode - 1 + offset) % 99;
     if (!usedCodes.has(candidate)) return candidate;
   }
   throw new Error("kode unik pembayaran tidak tersedia");
@@ -881,7 +881,7 @@ async function createLicenseCheckout(store2, input, now = /* @__PURE__ */ new Da
   const plan = findPlanByCode(store2, product.id, input.planCode);
   if (!plan.isActive) throw new Error("paket tidak aktif");
   const email = normalizeEmail(input.email);
-  const hwid = normalizeHwid(input.hwid);
+  const hwid = input.hwid ? normalizeHwid(input.hwid) : void 0;
   const idempotencyKey = input.idempotencyKey.trim();
   if (!idempotencyKey) throw new Error("idempotency key wajib diisi");
   const reusable = store2.data.orders.find((item) => item.productId === product.id && item.planId === plan.id && item.idempotencyKey === idempotencyKey && item.customerEmail === email && item.customerHwid === hwid && item.status === "pending" && Boolean(item.expiresAt && new Date(item.expiresAt) > now));
@@ -2469,10 +2469,10 @@ var paymentReviewSchema = z.object({
   if (value.decision === "reject" && !value.reason) context.addIssue({ code: "custom", message: "alasan penolakan wajib diisi" });
 });
 var desktopOrderSchema = z.object({
-  productSlug: z.literal("vjstudio"),
-  planCode: z.enum(["1M", "3M", "6M", "1Y"]),
+  productSlug: z.string().trim().min(1).regex(/^[a-z0-9-]+$/),
+  planCode: z.string().trim().min(1).max(40),
   email: z.string().email(),
-  hwid: z.string().trim().regex(/^[A-Za-z0-9]{16}$/, "HWID harus tepat 16 karakter huruf/angka."),
+  hwid: z.string().trim().regex(/^[A-Za-z0-9]{16}$/, "HWID harus tepat 16 karakter huruf/angka.").optional(),
   idempotencyKey: z.string().trim().min(8).max(128),
   voucherCode: z.string().trim().max(40).optional()
 });

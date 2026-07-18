@@ -41,8 +41,8 @@ describe('cart checkout validation', () => {
     const order = await createCartCheckout(store, 'm1', { items: [{ productId: 'p1', planId: 'plan1' }, { productId: 'p2', planId: 'plan2' }], customerHwid: 'ABCDEF1234567890' }, new Date('2026-07-17T00:00:00Z'));
     expect(order.orderItems).toHaveLength(2);
     expect(order.amount).toBe(79800);
-    expect(order.uniqueCode).toBeGreaterThanOrEqual(100);
-    expect(order.uniqueCode).toBeLessThanOrEqual(999);
+    expect(order.uniqueCode).toBeGreaterThanOrEqual(1);
+    expect(order.uniqueCode).toBeLessThanOrEqual(99);
     expect(order.totalAmount).toBe(order.amount + order.uniqueCode!);
     expect(store.data.orders).toHaveLength(1);
     expect(order.customerHwid).toBe('ABCDEF1234567890');

@@ -600,10 +600,10 @@ function allocateUniquePaymentCode(store: Store, now: Date): number {
       return expiresAt > now;
     })
     .map((order) => order.uniqueCode));
-  const firstCode = Math.floor(Math.random() * 900) + 100;
+  const firstCode = Math.floor(Math.random() * 99) + 1;
 
-  for (let offset = 0; offset < 900; offset += 1) {
-    const candidate = 100 + ((firstCode - 100 + offset) % 900);
+  for (let offset = 0; offset < 99; offset += 1) {
+    const candidate = 1 + ((firstCode - 1 + offset) % 99);
     if (!usedCodes.has(candidate)) return candidate;
   }
 
@@ -686,7 +686,7 @@ export async function createLicenseCheckout(store: Store, input: {
   productSlug: string;
   planCode: string;
   email: string;
-  hwid: string;
+  hwid?: string;
   idempotencyKey: string;
   voucherCode?: string;
 }, now = new Date()): Promise<{ order: Order; accessToken: string }> {
@@ -695,7 +695,7 @@ export async function createLicenseCheckout(store: Store, input: {
   const plan = findPlanByCode(store, product.id, input.planCode);
   if (!plan.isActive) throw new Error('paket tidak aktif');
   const email = normalizeEmail(input.email);
-  const hwid = normalizeHwid(input.hwid);
+  const hwid = input.hwid ? normalizeHwid(input.hwid) : undefined;
   const idempotencyKey = input.idempotencyKey.trim();
   if (!idempotencyKey) throw new Error('idempotency key wajib diisi');
 

@@ -72,8 +72,8 @@ describe('server services', () => {
     const order = await createCheckout(store, member.id, product.id);
     expect(order.status).toBe('pending');
     expect(order.invoiceNumber).toMatch(/^INV-/);
-    expect(order.uniqueCode).toBeGreaterThanOrEqual(100);
-    expect(order.uniqueCode).toBeLessThanOrEqual(999);
+    expect(order.uniqueCode).toBeGreaterThanOrEqual(1);
+    expect(order.uniqueCode).toBeLessThanOrEqual(99);
     expect(order.totalAmount).toBe(order.amount + (order.uniqueCode ?? 0));
     expect(order.expiresAt).toBeTruthy();
     expect(order.paymentQrUrl).toMatch(/^data:image\/png;base64,/);
@@ -236,14 +236,14 @@ describe('server services', () => {
     });
     store.data.orders.push({
       id: 'existing_order', memberId: member.id, productId: product.id,
-      uniqueCode: 100, amount: 99000, status: 'pending', qrisPayload: '',
+      uniqueCode: 1, amount: 99000, status: 'pending', qrisPayload: '',
       createdAt: '2026-07-17T07:00:00.000Z', expiresAt: '2026-07-18T07:00:00.000Z'
     });
     const random = vi.spyOn(Math, 'random').mockReturnValue(0);
 
     try {
       const order = await createCheckout(store, member.id, product.id, new Date('2026-07-17T08:00:00.000Z'));
-      expect(order.uniqueCode).toBe(101);
+      expect(order.uniqueCode).toBe(2);
     } finally {
       random.mockRestore();
     }
@@ -254,11 +254,11 @@ describe('server services', () => {
     const product = createProductRecord(store, {
       name: 'Exhausted Product', slug: 'exhausted-product', type: 'tool', billingPeriod: 'monthly', price: 99000
     });
-    store.data.orders = Array.from({ length: 900 }, (_, index) => ({
+    store.data.orders = Array.from({ length: 99 }, (_, index) => ({
       id: `pending_${index}`,
       memberId: member.id,
       productId: product.id,
-      uniqueCode: 100 + index,
+      uniqueCode: 1 + index,
       amount: 99000,
       status: 'pending' as const,
       qrisPayload: '',
@@ -269,7 +269,7 @@ describe('server services', () => {
     await expect(createCheckout(
       store, member.id, product.id, new Date('2026-07-17T08:00:00.000Z')
     )).rejects.toThrow('kode unik pembayaran tidak tersedia');
-    expect(store.data.orders).toHaveLength(900);
+    expect(store.data.orders).toHaveLength(99);
   });
 
   it('serializes direct concurrent checkouts with distinct invoices and payment codes', async () => {
@@ -286,8 +286,8 @@ describe('server services', () => {
       ]);
 
       expect(first.invoiceNumber).not.toBe(second.invoiceNumber);
-      expect(first.uniqueCode).toBe(100);
-      expect(second.uniqueCode).toBe(101);
+      expect(first.uniqueCode).toBe(1);
+      expect(second.uniqueCode).toBe(2);
       expect(store.data.orders).toHaveLength(2);
     } finally {
       random.mockRestore();
@@ -418,7 +418,7 @@ describe('server services', () => {
     expect(html).toContain('Total Bayar');
   });
 
-  it('creates one idempotent VJ Studio checkout with a three digit code', async () => {
+  it('creates one idempotent VJ Studio checkout with a two digit code', async () => {
     const product = createProductRecord(store, {
       name: 'VJ Studio Pro', slug: 'vjstudio', type: 'tool', billingPeriod: 'monthly', price: 49900
     });
@@ -435,8 +435,8 @@ describe('server services', () => {
 
     expect(second.order.id).toBe(first.order.id);
     expect(first.accessToken).toBe(second.accessToken);
-    expect(first.order.uniqueCode).toBeGreaterThanOrEqual(100);
-    expect(first.order.uniqueCode).toBeLessThanOrEqual(999);
+    expect(first.order.uniqueCode).toBeGreaterThanOrEqual(1);
+    expect(first.order.uniqueCode).toBeLessThanOrEqual(99);
     expect(first.order.totalAmount).toBe(49900 + first.order.uniqueCode!);
     expect(first.order.customerHwid).toBe('CA00E2C30BA61C8D');
   });

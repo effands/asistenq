@@ -85,7 +85,8 @@ describe('Telegram commerce API boundaries', () => {
     });
     expect(created.status).toBe(201);
     expect(created.body.totalAmount).toBe(49900 + created.body.uniqueCode);
-    expect(created.body.uniqueCode).toBeGreaterThanOrEqual(100);
+    expect(created.body.uniqueCode).toBeGreaterThanOrEqual(1);
+    expect(created.body.uniqueCode).toBeLessThanOrEqual(99);
     expect(created.body).not.toHaveProperty('qrisPayload');
 
     const invoice = created.body.invoiceNumber;
@@ -94,6 +95,24 @@ describe('Telegram commerce API boundaries', () => {
       .set('x-order-token', created.body.accessToken);
     expect(status.status).toBe(200);
     expect(status.body.status).toBe('pending');
+  });
+
+  it('creates a MIXIN9 desktop invoice using the admin plan price', async () => {
+    await seedInitialData(store);
+    const product = store.data.products.find((item) => item.slug === 'mixin9')!;
+    const plan = store.data.plans.find((item) => item.productId === product.id && item.code === '1M')!;
+    plan.price = 47000;
+
+    const created = await request(app).post('/api/license/orders').send({
+      productSlug: 'mixin9', planCode: '1M', email: 'mixin9-buyer@example.com',
+      idempotencyKey: 'mixin9-checkout-001'
+    });
+
+    expect(created.status).toBe(201);
+    expect(created.body.product.slug).toBe('mixin9');
+    expect(created.body.amount).toBe(47000);
+    expect(created.body.totalAmount).toBe(47000 + created.body.uniqueCode);
+    expect(store.data.orders.at(-1)?.customerHwid).toBeUndefined();
   });
 
   it('deletes one uploaded desktop payment proof without deleting its order', async () => {

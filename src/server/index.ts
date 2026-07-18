@@ -153,10 +153,10 @@ const paymentReviewSchema = z.object({
   if (value.decision === 'reject' && !value.reason) context.addIssue({ code: 'custom', message: 'alasan penolakan wajib diisi' });
 });
 const desktopOrderSchema = z.object({
-  productSlug: z.literal('vjstudio'),
-  planCode: z.enum(['1M', '3M', '6M', '1Y']),
+  productSlug: z.string().trim().min(1).regex(/^[a-z0-9-]+$/),
+  planCode: z.string().trim().min(1).max(40),
   email: z.string().email(),
-  hwid: z.string().trim().regex(/^[A-Za-z0-9]{16}$/, 'HWID harus tepat 16 karakter huruf/angka.'),
+  hwid: z.string().trim().regex(/^[A-Za-z0-9]{16}$/, 'HWID harus tepat 16 karakter huruf/angka.').optional(),
   idempotencyKey: z.string().trim().min(8).max(128),
   voucherCode: z.string().trim().max(40).optional()
 });
