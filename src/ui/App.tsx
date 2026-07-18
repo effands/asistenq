@@ -3292,16 +3292,17 @@ function MemberPanel({ session, products, dashboard, orders, onRegister, onLogin
               </select>
               <span>{filteredLicenses.length} ditemukan</span>
             </div>}
+            {visibleLicenses.length > 0 && <div className="license-list-header" aria-hidden="true"><span>Produk & Paket</span><span>Perangkat</span><span>Masa Berlaku</span><span>Status</span><span>Aksi</span></div>}
             <div className="member-license-compact-list">
               {visibleLicenses.map((license) => {
                 const open = expandedLicense === license.id;
                 return <article className={`member-license-compact ${open ? 'open' : ''}`} key={license.id}>
                   <button className="license-compact-summary" onClick={() => setExpandedLicense(open ? '' : license.id)}>
-                    <span><strong>{license.product?.name ?? license.productId}</strong><small>{license.plan?.name ?? license.planId}</small></span>
-                    <code>{license.hwid}</code>
-                    <span><small>Berakhir</small><b>{formatDate(license.expiresAt)}</b></span>
-                    <span className={`status-dot status-${license.status}`}>{licenseStatusLabel(license)}</span>
-                    <b>{open ? 'Tutup' : 'Detail'}</b>
+                    <span className="license-product-cell"><span className="license-product-icon"><KeyRound /></span><span><strong>{license.product?.name ?? license.productId}</strong><small>{license.plan?.name ?? license.planId}</small></span></span>
+                    <span className="license-hwid-cell"><small>HWID perangkat</small><code>{license.hwid}</code></span>
+                    <span className="license-expiry-cell"><small>Berakhir</small><b>{formatDate(license.expiresAt)}</b></span>
+                    <span className="license-status-cell"><span className={`status-dot status-${license.status}`}>{licenseStatusLabel(license)}</span></span>
+                    <span className="license-detail-action">{open ? 'Tutup' : 'Detail'} <ArrowRight /></span>
                   </button>
                   {open && <div className="license-compact-detail">
                     <div className="member-token-box"><small>Token Lisensi</small><code>{license.key}</code><button className="primary" onClick={() => navigator.clipboard.writeText(license.key)}>Copy Token</button></div>
