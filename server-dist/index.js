@@ -11,8 +11,8 @@ import express from "express";
 import multer from "multer";
 import AdmZip from "adm-zip";
 import crypto10 from "crypto";
-import fs8 from "fs";
-import path8 from "path";
+import fs9 from "fs";
+import path9 from "path";
 import { z } from "zod";
 
 // src/shared/domain.ts
@@ -391,6 +391,67 @@ function clearPaymentProofDirectory(directory) {
   return result;
 }
 
+// src/server/payment-proof-notifications.ts
+import fs3 from "fs";
+import path3 from "path";
+function buildPaymentProofNotification(input, adminUrl) {
+  return {
+    caption: [
+      "\u{1F9FE} Bukti pembayaran baru",
+      `Invoice: ${input.invoice}`,
+      `Pembeli: ${input.buyer}`,
+      `Produk: ${input.product}`,
+      `Paket: ${input.plan}`,
+      `Total: ${input.total}`,
+      `Sumber: ${input.source}`
+    ].join("\n"),
+    reply_markup: {
+      inline_keyboard: [
+        [
+          { text: "\u2705 Setujui", callback_data: `proof_ok:${input.invoice}` },
+          { text: "\u274C Tolak", callback_data: `proof_no:${input.invoice}` }
+        ],
+        [
+          { text: "\u{1F50D} Detail", callback_data: `order:${input.invoice}` },
+          { text: "\u{1F310} Buka Admin Web", url: adminUrl }
+        ]
+      ]
+    }
+  };
+}
+async function notifyOwnerOfPaymentProof(store2, order, filePath, source, fetcher = fetch) {
+  const settings2 = store2.data.deploymentSettings ?? {};
+  const token = settings2.telegramBotToken ?? process.env.TELEGRAM_BOT_TOKEN ?? "";
+  const ownerId = settings2.telegramOwnerId ?? process.env.TELEGRAM_OWNER_ID ?? "";
+  if (!token || !ownerId) return { delivered: false, error: "Telegram owner belum dikonfigurasi." };
+  const product = store2.data.products.find((item) => item.id === order.productId);
+  const plan = store2.data.plans.find((item) => item.id === order.planId);
+  const member = store2.data.members.find((item) => item.id === order.memberId);
+  const invoice = order.invoiceNumber ?? order.id;
+  const notification = buildPaymentProofNotification({
+    invoice,
+    buyer: `${member?.name ?? order.customerEmail ?? "Pembeli"} <${order.customerEmail ?? member?.email ?? "-"}>`,
+    product: product?.name ?? order.productName ?? order.productId,
+    plan: plan?.name ?? "-",
+    total: formatCurrency(order.totalAmount ?? order.amount),
+    source
+  }, `https://asistenq.com/?adminOrder=${encodeURIComponent(invoice)}`);
+  try {
+    const form = new FormData();
+    form.set("chat_id", ownerId);
+    form.set("caption", notification.caption);
+    form.set("reply_markup", JSON.stringify(notification.reply_markup));
+    form.set("photo", new Blob([fs3.readFileSync(filePath)]), path3.basename(filePath));
+    const response = await fetcher(`https://api.telegram.org/bot${token}/sendPhoto`, { method: "POST", body: form });
+    if (!response.ok) throw new Error(`Telegram HTTP ${response.status}`);
+    return { delivered: true };
+  } catch (error) {
+    const message2 = error instanceof Error ? error.message : "Telegram notification failed";
+    console.error(`Payment proof notification failed for ${invoice}: ${message2}`);
+    return { delivered: false, error: message2 };
+  }
+}
+
 // src/server/services.ts
 import bcrypt from "bcryptjs";
 import crypto3 from "crypto";
@@ -672,11 +733,11 @@ async function requestPasswordReset(store2, input) {
   });
   store2.save();
   const baseUrl = process.env.APP_URL ?? "http://127.0.0.1:4000";
-  const path9 = input.accountType === "admin" ? "/adminasistenq" : "/member";
+  const path10 = input.accountType === "admin" ? "/adminasistenq" : "/member";
   return {
     ok: true,
     expiresAt,
-    resetUrl: `${baseUrl}${path9}?reset=${token}&type=${input.accountType}`
+    resetUrl: `${baseUrl}${path10}?reset=${token}&type=${input.accountType}`
   };
 }
 async function resetPassword(store2, input) {
@@ -1684,8 +1745,8 @@ async function seedInitialData(store2) {
 }
 
 // src/server/store.ts
-import fs3 from "fs";
-import path3 from "path";
+import fs4 from "fs";
+import path4 from "path";
 var defaultQrisStaticPayload = "00020101021126570011ID.DANA.WWW011893600915303265462802090326546280303UMI51440014ID.CO.QRIS.WWW0215ID10265329452210303UMI5204504553033605802ID5905ZIQVA6011Kab. Malang6105651676304F3F6";
 var emptyData = () => ({
   admins: [],
@@ -1750,18 +1811,18 @@ function createMemoryStore(initialData = emptyData()) {
     }
   };
 }
-function createFileStore(filePath = path3.resolve("data/asistenq.json")) {
-  const dir = path3.dirname(filePath);
-  if (!fs3.existsSync(dir)) {
-    fs3.mkdirSync(dir, { recursive: true });
+function createFileStore(filePath = path4.resolve("data/asistenq.json")) {
+  const dir = path4.dirname(filePath);
+  if (!fs4.existsSync(dir)) {
+    fs4.mkdirSync(dir, { recursive: true });
   }
-  if (!fs3.existsSync(filePath)) {
-    fs3.writeFileSync(filePath, JSON.stringify(emptyData(), null, 2));
+  if (!fs4.existsSync(filePath)) {
+    fs4.writeFileSync(filePath, JSON.stringify(emptyData(), null, 2));
   }
   return {
-    data: normalizeData(JSON.parse(fs3.readFileSync(filePath, "utf-8"))),
+    data: normalizeData(JSON.parse(fs4.readFileSync(filePath, "utf-8"))),
     save() {
-      fs3.writeFileSync(filePath, JSON.stringify(this.data, null, 2));
+      fs4.writeFileSync(filePath, JSON.stringify(this.data, null, 2));
     },
     reset() {
       this.data = emptyData();
@@ -1773,20 +1834,20 @@ function createFileStore(filePath = path3.resolve("data/asistenq.json")) {
 // src/server/mailer.ts
 import net from "net";
 import tls from "tls";
-import fs4 from "fs";
-import path4 from "path";
+import fs5 from "fs";
+import path5 from "path";
 function readMailSettings() {
   try {
-    const filePath = path4.resolve("data/mail-settings.json");
-    return JSON.parse(fs4.readFileSync(filePath, "utf-8"));
+    const filePath = path5.resolve("data/mail-settings.json");
+    return JSON.parse(fs5.readFileSync(filePath, "utf-8"));
   } catch {
     return {};
   }
 }
 function readDeploymentMailSettings() {
   try {
-    const filePath = path4.resolve("data/asistenq.json");
-    const data = JSON.parse(fs4.readFileSync(filePath, "utf-8"));
+    const filePath = path5.resolve("data/asistenq.json");
+    const data = JSON.parse(fs5.readFileSync(filePath, "utf-8"));
     return data.deploymentSettings ?? {};
   } catch {
     return {};
@@ -1957,8 +2018,8 @@ function analyticsOverview(store2, now = /* @__PURE__ */ new Date()) {
 
 // src/server/telegram-commerce.ts
 import crypto5 from "crypto";
-import fs5 from "fs";
-import path5 from "path";
+import fs6 from "fs";
+import path6 from "path";
 function validatedDownloadSource(type, source) {
   if (type !== "download" || !source?.trim()) return void 0;
   const value = source.trim();
@@ -2029,10 +2090,10 @@ function deactivateTelegramProduct(store2, productId, actorTelegramId = "system"
 function attachTelegramDigitalFile(store2, productId, filePath, actorTelegramId = "system") {
   const product = store2.data.products.find((item) => item.id === productId);
   if (!product || product.fulfillmentType !== "download") throw new Error("produk bukan produk download");
-  const privateRoot = path5.resolve("data/digital-products");
-  const absolutePath = path5.resolve(filePath);
-  if (path5.dirname(absolutePath) !== privateRoot || path5.extname(absolutePath).toLowerCase() !== ".zip") throw new Error("path file digital tidak valid");
-  const signature = fs5.readFileSync(absolutePath).subarray(0, 4);
+  const privateRoot = path6.resolve("data/digital-products");
+  const absolutePath = path6.resolve(filePath);
+  if (path6.dirname(absolutePath) !== privateRoot || path6.extname(absolutePath).toLowerCase() !== ".zip") throw new Error("path file digital tidak valid");
+  const signature = fs6.readFileSync(absolutePath).subarray(0, 4);
   const zipSignature = signature.length === 4 && signature[0] === 80 && signature[1] === 75 && (signature[2] === 3 && signature[3] === 4 || signature[2] === 5 && signature[3] === 6 || signature[2] === 7 && signature[3] === 8);
   if (!zipSignature) throw new Error("file bukan ZIP yang valid");
   const updated = updateProductRecord(store2, productId, { downloadSourceUrl: absolutePath });
@@ -2204,8 +2265,8 @@ function listTelegramBuyerLicenses(store2, telegramId) {
 
 // src/server/digital-downloads.ts
 import crypto6 from "crypto";
-import fs6 from "fs";
-import path6 from "path";
+import fs7 from "fs";
+import path7 from "path";
 var hashToken = (token) => crypto6.createHash("sha256").update(token).digest("hex");
 function isPrivateHost(hostname) {
   const host = hostname.toLowerCase().replace(/^\[|\]$/g, "");
@@ -2217,11 +2278,11 @@ function isPrivateHost(hostname) {
   return host.includes("::ffff:127.") || host.startsWith("fc") || host.startsWith("fd") || host.startsWith("fe8") || host.startsWith("fe9") || host.startsWith("fea") || host.startsWith("feb");
 }
 function validateDownloadSource(source) {
-  if (path6.isAbsolute(source)) {
-    const root = path6.resolve("data/digital-products");
-    const resolved = path6.resolve(source);
-    if (resolved !== root && !resolved.startsWith(root + path6.sep)) throw new Error("path file lokal tidak diizinkan");
-    if (!fs6.existsSync(resolved) || !fs6.statSync(resolved).isFile()) throw new Error("file produk digital tidak tersedia");
+  if (path7.isAbsolute(source)) {
+    const root = path7.resolve("data/digital-products");
+    const resolved = path7.resolve(source);
+    if (resolved !== root && !resolved.startsWith(root + path7.sep)) throw new Error("path file lokal tidak diizinkan");
+    if (!fs7.existsSync(resolved) || !fs7.statSync(resolved).isFile()) throw new Error("file produk digital tidak tersedia");
     return { kind: "local", value: resolved };
   }
   let url;
@@ -2371,8 +2432,8 @@ function subscribersCsv(store2) {
 
 // src/server/product-media-storage.ts
 import crypto9 from "crypto";
-import fs7 from "fs";
-import path7 from "path";
+import fs8 from "fs";
+import path8 from "path";
 var allowed = /* @__PURE__ */ new Map([
   ["image/jpeg", { extensions: [".jpg", ".jpeg"], output: ".jpg", max: 8 * 1024 * 1024 }],
   ["image/png", { extensions: [".png"], output: ".png", max: 8 * 1024 * 1024 }],
@@ -2380,26 +2441,26 @@ var allowed = /* @__PURE__ */ new Map([
   ["video/mp4", { extensions: [".mp4"], output: ".mp4", max: 40 * 1024 * 1024 }],
   ["video/webm", { extensions: [".webm"], output: ".webm", max: 40 * 1024 * 1024 }]
 ]);
-var productMediaRoot = path7.resolve("data/product-media");
+var productMediaRoot = path8.resolve("data/product-media");
 function saveProductMedia(input) {
   if (!/^[A-Za-z0-9_-]+$/.test(input.productId)) throw new Error("product media id tidak valid");
   const rule = allowed.get(input.mimeType);
-  const extension = path7.extname(input.originalName).toLowerCase();
+  const extension = path8.extname(input.originalName).toLowerCase();
   if (!rule || !rule.extensions.includes(extension)) throw new Error("tipe file media tidak diizinkan");
   if (input.buffer.length > rule.max) throw new Error("ukuran file media terlalu besar");
-  const root = path7.resolve(input.root ?? productMediaRoot);
-  const directory = path7.join(root, input.productId);
-  fs7.mkdirSync(directory, { recursive: true });
+  const root = path8.resolve(input.root ?? productMediaRoot);
+  const directory = path8.join(root, input.productId);
+  fs8.mkdirSync(directory, { recursive: true });
   const fileName = `${crypto9.randomUUID()}${rule.output}`;
-  const absolutePath = path7.join(directory, fileName);
-  fs7.writeFileSync(absolutePath, input.buffer, { flag: "wx" });
+  const absolutePath = path8.join(directory, fileName);
+  fs8.writeFileSync(absolutePath, input.buffer, { flag: "wx" });
   return { absolutePath, relativePath: `${input.productId}/${fileName}`, bytes: input.buffer.length, mimeType: input.mimeType };
 }
 function removeProductMedia(relativePath, root = productMediaRoot) {
-  const base = path7.resolve(root);
-  const target = path7.resolve(base, relativePath);
-  if (!target.startsWith(base + path7.sep)) throw new Error("path media tidak valid");
-  fs7.rmSync(target, { force: true });
+  const base = path8.resolve(root);
+  const target = path8.resolve(base, relativePath);
+  if (!target.startsWith(base + path8.sep)) throw new Error("path media tidak valid");
+  fs8.rmSync(target, { force: true });
 }
 
 // src/server/index.ts
@@ -2408,20 +2469,20 @@ var isTest = process.env.VITEST === "true" || process.env.NODE_ENV === "test";
 var store = isTest ? createMemoryStore() : createFileStore();
 var port = Number(process.env.API_PORT ?? 4e3);
 var isProduction = process.env.NODE_ENV === "production";
-var publicDir = path8.resolve(process.cwd(), "dist");
-var hasBuiltFrontend = fs8.existsSync(path8.join(publicDir, "index.html"));
+var publicDir = path9.resolve(process.cwd(), "dist");
+var hasBuiltFrontend = fs9.existsSync(path9.join(publicDir, "index.html"));
 var shouldServeFrontend = isProduction || hasBuiltFrontend;
-var cpanelNodeBin = path8.join(process.env.HOME ?? "", "nodevenv/repositories/asistenq/20/bin");
+var cpanelNodeBin = path9.join(process.env.HOME ?? "", "nodevenv/repositories/asistenq/20/bin");
 if (!isProduction) {
   app.use(cors({ origin: ["http://127.0.0.1:3000", "http://localhost:3000"] }));
 }
 app.use(express.json());
-var landingImportDir = path8.resolve("data/landing-imports");
-var productAssetDir = path8.resolve("data/product-assets");
-var digitalProductDir = path8.resolve("data/digital-products");
-var paymentProofDir = path8.resolve("data/payment-proofs");
-var bundledLandingDir = path8.resolve("landings");
-var bundledToolDir = path8.resolve("tools-dist");
+var landingImportDir = path9.resolve("data/landing-imports");
+var productAssetDir = path9.resolve("data/product-assets");
+var digitalProductDir = path9.resolve("data/digital-products");
+var paymentProofDir = path9.resolve("data/payment-proofs");
+var bundledLandingDir = path9.resolve("landings");
+var bundledToolDir = path9.resolve("tools-dist");
 var retiredLandingPaths = /* @__PURE__ */ new Set(["/jadwalinaja"]);
 var ignoredLandingZipPaths = [
   /^node_modules\//,
@@ -2706,14 +2767,14 @@ async function runGitHubDeployUpdate(githubToken) {
   const settings2 = store.data.deploymentSettings ?? {};
   const { githubRepo, githubBranch } = parseDeploymentSettings(settings2);
   const remote = buildGitHubRemote(githubRepo, githubToken);
-  const hasLockfile = fs8.existsSync(path8.resolve("package-lock.json"));
+  const hasLockfile = fs9.existsSync(path9.resolve("package-lock.json"));
   const commandOptions = {
     cwd: process.cwd(),
     timeout: 18e4,
     maxBuffer: 1024 * 1024,
     env: {
       ...process.env,
-      PATH: fs8.existsSync(cpanelNodeBin) ? `${cpanelNodeBin}${path8.delimiter}${process.env.PATH ?? ""}` : process.env.PATH
+      PATH: fs9.existsSync(cpanelNodeBin) ? `${cpanelNodeBin}${path9.delimiter}${process.env.PATH ?? ""}` : process.env.PATH
     }
   };
   const results = [
@@ -2722,8 +2783,8 @@ async function runGitHubDeployUpdate(githubToken) {
     await runCommand("npm", deploymentAuditArgs(), commandOptions),
     await runCommand("npm", ["run", "build:hosting"], commandOptions)
   ];
-  fs8.mkdirSync(path8.resolve("tmp"), { recursive: true });
-  fs8.writeFileSync(path8.resolve("tmp/restart.txt"), (/* @__PURE__ */ new Date()).toISOString());
+  fs9.mkdirSync(path9.resolve("tmp"), { recursive: true });
+  fs9.writeFileSync(path9.resolve("tmp/restart.txt"), (/* @__PURE__ */ new Date()).toISOString());
   return {
     stdout: hideSecret(results.map((result) => result.stdout).join("\n"), githubToken),
     stderr: hideSecret(results.map((result) => result.stderr).join("\n"), githubToken)
@@ -2993,17 +3054,39 @@ app.post("/api/license/orders/:invoice/payment-proof", desktopPaymentProofUpload
     res.status(400).json({ message: req.file ? "Invoice tidak dapat menerima bukti." : "Bukti gambar wajib diunggah." });
     return;
   }
-  fs8.mkdirSync(paymentProofDir, { recursive: true });
+  fs9.mkdirSync(paymentProofDir, { recursive: true });
   const previousFile = order.paymentProofFileId;
   const extension = req.file.mimetype === "image/png" ? ".png" : req.file.mimetype === "image/webp" ? ".webp" : ".jpg";
   const fileName = `${order.id.replace(/[^a-zA-Z0-9_-]/g, "")}-${Date.now()}${extension}`;
-  fs8.writeFileSync(path8.join(paymentProofDir, fileName), req.file.buffer);
+  fs9.writeFileSync(path9.join(paymentProofDir, fileName), req.file.buffer);
   order.paymentProofFileId = fileName;
   order.paymentProofStatus = "submitted";
   order.paymentProofSubmittedAt = (/* @__PURE__ */ new Date()).toISOString();
   store.save();
   if (previousFile && previousFile !== fileName) removePaymentProof(paymentProofDir, previousFile);
+  void notifyOwnerOfPaymentProof(store, order, path9.join(paymentProofDir, fileName), "MIXIN9/Desktop");
   res.json(desktopOrderDto(order));
+});
+app.get("/api/telegram/confirm/:invoice", async (req, res) => {
+  const invoice = String(req.params.invoice);
+  if (!/^[A-Za-z0-9_-]+$/.test(invoice)) {
+    res.status(400).send("Invoice tidak valid.");
+    return;
+  }
+  const token = store.data.deploymentSettings?.telegramBotToken ?? process.env.TELEGRAM_BOT_TOKEN ?? "";
+  if (!token) {
+    res.status(503).send("Bot Telegram belum dikonfigurasi.");
+    return;
+  }
+  try {
+    const response = await fetch(`https://api.telegram.org/bot${token}/getMe`);
+    const result = await response.json();
+    const username = result.result?.username;
+    if (!response.ok || !result.ok || !username) throw new Error("username bot tidak tersedia");
+    res.redirect(`https://t.me/${username}?start=invoice_${invoice}`);
+  } catch {
+    res.status(503).send("Bot Telegram sedang tidak tersedia. Silakan coba lagi.");
+  }
 });
 app.get("/announcement", (_req, res) => {
   const product = store.data.products.find((item) => item.slug === "vjstudio");
@@ -3159,7 +3242,7 @@ app.get("/api/product-media/:productId/:fileName", (req, res) => {
     res.status(404).end();
     return;
   }
-  res.sendFile(path8.join(productMediaRoot, productId, fileName), (error) => {
+  res.sendFile(path9.join(productMediaRoot, productId, fileName), (error) => {
     if (error && !res.headersSent) res.status(404).end();
   });
 });
@@ -3458,7 +3541,7 @@ app.get("/api/profile-avatar/:memberFolder/:fileName", (req, res) => {
     res.status(404).end();
     return;
   }
-  res.sendFile(path8.join(productMediaRoot, memberFolder, fileName), (error) => {
+  res.sendFile(path9.join(productMediaRoot, memberFolder, fileName), (error) => {
     if (error && !res.headersSent) res.status(404).end();
   });
 });
@@ -3517,9 +3600,9 @@ app.post(
       return;
     }
     const safeSlug = product.slug.replace(/[^a-z0-9-]/g, "");
-    const targetDir = path8.join(landingImportDir, safeSlug);
-    fs8.rmSync(targetDir, { recursive: true, force: true });
-    fs8.mkdirSync(targetDir, { recursive: true });
+    const targetDir = path9.join(landingImportDir, safeSlug);
+    fs9.rmSync(targetDir, { recursive: true, force: true });
+    fs9.mkdirSync(targetDir, { recursive: true });
     const zip = new AdmZip(req.body);
     const entries = zip.getEntries();
     const hasBuiltDist = entries.some((entry) => normalizeZipEntryName(entry.entryName) === "dist/index.html");
@@ -3539,13 +3622,13 @@ app.post(
         res.status(400).json({ message: "ZIP terlalu besar: maksimal 300 file landing." });
         return;
       }
-      const outputPath = path8.resolve(targetDir, outputName);
+      const outputPath = path9.resolve(targetDir, outputName);
       if (!outputPath.startsWith(targetDir)) continue;
-      fs8.mkdirSync(path8.dirname(outputPath), { recursive: true });
-      fs8.writeFileSync(outputPath, entry.getData());
+      fs9.mkdirSync(path9.dirname(outputPath), { recursive: true });
+      fs9.writeFileSync(outputPath, entry.getData());
     }
-    if (!fs8.existsSync(path8.join(targetDir, "index.html"))) {
-      fs8.rmSync(targetDir, { recursive: true, force: true });
+    if (!fs9.existsSync(path9.join(targetDir, "index.html"))) {
+      fs9.rmSync(targetDir, { recursive: true, force: true });
       res.status(400).json({ message: "ZIP belum berisi landing siap pakai. Upload folder dist hasil build, atau ZIP yang punya index.html di root." });
       return;
     }
@@ -3587,10 +3670,10 @@ app.post(
       return;
     }
     const safeSlug = product.slug.replace(/[^a-z0-9-]/g, "");
-    const targetDir = path8.join(landingImportDir, safeSlug);
-    fs8.rmSync(targetDir, { recursive: true, force: true });
-    fs8.mkdirSync(targetDir, { recursive: true });
-    fs8.writeFileSync(path8.join(targetDir, "index.html"), html);
+    const targetDir = path9.join(landingImportDir, safeSlug);
+    fs9.rmSync(targetDir, { recursive: true, force: true });
+    fs9.mkdirSync(targetDir, { recursive: true });
+    fs9.writeFileSync(path9.join(targetDir, "index.html"), html);
     product.landingTemplate = "single-html";
     product.destinationType = "hosted";
     product.openMode = "same_tab";
@@ -3623,10 +3706,10 @@ app.post(
       res.status(400).json({ message: "Format gambar harus PNG, JPG, atau WEBP." });
       return;
     }
-    fs8.mkdirSync(productAssetDir, { recursive: true });
+    fs9.mkdirSync(productAssetDir, { recursive: true });
     const safeSlug = product.slug.replace(/[^a-z0-9-]/g, "") || product.id;
     const filename = `${safeSlug}-${Date.now()}.${extension}`;
-    fs8.writeFileSync(path8.join(productAssetDir, filename), req.body);
+    fs9.writeFileSync(path9.join(productAssetDir, filename), req.body);
     product.logoUrl = `/product-assets/${filename}`;
     product.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
     store.save();
@@ -3887,7 +3970,7 @@ var telegramPlanPatchSchema = z.object({
 var digitalProductUpload = multer({
   storage: multer.diskStorage({
     destination: (_req, _file, callback) => {
-      fs8.mkdirSync(digitalProductDir, { recursive: true });
+      fs9.mkdirSync(digitalProductDir, { recursive: true });
       callback(null, digitalProductDir);
     },
     filename: (_req, _file, callback) => callback(null, `${crypto10.randomUUID()}.zip`)
@@ -3895,7 +3978,7 @@ var digitalProductUpload = multer({
   limits: { fileSize: 50 * 1024 * 1024, files: 1 },
   fileFilter: (_req, file, callback) => {
     const zipMime = /* @__PURE__ */ new Set(["application/zip", "application/x-zip-compressed", "application/octet-stream"]);
-    callback(null, path8.extname(path8.basename(file.originalname)).toLowerCase() === ".zip" && zipMime.has(file.mimetype));
+    callback(null, path9.extname(path9.basename(file.originalname)).toLowerCase() === ".zip" && zipMime.has(file.mimetype));
   }
 });
 app.post("/api/bot/owner/products", (req, res) => {
@@ -3943,7 +4026,7 @@ app.post("/api/bot/owner/products/:id/digital-file", (req, res, next) => {
   try {
     res.json(publicProduct(attachTelegramDigitalFile(store, String(req.params.id), req.file.path, telegramUserId(req))));
   } catch (error) {
-    fs8.rmSync(req.file.path, { force: true });
+    fs9.rmSync(req.file.path, { force: true });
     res.status(400).json({ message: publicTelegramError(error, "File digital gagal disimpan.") });
   }
 });
@@ -3956,9 +4039,9 @@ app.get("/api/bot/owner/payment-proofs", (_req, res) => {
 });
 app.get("/api/bot/owner/payment-proofs/:invoice/file", (req, res) => {
   const order = store.data.orders.find((item) => item.invoiceNumber === String(req.params.invoice) || item.id === String(req.params.invoice));
-  const fileName = order?.paymentProofFileId ? path8.basename(order.paymentProofFileId) : "";
-  const filePath = fileName ? path8.join(paymentProofDir, fileName) : "";
-  if (!filePath || !fs8.existsSync(filePath)) {
+  const fileName = order?.paymentProofFileId ? path9.basename(order.paymentProofFileId) : "";
+  const filePath = fileName ? path9.join(paymentProofDir, fileName) : "";
+  if (!filePath || !fs9.existsSync(filePath)) {
     res.status(404).json({ message: "Bukti pembayaran tidak ditemukan." });
     return;
   }
@@ -4044,19 +4127,17 @@ app.post("/api/bot/license-generate", ...ownerBotMiddleware, (req, res) => {
     res.status(400).json({ message: message2 });
   }
 });
-app.get("/api/bot/owner/licenses/:id/delivery", ...ownerBotMiddleware, (req, res) => {
+app.get("/api/bot/owner/licenses/:id/delivery", ...ownerBotMiddleware, async (req, res) => {
   const license = store.data.licenses.find((item) => item.id === String(req.params.id));
   if (!license) {
     res.status(404).json({ message: "Lisensi tidak ditemukan." });
     return;
   }
   const email = license.email.trim().toLowerCase();
-  const member = store.data.members.find((item) => item.active && item.email === email && item.telegramId);
-  if (!member?.telegramId) {
-    res.status(404).json({ message: "Email pembeli belum terhubung ke Telegram." });
-    return;
-  }
-  res.json({ license, buyerTelegramId: member.telegramId });
+  const member = store.data.members.find((item) => item.active && item.email === email);
+  const order = store.data.orders.find((item) => item.id === license.orderId);
+  await emailLicense(license, order?.invoiceNumber);
+  res.json({ license, buyerTelegramId: member?.telegramId, emailed: true });
 });
 app.post("/api/bot/license-send", ...ownerBotMiddleware, (req, res) => {
   try {
@@ -4152,9 +4233,9 @@ app.get("/api/admin/orders", requireSession, requireAdminScope("orders"), (_req,
 });
 app.get("/api/admin/orders/:id/payment-proof", requireSession, requireAdminScope("orders"), (req, res) => {
   const order = store.data.orders.find((item) => item.id === String(req.params.id));
-  const fileName = order?.paymentProofFileId ? path8.basename(order.paymentProofFileId) : "";
-  const filePath = fileName ? path8.join(paymentProofDir, fileName) : "";
-  if (!filePath || !fs8.existsSync(filePath)) {
+  const fileName = order?.paymentProofFileId ? path9.basename(order.paymentProofFileId) : "";
+  const filePath = fileName ? path9.join(paymentProofDir, fileName) : "";
+  if (!filePath || !fs9.existsSync(filePath)) {
     res.status(404).json({ message: "Bukti pembayaran tidak ditemukan." });
     return;
   }
@@ -4191,6 +4272,7 @@ app.post("/api/admin/orders/:id/paid", requireSession, requireAdminScope("orders
     if (license) {
       result.order.licenseId = license.id;
       store.save();
+      void emailLicense(license, result.order.invoiceNumber ?? result.order.id);
     }
     res.json({ ok: true, order: publicOrder(result.order), subscription: result.subscription, license, fulfillment });
   } catch (error) {
@@ -4371,7 +4453,7 @@ app.get("/tool-presence.js", (_req, res) => {
   })();`);
 });
 function sendTrackedHtml(res, indexPath, productSlug) {
-  const source = fs8.readFileSync(indexPath, "utf8");
+  const source = fs9.readFileSync(indexPath, "utf8");
   const tracker = `<script src="/tool-presence.js" data-product-slug="${productSlug}"></script>`;
   const html = source.includes("</body>") ? source.replace("</body>", `${tracker}</body>`) : `${source}${tracker}`;
   res.type("html").send(html);
@@ -4399,8 +4481,8 @@ if (shouldServeFrontend) {
       sendProductAccessDenied(req, res, product);
       return;
     }
-    const toolIndexPath = path8.join(bundledToolDir, req.params.slug, "index.html");
-    if (product && fs8.existsSync(toolIndexPath)) {
+    const toolIndexPath = path9.join(bundledToolDir, req.params.slug, "index.html");
+    if (product && fs9.existsSync(toolIndexPath)) {
       sendTrackedHtml(res, toolIndexPath, product.slug);
       return;
     }
@@ -4412,7 +4494,7 @@ if (shouldServeFrontend) {
       sendProductAccessDenied(req, res, product);
       return;
     }
-    express.static(path8.join(bundledToolDir, req.params.slug))(req, res, next);
+    express.static(path9.join(bundledToolDir, req.params.slug))(req, res, next);
   });
   app.get(/^\/[a-z0-9-]+$/, (req, res, next) => {
     const product = store.data.products.find((item) => item.landingPath === req.path || `/${item.slug}` === req.path);
@@ -4425,16 +4507,16 @@ if (shouldServeFrontend) {
         sendProductAccessDenied(req, res, product);
         return;
       }
-      const toolIndexPath = path8.join(bundledToolDir, product.slug, "index.html");
-      if (fs8.existsSync(toolIndexPath)) {
+      const toolIndexPath = path9.join(bundledToolDir, product.slug, "index.html");
+      if (fs9.existsSync(toolIndexPath)) {
         sendTrackedHtml(res, toolIndexPath, product.slug);
         return;
       }
     }
-    const importedIndexPath = path8.join(landingImportDir, product.slug, "index.html");
-    const bundledIndexPath = path8.join(bundledLandingDir, product.slug, "index.html");
-    const indexPath = fs8.existsSync(importedIndexPath) ? importedIndexPath : bundledIndexPath;
-    if (!fs8.existsSync(indexPath)) {
+    const importedIndexPath = path9.join(landingImportDir, product.slug, "index.html");
+    const bundledIndexPath = path9.join(bundledLandingDir, product.slug, "index.html");
+    const indexPath = fs9.existsSync(importedIndexPath) ? importedIndexPath : bundledIndexPath;
+    if (!fs9.existsSync(indexPath)) {
       next();
       return;
     }
@@ -4442,7 +4524,7 @@ if (shouldServeFrontend) {
   });
   app.use(express.static(publicDir));
   app.get("*", (_req, res) => {
-    res.sendFile(path8.join(publicDir, "index.html"));
+    res.sendFile(path9.join(publicDir, "index.html"));
   });
 }
 if (!isTest) {
