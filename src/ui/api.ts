@@ -161,6 +161,7 @@ export type LicenseDashboardRow = ToolLicense & {
   plan?: Pick<ProductPlan, 'id' | 'code' | 'name' | 'price' | 'billingPeriod' | 'durationDays'> & { formattedPrice: string };
   activationUrl: string;
   verifyUrl: string;
+  resetQuota: { limit: number; remaining: number; nextAvailableAt: string | null };
 };
 export type AdminLicenseDashboard = {
   licenses: LicenseDashboardRow[];

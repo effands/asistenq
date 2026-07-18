@@ -3678,11 +3678,18 @@ textarea {
 .member-product-list { grid-template-columns: repeat(auto-fill, minmax(280px, 360px)); gap: 14px; align-items: start; }
 .member-product-cover { min-height: 150px; max-height: 180px; }
 .order-history-list { gap: 8px; }
+.member-order-tools { display: grid; grid-template-columns: minmax(220px, 1fr) auto auto; gap: 10px; align-items: center; }
+.member-order-tools > input { min-height: 42px; border: 1px solid var(--line); border-radius: 12px; padding: 0 13px; background: #fff; }
+.member-order-tools > small { color: var(--muted); white-space: nowrap; }
+.member-order-filters { display: flex; gap: 6px; flex-wrap: wrap; }
+.member-order-filters button { border: 1px solid var(--line); border-radius: 999px; background: #fff; padding: 8px 11px; font-weight: 700; }
+.member-order-filters button.active { border-color: #08735e; background: #08735e; color: #fff; }
+.member-order-filters span { opacity: .72; }
 .order-history-card { grid-template-columns: minmax(180px, 1.05fr) minmax(220px, 1.35fr) minmax(150px, .8fr) auto; min-height: 0; padding: 12px 15px; border-radius: 15px; }
 .order-history-actions { display: flex; flex-direction: row; gap: 7px; }
 
 @media (max-width: 900px) {
-  .license-list-tools, .member-profile-editor, .download-tool-card, .license-compact-detail { grid-template-columns: 1fr; }
+  .license-list-tools, .member-profile-editor, .download-tool-card, .license-compact-detail, .member-order-tools { grid-template-columns: 1fr; }
   .license-compact-summary { grid-template-columns: 1fr auto; }
   .license-compact-summary > code, .license-compact-summary > span:nth-child(3) { display: none; }
   .profile-form-grid, .download-steps { grid-template-columns: 1fr; }

@@ -85,6 +85,9 @@ describe('license services', () => {
     const updated = resetLicenseDevice(store, {
       licenseId: license.id,
       newHwid: 'new-hwid',
+      actorType: 'member',
+      actorId: 'member-1',
+      now: new Date('2026-06-29T00:00:00.000Z'),
       salt: 'vjstudio_secret_salt_2026_xyz'
     });
 
@@ -92,6 +95,59 @@ describe('license services', () => {
     expect(updated.key).not.toBe(oldKey);
     expect(store.data.bannedHwids.some((item) => item.hwid === 'OLD-HWID')).toBe(true);
     expect(updated.status).toBe('generated');
+    expect(updated.expiresAt).toBe(license.expiresAt);
+    expect(updated.resetQuota.remaining).toBe(1);
+    expect(store.data.licenseDeviceResetEvents).toMatchObject([{
+      licenseId: license.id, oldHwid: 'OLD-HWID', newHwid: 'NEW-HWID', actorType: 'member'
+    }]);
+  });
+
+  it('limits member device resets to two per rolling seven days', () => {
+    const license = generateToolLicense(store, {
+      productSlug: 'vjstudio', planCode: '1M', email: 'buyer@example.com', hwid: 'AAAAAAAAAAAAAAAA',
+      now: new Date('2026-06-28T00:00:00.000Z'), salt: 'vjstudio_secret_salt_2026_xyz'
+    });
+    resetLicenseDevice(store, {
+      licenseId: license.id, newHwid: 'BBBBBBBBBBBBBBBB', actorType: 'member', actorId: 'member-1',
+      now: new Date('2026-06-29T00:00:00.000Z')
+    });
+    const second = resetLicenseDevice(store, {
+      licenseId: license.id, newHwid: 'CCCCCCCCCCCCCCCC', actorType: 'member', actorId: 'member-1',
+      now: new Date('2026-06-30T00:00:00.000Z')
+    });
+    expect(second.resetQuota.remaining).toBe(0);
+    expect(second.resetQuota.nextAvailableAt).toBe('2026-07-06T00:00:00.000Z');
+
+    expect(() => resetLicenseDevice(store, {
+      licenseId: license.id, newHwid: 'DDDDDDDDDDDDDDDD', actorType: 'member', actorId: 'member-1',
+      now: new Date('2026-07-01T00:00:00.000Z')
+    })).toThrow('Batas reset perangkat 2 kali dalam 7 hari telah habis.');
+
+    expect(resetLicenseDevice(store, {
+      licenseId: license.id, newHwid: 'DDDDDDDDDDDDDDDD', actorType: 'member', actorId: 'member-1',
+      now: new Date('2026-07-06T00:00:00.001Z')
+    }).resetQuota.remaining).toBe(0);
+  });
+
+  it('does not consume member quota for unchanged HWID and does not limit admin resets', () => {
+    const license = generateToolLicense(store, {
+      productSlug: 'vjstudio', planCode: '1M', email: 'buyer@example.com', hwid: 'AAAAAAAAAAAAAAAA',
+      now: new Date('2026-06-28T00:00:00.000Z')
+    });
+    expect(() => resetLicenseDevice(store, {
+      licenseId: license.id, newHwid: 'AAAAAAAAAAAAAAAA', actorType: 'member', actorId: 'member-1',
+      now: new Date('2026-06-29T00:00:00.000Z')
+    })).toThrow('HWID baru harus berbeda.');
+    expect(store.data.licenseDeviceResetEvents).toHaveLength(0);
+
+    for (const [index, hwid] of ['BBBBBBBBBBBBBBBB', 'CCCCCCCCCCCCCCCC', 'DDDDDDDDDDDDDDDD'].entries()) {
+      resetLicenseDevice(store, {
+        licenseId: license.id, newHwid: hwid, actorType: 'admin', actorId: 'admin-1',
+        now: new Date(['2026-06-29T00:00:00.000Z', '2026-06-30T00:00:00.000Z', '2026-07-01T00:00:00.000Z'][index])
+      });
+    }
+    expect(store.data.licenseDeviceResetEvents).toHaveLength(3);
+    expect(store.data.licenseDeviceResetEvents.every((event) => event.actorType === 'admin')).toBe(true);
   });
 
   it('returns admin license dashboard rows with product and plan details', () => {
@@ -139,7 +195,8 @@ describe('license services', () => {
       email: 'buyer@example.com',
       product: { name: 'VJ Studio Pro', slug: 'vjstudio' },
       plan: { code: '1M' },
-      activationUrl: '/api/license/activate'
+      activationUrl: '/api/license/activate',
+      resetQuota: { limit: 2, remaining: 2, nextAvailableAt: null }
     });
   });
 

@@ -4,11 +4,13 @@ import {
   createAdmin,
   createCheckout,
   createLicenseCheckout,
+  canAccessLicenseOrder,
   createMember,
   createProductRecord,
   deleteProductRecord,
   formatInvoiceHtml,
   generateLicenseForPaidOrder,
+  generateToolLicense,
   expirePendingOrders,
   listPendingOrders,
   markOrderPaid,
@@ -431,14 +433,37 @@ describe('server services', () => {
       hwid: 'CA00E2C30BA61C8D', idempotencyKey: 'desktop-001'
     };
     const first = await createLicenseCheckout(store, input, new Date('2026-07-17T10:00:00.000Z'));
-    const second = await createLicenseCheckout(store, input, new Date('2026-07-17T10:01:00.000Z'));
+    const second = await createLicenseCheckout(store, {
+      ...input,
+      idempotencyKey: 'desktop-002'
+    }, new Date('2026-07-17T10:01:00.000Z'));
 
     expect(second.order.id).toBe(first.order.id);
     expect(first.accessToken).toBe(second.accessToken);
+    expect(canAccessLicenseOrder(second.order, second.accessToken)).toBe(true);
     expect(first.order.uniqueCode).toBeGreaterThanOrEqual(1);
     expect(first.order.uniqueCode).toBeLessThanOrEqual(99);
     expect(first.order.totalAmount).toBe(49900 + first.order.uniqueCode!);
     expect(first.order.customerHwid).toBe('CA00E2C30BA61C8D');
+  });
+
+  it('rejects desktop checkout when the same device already has a valid license', async () => {
+    const product = createProductRecord(store, {
+      name: 'VJ Studio Pro', slug: 'vjstudio', type: 'tool', billingPeriod: 'monthly', price: 49900
+    });
+    store.data.plans.push({
+      id: 'plan-vj-1m', productId: product.id, code: '1M', name: '1 Bulan', price: 49900,
+      billingPeriod: 'monthly', durationDays: 30, isFree: false, isActive: true
+    });
+    generateToolLicense(store, {
+      productSlug: 'vjstudio', planCode: '1M', email: 'buyer@example.com',
+      hwid: 'CA00E2C30BA61C8D', now: new Date('2026-07-17T09:00:00.000Z')
+    });
+
+    await expect(createLicenseCheckout(store, {
+      productSlug: 'vjstudio', planCode: '1M', email: 'buyer@example.com',
+      hwid: 'CA00E2C30BA61C8D', idempotencyKey: 'desktop-active'
+    }, new Date('2026-07-17T10:00:00.000Z'))).rejects.toThrow('Lisensi untuk perangkat ini masih aktif.');
   });
 
   it('resets member password with a valid reset token', async () => {

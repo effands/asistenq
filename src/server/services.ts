@@ -121,6 +121,21 @@ function productPlanRow(store: Store, plan: ProductPlan) {
   };
 }
 
+function licenseResetQuota(store: Store, licenseId: string, now = new Date()) {
+  const resetWindowMs = 7 * 24 * 60 * 60 * 1000;
+  const cutoff = now.getTime() - resetWindowMs;
+  const events = store.data.licenseDeviceResetEvents
+    .filter((event) => event.licenseId === licenseId && event.actorType === 'member' && new Date(event.createdAt).getTime() > cutoff)
+    .sort((left, right) => left.createdAt.localeCompare(right.createdAt));
+  return {
+    limit: 2,
+    remaining: Math.max(0, 2 - events.length),
+    nextAvailableAt: events.length >= 2
+      ? new Date(new Date(events[0].createdAt).getTime() + resetWindowMs).toISOString()
+      : null
+  };
+}
+
 function licenseDashboardRow(store: Store, license: ToolLicense) {
   const product = store.data.products.find((item) => item.id === license.productId);
   const plan = store.data.plans.find((item) => item.id === license.planId);
@@ -154,7 +169,8 @@ function licenseDashboardRow(store: Store, license: ToolLicense) {
         }
       : undefined,
     activationUrl: '/api/license/activate',
-    verifyUrl: '/api/license/verify'
+    verifyUrl: '/api/license/verify',
+    resetQuota: licenseResetQuota(store, license.id)
   };
 }
 
@@ -702,13 +718,23 @@ export async function createLicenseCheckout(store: Store, input: {
   const reusable = store.data.orders.find((item) => (
     item.productId === product.id &&
     item.planId === plan.id &&
-    item.idempotencyKey === idempotencyKey &&
     item.customerEmail === email &&
     item.customerHwid === hwid &&
     item.status === 'pending' &&
     Boolean(item.expiresAt && new Date(item.expiresAt) > now)
   ));
-  if (reusable) return { order: reusable, accessToken: orderAccessToken(reusable.id, idempotencyKey) };
+  if (reusable?.idempotencyKey) {
+    return { order: reusable, accessToken: orderAccessToken(reusable.id, reusable.idempotencyKey) };
+  }
+
+  const validLicense = hwid && store.data.licenses.some((license) => (
+    license.productId === product.id &&
+    license.email === email &&
+    license.hwid === hwid &&
+    (license.status === 'generated' || license.status === 'active') &&
+    (!license.expiresAt || new Date(`${license.expiresAt}T23:59:59.999Z`) >= now)
+  ));
+  if (validLicense) throw new Error('Lisensi untuk perangkat ini masih aktif.');
 
   let member = store.data.members.find((item) => item.email === email);
   if (!member) {
@@ -982,8 +1008,11 @@ export function unbanHwid(store: Store, input: {
 export function resetLicenseDevice(store: Store, input: {
   licenseId: string;
   newHwid: string;
+  actorType?: 'member' | 'admin';
+  actorId?: string;
+  now?: Date;
   salt?: string;
-}): ToolLicense {
+}): ToolLicense & { resetQuota: { limit: number; remaining: number; nextAvailableAt: string | null } } {
   const license = store.data.licenses.find((item) => item.id === input.licenseId);
 
   if (!license) {
@@ -992,7 +1021,19 @@ export function resetLicenseDevice(store: Store, input: {
 
   const oldHwid = license.hwid;
   if (oldHwid === normalizeHwid(input.newHwid)) {
-    throw new Error('new HWID must be different');
+    throw new Error('HWID baru harus berbeda.');
+  }
+
+  const now = input.now ?? new Date();
+  const actorType = input.actorType ?? 'admin';
+  const actorId = input.actorId ?? 'system-admin';
+  const resetWindowMs = 7 * 24 * 60 * 60 * 1000;
+  const cutoff = now.getTime() - resetWindowMs;
+  const recentMemberResets = store.data.licenseDeviceResetEvents
+    .filter((event) => event.licenseId === license.id && event.actorType === 'member' && new Date(event.createdAt).getTime() > cutoff)
+    .sort((left, right) => left.createdAt.localeCompare(right.createdAt));
+  if (actorType === 'member' && recentMemberResets.length >= 2) {
+    throw new Error('Batas reset perangkat 2 kali dalam 7 hari telah habis.');
   }
 
   const existingBan = store.data.bannedHwids.find((item) => (
@@ -1016,8 +1057,29 @@ export function resetLicenseDevice(store: Store, input: {
   });
   license.status = 'generated';
   delete license.activatedAt;
+  store.data.licenseDeviceResetEvents.push({
+    id: createId('reset'),
+    licenseId: license.id,
+    oldHwid,
+    newHwid: license.hwid,
+    actorType,
+    actorId,
+    createdAt: now.toISOString()
+  });
   store.save();
-  return license;
+  const memberEventsAfterReset = actorType === 'member'
+    ? [...recentMemberResets, store.data.licenseDeviceResetEvents.at(-1)!]
+    : recentMemberResets;
+  return {
+    ...license,
+    resetQuota: {
+      limit: 2,
+      remaining: Math.max(0, 2 - memberEventsAfterReset.length),
+      nextAvailableAt: memberEventsAfterReset.length >= 2
+        ? new Date(new Date(memberEventsAfterReset[0].createdAt).getTime() + resetWindowMs).toISOString()
+        : null
+    }
+  };
 }
 
 export function adminLicenseDashboard(store: Store) {

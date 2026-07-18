@@ -627,6 +627,16 @@ function productPlanRow(store2, plan) {
     formattedPrice: formatCurrency(plan.price)
   };
 }
+function licenseResetQuota(store2, licenseId, now = /* @__PURE__ */ new Date()) {
+  const resetWindowMs = 7 * 24 * 60 * 60 * 1e3;
+  const cutoff = now.getTime() - resetWindowMs;
+  const events = store2.data.licenseDeviceResetEvents.filter((event) => event.licenseId === licenseId && event.actorType === "member" && new Date(event.createdAt).getTime() > cutoff).sort((left, right) => left.createdAt.localeCompare(right.createdAt));
+  return {
+    limit: 2,
+    remaining: Math.max(0, 2 - events.length),
+    nextAvailableAt: events.length >= 2 ? new Date(new Date(events[0].createdAt).getTime() + resetWindowMs).toISOString() : null
+  };
+}
 function licenseDashboardRow(store2, license) {
   const product = store2.data.products.find((item) => item.id === license.productId);
   const plan = store2.data.plans.find((item) => item.id === license.planId);
@@ -652,7 +662,8 @@ function licenseDashboardRow(store2, license) {
       formattedPrice: formatCurrency(plan.price)
     } : void 0,
     activationUrl: "/api/license/activate",
-    verifyUrl: "/api/license/verify"
+    verifyUrl: "/api/license/verify",
+    resetQuota: licenseResetQuota(store2, license.id)
   };
 }
 async function createAdmin(store2, input) {
@@ -945,8 +956,12 @@ async function createLicenseCheckout(store2, input, now = /* @__PURE__ */ new Da
   const hwid = input.hwid ? normalizeHwid(input.hwid) : void 0;
   const idempotencyKey = input.idempotencyKey.trim();
   if (!idempotencyKey) throw new Error("idempotency key wajib diisi");
-  const reusable = store2.data.orders.find((item) => item.productId === product.id && item.planId === plan.id && item.idempotencyKey === idempotencyKey && item.customerEmail === email && item.customerHwid === hwid && item.status === "pending" && Boolean(item.expiresAt && new Date(item.expiresAt) > now));
-  if (reusable) return { order: reusable, accessToken: orderAccessToken(reusable.id, idempotencyKey) };
+  const reusable = store2.data.orders.find((item) => item.productId === product.id && item.planId === plan.id && item.customerEmail === email && item.customerHwid === hwid && item.status === "pending" && Boolean(item.expiresAt && new Date(item.expiresAt) > now));
+  if (reusable?.idempotencyKey) {
+    return { order: reusable, accessToken: orderAccessToken(reusable.id, reusable.idempotencyKey) };
+  }
+  const validLicense = hwid && store2.data.licenses.some((license) => license.productId === product.id && license.email === email && license.hwid === hwid && (license.status === "generated" || license.status === "active") && (!license.expiresAt || /* @__PURE__ */ new Date(`${license.expiresAt}T23:59:59.999Z`) >= now));
+  if (validLicense) throw new Error("Lisensi untuk perangkat ini masih aktif.");
   let member = store2.data.members.find((item) => item.email === email);
   if (!member) {
     member = await createMember(store2, {
@@ -1133,7 +1148,16 @@ function resetLicenseDevice(store2, input) {
   }
   const oldHwid = license.hwid;
   if (oldHwid === normalizeHwid(input.newHwid)) {
-    throw new Error("new HWID must be different");
+    throw new Error("HWID baru harus berbeda.");
+  }
+  const now = input.now ?? /* @__PURE__ */ new Date();
+  const actorType = input.actorType ?? "admin";
+  const actorId = input.actorId ?? "system-admin";
+  const resetWindowMs = 7 * 24 * 60 * 60 * 1e3;
+  const cutoff = now.getTime() - resetWindowMs;
+  const recentMemberResets = store2.data.licenseDeviceResetEvents.filter((event) => event.licenseId === license.id && event.actorType === "member" && new Date(event.createdAt).getTime() > cutoff).sort((left, right) => left.createdAt.localeCompare(right.createdAt));
+  if (actorType === "member" && recentMemberResets.length >= 2) {
+    throw new Error("Batas reset perangkat 2 kali dalam 7 hari telah habis.");
   }
   const existingBan = store2.data.bannedHwids.find((item) => item.productId === license.productId && item.hwid === oldHwid);
   if (!existingBan) {
@@ -1153,8 +1177,25 @@ function resetLicenseDevice(store2, input) {
   });
   license.status = "generated";
   delete license.activatedAt;
+  store2.data.licenseDeviceResetEvents.push({
+    id: createId("reset"),
+    licenseId: license.id,
+    oldHwid,
+    newHwid: license.hwid,
+    actorType,
+    actorId,
+    createdAt: now.toISOString()
+  });
   store2.save();
-  return license;
+  const memberEventsAfterReset = actorType === "member" ? [...recentMemberResets, store2.data.licenseDeviceResetEvents.at(-1)] : recentMemberResets;
+  return {
+    ...license,
+    resetQuota: {
+      limit: 2,
+      remaining: Math.max(0, 2 - memberEventsAfterReset.length),
+      nextAvailableAt: memberEventsAfterReset.length >= 2 ? new Date(new Date(memberEventsAfterReset[0].createdAt).getTime() + resetWindowMs).toISOString() : null
+    }
+  };
 }
 function adminLicenseDashboard(store2) {
   return {
@@ -1758,6 +1799,7 @@ var emptyData = () => ({
   vouchers: [],
   announcements: [],
   bannedHwids: [],
+  licenseDeviceResetEvents: [],
   orders: [],
   downloadGrants: [],
   subscriptions: [],
@@ -1785,6 +1827,7 @@ function normalizeData(data) {
     vouchers: data.vouchers ?? [],
     announcements: data.announcements ?? [],
     bannedHwids: data.bannedHwids ?? [],
+    licenseDeviceResetEvents: data.licenseDeviceResetEvents ?? [],
     orders: data.orders ?? [],
     downloadGrants: data.downloadGrants ?? [],
     subscriptions: data.subscriptions ?? [],
@@ -3352,7 +3395,11 @@ app.post("/api/license/generate", requireSession, requireAdminScope("products"),
 });
 app.post("/api/license/reset-device", requireSession, requireAdminScope("products"), (req, res) => {
   const body = resetLicenseSchema.parse(req.body);
-  res.json(resetLicenseDevice(store, body));
+  res.json(resetLicenseDevice(store, {
+    ...body,
+    actorType: "admin",
+    actorId: req.user?.id ?? "unknown-admin"
+  }));
 });
 app.post("/api/license/ban-hwid", requireSession, requireAdminScope("products"), (req, res) => {
   const body = hwidActionSchema.parse(req.body);
@@ -4419,14 +4466,19 @@ app.post("/api/member/licenses/:id/reset-device", requireSession, (req, res) => 
     res.status(403).json({ message: "member access required" });
     return;
   }
-  const body = z.object({ newHwid: z.string().min(8).max(32) }).parse(req.body);
+  const body = z.object({ newHwid: z.string().trim().regex(/^[A-Za-z0-9]{16}$/, "HWID harus tepat 16 karakter huruf/angka.") }).parse(req.body);
   const member = store.data.members.find((item) => item.id === req.user?.id);
   const license = store.data.licenses.find((item) => item.id === String(req.params.id));
   if (!member || !license || license.email !== member.email) {
     res.status(404).json({ message: "Lisensi tidak ditemukan di akun member ini." });
     return;
   }
-  res.json(resetLicenseDevice(store, { licenseId: license.id, newHwid: body.newHwid }));
+  res.json(resetLicenseDevice(store, {
+    licenseId: license.id,
+    newHwid: body.newHwid,
+    actorType: "member",
+    actorId: member.id
+  }));
 });
 app.use("/api", (error, _req, res, _next) => {
   const message2 = error instanceof z.ZodError ? error.issues.map((issue) => issue.message).join(", ") : error instanceof Error ? error.message : "Permintaan gagal diproses.";

@@ -1102,7 +1102,11 @@ app.post('/api/license/generate', requireSession, requireAdminScope('products'),
 
 app.post('/api/license/reset-device', requireSession, requireAdminScope('products'), (req, res) => {
   const body = resetLicenseSchema.parse(req.body);
-  res.json(resetLicenseDevice(store, body));
+  res.json(resetLicenseDevice(store, {
+    ...body,
+    actorType: 'admin',
+    actorId: req.user?.id ?? 'unknown-admin'
+  }));
 });
 
 app.post('/api/license/ban-hwid', requireSession, requireAdminScope('products'), (req, res) => {
@@ -2304,7 +2308,7 @@ app.post('/api/member/licenses/:id/reset-device', requireSession, (req, res) => 
     return;
   }
 
-  const body = z.object({ newHwid: z.string().min(8).max(32) }).parse(req.body);
+  const body = z.object({ newHwid: z.string().trim().regex(/^[A-Za-z0-9]{16}$/, 'HWID harus tepat 16 karakter huruf/angka.') }).parse(req.body);
   const member = store.data.members.find((item) => item.id === req.user?.id);
   const license = store.data.licenses.find((item) => item.id === String(req.params.id));
   if (!member || !license || license.email !== member.email) {
@@ -2312,7 +2316,12 @@ app.post('/api/member/licenses/:id/reset-device', requireSession, (req, res) => 
     return;
   }
 
-  res.json(resetLicenseDevice(store, { licenseId: license.id, newHwid: body.newHwid }));
+  res.json(resetLicenseDevice(store, {
+    licenseId: license.id,
+    newHwid: body.newHwid,
+    actorType: 'member',
+    actorId: member.id
+  }));
 });
 
 app.use('/api', (error: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {

@@ -31,6 +31,7 @@ import { paymentProofCleanupMessage, type PaymentProofCleanupResult } from './pa
 import { buildProductFulfillmentPatch, cleanOptionalProductUrls } from './product-form';
 import { addCartItem, readCart, removeCartItem, writeCart, type MarketplaceCartItem } from './cart-store';
 import { clearMemberSession, readMemberSession, writeMemberSession } from './member-session';
+import { filterMemberOrders, groupLicenseStatus, groupOrderStatus, type MemberOrderFilter } from './member-filters';
 import { ManagedContent, MarketplaceCart, MarketplaceHome, MarketplaceProductDetail } from './MarketplaceStorefront';
 import {
   apiRequest,
@@ -3135,6 +3136,8 @@ function MemberPanel({ session, products, dashboard, orders, onRegister, onLogin
   const [licenseStatusFilter, setLicenseStatusFilter] = useState('all');
   const [licensePage, setLicensePage] = useState(1);
   const [expandedLicense, setExpandedLicense] = useState('');
+  const [orderSearch, setOrderSearch] = useState('');
+  const [orderStatusFilter, setOrderStatusFilter] = useState<MemberOrderFilter>('all');
 
   useEffect(() => {
     if (!session) return;
@@ -3192,7 +3195,7 @@ function MemberPanel({ session, products, dashboard, orders, onRegister, onLogin
   const installerProducts = paidProducts.filter((product) => product.installerConfigured);
   const pendingOrders = orders.filter((order) => order.status === 'pending').length;
   const filteredLicenses = ownedLicenses.filter((license) => {
-    const matchesStatus = licenseStatusFilter === 'all' || license.status === licenseStatusFilter;
+    const matchesStatus = licenseStatusFilter === 'all' || groupLicenseStatus(license) === licenseStatusFilter;
     const query = licenseSearch.trim().toLowerCase();
     const matchesSearch = !query || `${license.product?.name ?? ''} ${license.plan?.name ?? ''} ${license.hwid} ${license.key}`.toLowerCase().includes(query);
     return matchesStatus && matchesSearch;
@@ -3200,6 +3203,13 @@ function MemberPanel({ session, products, dashboard, orders, onRegister, onLogin
   const licensePageSize = 10;
   const licensePages = Math.max(1, Math.ceil(filteredLicenses.length / licensePageSize));
   const visibleLicenses = filteredLicenses.slice((Math.min(licensePage, licensePages) - 1) * licensePageSize, Math.min(licensePage, licensePages) * licensePageSize);
+  const filteredOrders = filterMemberOrders(orders, orderStatusFilter, orderSearch);
+  const orderCounts = {
+    all: orders.length,
+    success: orders.filter((order) => groupOrderStatus(order) === 'success').length,
+    pending: orders.filter((order) => groupOrderStatus(order) === 'pending').length,
+    cancelled: orders.filter((order) => groupOrderStatus(order) === 'cancelled').length
+  };
 
   function toggleCart(productId: string) {
     setCartProductIds((current) => current.includes(productId)
@@ -3278,7 +3288,7 @@ function MemberPanel({ session, products, dashboard, orders, onRegister, onLogin
             {ownedLicenses.length > 0 && <div className="license-list-tools">
               <input value={licenseSearch} onChange={(event) => { setLicenseSearch(event.target.value); setLicensePage(1); }} placeholder="Cari produk, HWID, atau token..." />
               <select value={licenseStatusFilter} onChange={(event) => { setLicenseStatusFilter(event.target.value); setLicensePage(1); }}>
-                <option value="all">Semua status</option><option value="generated">Belum diaktivasi</option><option value="active">Aktif</option><option value="expired">Expired</option><option value="suspended">Ditangguhkan</option>
+                <option value="all">Semua status</option><option value="generated">Belum diaktivasi</option><option value="active">Aktif</option><option value="expired">Kedaluwarsa</option>
               </select>
               <span>{filteredLicenses.length} ditemukan</span>
             </div>}
@@ -3295,7 +3305,7 @@ function MemberPanel({ session, products, dashboard, orders, onRegister, onLogin
                   </button>
                   {open && <div className="license-compact-detail">
                     <div className="member-token-box"><small>Token Lisensi</small><code>{license.key}</code><button className="primary" onClick={() => navigator.clipboard.writeText(license.key)}>Copy Token</button></div>
-                    <div className="member-reset-box"><small>Reset lisensi ke device baru</small><input value={memberResetValues[license.id] ?? ''} onChange={(event) => setMemberResetValues((current) => ({ ...current, [license.id]: event.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '') }))} maxLength={16} placeholder="16 karakter HWID baru" /><button className="ghost-button" disabled={memberResetBusy === license.id || (memberResetValues[license.id]?.length ?? 0) !== 16} onClick={async () => { setMemberResetBusy(license.id); setLicenseNotice(''); try { await onResetLicense(license.id, memberResetValues[license.id]); setMemberResetValues((current) => ({ ...current, [license.id]: '' })); setLicenseNotice('Lisensi berhasil direset.'); } catch (error) { setLicenseNotice(error instanceof Error ? error.message : 'Reset lisensi gagal.'); } finally { setMemberResetBusy(''); } }}>Reset Lisensi</button></div>
+                    <div className="member-reset-box"><small>Reset lisensi ke device baru</small><b>Sisa reset minggu ini: {license.resetQuota?.remaining ?? 2} dari {license.resetQuota?.limit ?? 2}</b><small>HWID lama akan berhenti berlaku. Masa aktif lisensi tidak berubah.</small>{(license.resetQuota?.remaining ?? 2) === 0 && <small>Reset tersedia kembali {license.resetQuota.nextAvailableAt ? formatDate(license.resetQuota.nextAvailableAt) : 'setelah 7 hari'} atau hubungi admin.</small>}<input disabled={(license.resetQuota?.remaining ?? 2) === 0} value={memberResetValues[license.id] ?? ''} onChange={(event) => setMemberResetValues((current) => ({ ...current, [license.id]: event.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '') }))} maxLength={16} placeholder="16 karakter HWID baru" /><button className="ghost-button" disabled={(license.resetQuota?.remaining ?? 2) === 0 || memberResetBusy === license.id || (memberResetValues[license.id]?.length ?? 0) !== 16} onClick={async () => { setMemberResetBusy(license.id); setLicenseNotice(''); try { await onResetLicense(license.id, memberResetValues[license.id]); setMemberResetValues((current) => ({ ...current, [license.id]: '' })); setLicenseNotice('HWID berhasil diganti. Salin token terbaru dan aktifkan di perangkat baru.'); } catch (error) { setLicenseNotice(error instanceof Error ? error.message : 'Reset lisensi gagal.'); } finally { setMemberResetBusy(''); } }}>Reset Lisensi</button></div>
                   </div>}
                 </article>;
               })}
@@ -3354,8 +3364,16 @@ function MemberPanel({ session, products, dashboard, orders, onRegister, onLogin
               <span className="soft-badge">{orders.length} order</span>
             </div>
             {orders.length === 0 && <div className="empty-state">Belum ada order. Pilih produk dulu untuk membuat invoice.</div>}
+            {orders.length > 0 && <div className="member-order-tools">
+              <input value={orderSearch} onChange={(event) => setOrderSearch(event.target.value)} placeholder="Cari invoice atau produk..." />
+              <div className="member-order-filters">
+                {([['all', 'Semua'], ['success', 'Sukses'], ['pending', 'Pending'], ['cancelled', 'Dibatalkan']] as const).map(([value, label]) => <button key={value} className={orderStatusFilter === value ? 'active' : ''} onClick={() => setOrderStatusFilter(value)}>{label} <span>{orderCounts[value]}</span></button>)}
+              </div>
+              <small>{filteredOrders.length} ditemukan</small>
+            </div>}
+            {orders.length > 0 && filteredOrders.length === 0 && <div className="empty-state">Tidak ada invoice yang cocok dengan filter ini.</div>}
             <div className="order-history-list">
-              {orders.map((order) => (
+              {filteredOrders.map((order) => (
                 <article className="order-history-card" key={order.id}>
                   <div className="order-history-invoice">
                     <span className={`status-dot status-${order.status}`}>{order.status}</span>

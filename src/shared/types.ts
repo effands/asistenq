@@ -210,6 +210,16 @@ export interface BannedHwid {
   createdAt: string;
 }
 
+export interface LicenseDeviceResetEvent {
+  id: string;
+  licenseId: string;
+  oldHwid: string;
+  newHwid: string;
+  actorType: 'member' | 'admin';
+  actorId: string;
+  createdAt: string;
+}
+
 export interface Order {
   id: string;
   memberId: string;
@@ -353,6 +363,7 @@ export interface DatabaseShape {
   vouchers: Voucher[];
   announcements: ProductAnnouncement[];
   bannedHwids: BannedHwid[];
+  licenseDeviceResetEvents: LicenseDeviceResetEvent[];
   orders: Order[];
   downloadGrants: DownloadGrant[];
   subscriptions: Subscription[];
