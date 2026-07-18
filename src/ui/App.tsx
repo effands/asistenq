@@ -4,6 +4,8 @@ import {
   BookOpen,
   Boxes,
   CheckCircle2,
+  ChevronDown,
+  Copy,
   CreditCard,
   Download,
   ExternalLink,
@@ -14,10 +16,12 @@ import {
   LayoutDashboard,
   LogIn,
   LogOut,
+  Mail,
   Monitor,
   PackagePlus,
   PlayCircle,
   RefreshCw,
+  Search,
   ShieldCheck,
   ShoppingCart,
   Sparkles,
@@ -3138,6 +3142,9 @@ function MemberPanel({ session, products, dashboard, orders, onRegister, onLogin
   const [expandedLicense, setExpandedLicense] = useState('');
   const [orderSearch, setOrderSearch] = useState('');
   const [orderStatusFilter, setOrderStatusFilter] = useState<MemberOrderFilter>('all');
+  const [helpSearch, setHelpSearch] = useState('');
+  const [openHelpFaq, setOpenHelpFaq] = useState(0);
+  const [helpNotice, setHelpNotice] = useState('');
 
   useEffect(() => {
     if (!session) return;
@@ -3210,6 +3217,19 @@ function MemberPanel({ session, products, dashboard, orders, onRegister, onLogin
     pending: orders.filter((order) => groupOrderStatus(order) === 'pending').length,
     cancelled: orders.filter((order) => groupOrderStatus(order) === 'cancelled').length
   };
+  const helpFaqItems = [
+    { question: 'Apakah saya harus membeli sebelum download?', answer: 'Tidak. Buka menu Download, pasang aplikasi, lalu lihat HWID perangkat Anda sebelum membeli lisensi.' },
+    { question: 'Di mana saya menemukan HWID?', answer: 'Jalankan aplikasi pada komputer tujuan, buka halaman Lisensi, lalu salin Device ID atau HWID yang terdiri dari 16 karakter.' },
+    { question: 'Pembayaran sudah disetujui, langkah berikutnya apa?', answer: 'Buka Pesanan, masukkan HWID pada invoice berstatus sukses, lalu token akan tersedia otomatis di menu Lisensi.' },
+    { question: 'Bagaimana jika saya pindah komputer?', answer: 'Buka Lisensi, pilih Detail, lalu gunakan Reset Lisensi. Setiap lisensi mendapat maksimal 2 kali reset dalam 7 hari.' },
+    { question: 'Token tidak bisa diaktifkan, apa yang harus diperiksa?', answer: 'Pastikan token disalin lengkap, HWID aplikasi sama dengan HWID lisensi, dan masa aktif lisensi belum berakhir.' }
+  ];
+  const visibleHelpFaq = helpFaqItems.filter((item) => `${item.question} ${item.answer}`.toLowerCase().includes(helpSearch.trim().toLowerCase()));
+
+  async function copySupportEmail(email: string) {
+    await navigator.clipboard.writeText(email);
+    setHelpNotice(`${email} berhasil disalin.`);
+  }
 
   function toggleCart(productId: string) {
     setCartProductIds((current) => current.includes(productId)
@@ -3255,17 +3275,18 @@ function MemberPanel({ session, products, dashboard, orders, onRegister, onLogin
           </section>}
 
           {activeMemberTab === 'dashboard' && (
-            <section className="member-owned-overview">
-              <div className="member-section-heading"><div><h2><Boxes /> Produk & Tools Saya</h2><p>Semua produk digital yang sudah aktif di akunmu.</p></div><button onClick={() => setActiveMemberTab('products')}>Lihat Semua <ArrowRight /></button></div>
+            <section className="member-quick-access">
+              <div className="member-section-heading"><div><p className="section-kicker">Akses Cepat</p><h2>Produk aktif</h2><p>Lanjutkan pekerjaan tanpa perlu mencari ulang.</p></div><button onClick={() => setActiveMemberTab('products')}>Lihat library <ArrowRight /></button></div>
               {ownedProducts.length === 0 ? <div className="empty-state">Belum ada produk aktif. Pilih produk dari Marketplace untuk memulai.</div> : (
-                <div className="member-owned-grid">
-                  {ownedProducts.slice(0, 4).map((product) => (
-                    <article className="member-owned-card" key={product.id}>
-                      <div className="member-owned-cover">{product.coverUrl ? <img src={product.coverUrl} alt="" /> : productIcon(product)}<span>{product.category}</span></div>
-                      <div><h3>{product.name}</h3><p>{product.headline}</p><small>{product.type}</small></div>
-                      <footer><b>Aktif</b><button onClick={() => setActiveMemberTab('products')}>Buka <ArrowRight /></button></footer>
-                    </article>
-                  ))}
+                <div className="member-quick-grid">
+                  {ownedProducts.slice(0, 4).map((product) => {
+                    const license = ownedLicenses.find((item) => item.productId === product.id);
+                    return <button className="member-quick-card" key={product.id} onClick={() => setActiveMemberTab(product.fulfillmentType === 'license' ? 'licenses' : 'products')}>
+                      <span className="member-quick-cover">{product.coverUrl ? <img src={product.coverUrl} alt="" /> : productIcon(product)}</span>
+                      <span className="member-quick-copy"><small>{product.category}</small><strong>{product.name}</strong><span>{license ? `Lisensi hingga ${formatDate(license.expiresAt)}` : 'Akses aktif di akunmu'}</span></span>
+                      <span className="member-quick-action">Buka <ArrowRight /></span>
+                    </button>;
+                  })}
                 </div>
               )}
             </section>
@@ -3324,16 +3345,19 @@ function MemberPanel({ session, products, dashboard, orders, onRegister, onLogin
                 <h2>Produk Saya</h2>
                 <p className="muted">Download, buka aplikasi, dan akses materi course dari satu tempat.</p>
               </div>
+              <span className="soft-badge">{ownedProducts.length} produk aktif</span>
             </div>
             {ownedProducts.length === 0 && <div className="empty-state">Belum ada produk aktif di akun ini. Buka Marketplace untuk membeli produk.</div>}
-            <div className="member-product-list">
-              {ownedProducts.map((product) => (
-                <article className="member-product-card" key={product.id}>
+            <div className="member-product-library">
+              {ownedProducts.map((product) => {
+                const license = ownedLicenses.find((item) => item.productId === product.id);
+                return <article className="member-product-card" key={product.id}>
                   <div className="member-product-cover">{product.coverUrl ? <img src={product.coverUrl} alt="" /> : productIcon(product)}<span>{product.category}</span></div>
-                  <strong>{product.name}</strong>
-                  <small>{product.headline}</small>
+                  <div className="member-product-content"><strong>{product.name}</strong><small>{product.headline}</small>
+                    <div className="member-product-meta"><span><BadgeCheck /> Akses aktif</span><span>{license ? `Berakhir ${formatDate(license.expiresAt)}` : product.type}</span></div>
+                  </div>
                   <div className="member-product-footer">
-                    <b>Aktif di akunmu</b>
+                    <b>{license ? licenseStatusLabel(license) : 'Siap digunakan'}</b>
                     <div className="member-product-actions">
                       <button className="ghost-button" type="button" onClick={() => {
                         if (product.fulfillmentType === 'license') setActiveMemberTab('licenses');
@@ -3348,8 +3372,8 @@ function MemberPanel({ session, products, dashboard, orders, onRegister, onLogin
                       </button>
                     </div>
                   </div>
-                </article>
-              ))}
+                </article>;
+              })}
             </div>
             {checkoutNotice && <p className="form-notice">{checkoutNotice}</p>}
           </div>
@@ -3540,46 +3564,25 @@ function MemberPanel({ session, products, dashboard, orders, onRegister, onLogin
         )}
 
         {activeMemberTab === 'help' && (
-          <div className="panel stack member-help-panel">
-            <p className="section-kicker">Pusat Bantuan</p>
-            <h2>Tata cara order, aktivasi lisensi, dan akses materi.</h2>
-            <div className="help-guide-grid">
-              <article className="help-guide-card">
-                <strong>Download dan mendapatkan HWID</strong>
-                <span>1. Buka menu Download — tidak perlu membeli lisensi lebih dahulu.</span>
-                <span>2. Download VJ Studio dari folder resmi AsistenQ.</span>
-                <span>3. Ekstrak file bila masih berbentuk ZIP, lalu jalankan `vjstudio.exe`.</span>
-                <span>4. Pada halaman aktivasi aplikasi, cari Device ID / HWID.</span>
-                <span>5. Salin tepat 16 karakter HWID dan simpan. HWID berbeda untuk setiap perangkat.</span>
-              </article>
-              <article className="help-guide-card">
-                <strong>Order dan mendapatkan lisensi</strong>
-                <span>1. Pilih produk dan paket, lalu checkout tanpa mengisi HWID.</span>
-                <span>2. Bayar QRIS sesuai total dan kode unik pada invoice.</span>
-                <span>3. Setelah pembayaran disetujui, buka menu Pesanan.</span>
-                <span>4. Masukkan HWID 16 karakter pada order berstatus paid.</span>
-                <span>5. Token lisensi langsung tersedia di menu Lisensi.</span>
-              </article>
-              <article className="help-guide-card">
-                <strong>Aktivasi di aplikasi</strong>
-                <span>1. Buka menu Lisensi dan cari nama produk atau HWID.</span>
-                <span>2. Buka Detail lalu klik Copy Token.</span>
-                <span>3. Kembali ke VJ Studio dan tempel token pada kolom aktivasi.</span>
-                <span>4. Pastikan HWID aplikasi sama dengan HWID pada lisensi.</span>
-                <span>5. Jika berpindah komputer, gunakan Reset Lisensi pada detail lisensi.</span>
-              </article>
-              <article className="help-guide-card">
-                <strong>Catatan keamanan</strong>
-                <span>Jangan membagikan token lisensi kepada orang lain.</span>
-                <span>Gunakan link download resmi dari menu Download.</span>
-                <span>WhatsApp dan Telegram pada Profil bersifat opsional untuk memudahkan bantuan.</span>
-                <span>Hubungi Customer Service bila HWID tidak tampil atau aktivasi gagal.</span>
-              </article>
-            </div>
-            <div className="help-contact-box">
-              <strong>Customer Service</strong>
-              <a href="mailto:cs@ziqva.com">cs@ziqva.com</a>
-              <a href="mailto:cs@asistenq.com">cs@asistenq.com</a>
+          <div className="member-help-panel">
+            <header className="help-center-hero"><div><p className="section-kicker">Pusat Bantuan</p><h2>Ada yang bisa kami bantu?</h2><p>Ikuti alur singkat atau cari jawaban tentang download, pembayaran, HWID, dan lisensi.</p></div>
+              <label className="help-center-search"><Search /><input value={helpSearch} onChange={(event) => setHelpSearch(event.target.value)} placeholder="Cari bantuan, misalnya: pindah device" /></label>
+            </header>
+            <section className="help-stepper" aria-label="Alur aktivasi lisensi">
+              <button onClick={() => setActiveMemberTab('download')}><b>1</b><span><small>Langkah pertama</small><strong>Download aplikasi</strong><em>Pasang dan lihat HWID</em></span><ArrowRight /></button>
+              <button onClick={() => setActiveMemberTab('orders')}><b>2</b><span><small>Setelah checkout</small><strong>Bayar invoice</strong><em>Bayar persis dengan kode unik</em></span><ArrowRight /></button>
+              <button onClick={() => setActiveMemberTab('licenses')}><b>3</b><span><small>Setelah disetujui</small><strong>Aktifkan lisensi</strong><em>Salin token ke aplikasi</em></span><ArrowRight /></button>
+            </section>
+            <div className="help-content-grid">
+              <section className="help-faq-section"><div className="help-section-title"><div><p className="section-kicker">Jawaban Cepat</p><h3>Pertanyaan yang sering ditanyakan</h3></div><span>{visibleHelpFaq.length} topik</span></div>
+                <div className="help-faq-list">{visibleHelpFaq.map((item, index) => <article className={`help-faq-item ${openHelpFaq === index ? 'open' : ''}`} key={item.question}><button aria-expanded={openHelpFaq === index} onClick={() => setOpenHelpFaq(openHelpFaq === index ? -1 : index)}><span>{item.question}</span><ChevronDown /></button>{openHelpFaq === index && <p>{item.answer}</p>}</article>)}</div>
+                {visibleHelpFaq.length === 0 && <div className="empty-state">Belum ada jawaban yang cocok. Hubungi tim support di samping.</div>}
+              </section>
+              <aside className="help-support-panel"><p className="section-kicker">Butuh bantuan langsung?</p><h3>Tim support siap membantu</h3><p>Sertakan nama produk, nomor invoice, dan screenshot kendala agar pemeriksaan lebih cepat.</p>
+                <div className="help-contact-grid">{['cs@asistenq.com', 'cs@ziqva.com'].map((email) => <article className="help-contact-card" key={email}><span><Mail /></span><div><small>Email support</small><strong>{email}</strong></div><a href={`mailto:${email}`} aria-label={`Kirim email ke ${email}`}><ArrowRight /></a><button onClick={() => void copySupportEmail(email)} aria-label={`Salin ${email}`}><Copy /></button></article>)}</div>
+                <div className="help-security-note"><ShieldCheck /><span><strong>Jaga keamanan akun</strong><small>Jangan pernah mengirim password atau membagikan token lisensi.</small></span></div>
+                {helpNotice && <p className="form-notice">{helpNotice}</p>}
+              </aside>
             </div>
           </div>
         )}
