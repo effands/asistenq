@@ -30,6 +30,10 @@ class TelegramKeyboardMigrationTests(unittest.TestCase):
 
 
 class TelegramCommerceTests(unittest.TestCase):
+    def test_buyer_username_is_not_used_as_telegram_chat_id(self):
+        self.assertIsNone(BOT.telegram_chat_id("effands"))
+        self.assertEqual(BOT.telegram_chat_id("2002"), 2002)
+
     def test_invoice_start_payload_opens_matching_buyer_proof_flow(self):
         orders = {"orders": [{"invoiceNumber": "INV-20260718-0010", "status": "pending"}]}
         with patch.object(BOT, "api", return_value=orders) as api, patch.object(BOT, "set_pending") as pending, patch.object(BOT, "send") as send:

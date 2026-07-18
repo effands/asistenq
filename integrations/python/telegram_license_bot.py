@@ -193,6 +193,11 @@ def is_owner(chat_id: Any) -> bool:
     return str(chat_id) == OWNER_ID
 
 
+def telegram_chat_id(value: Any) -> Optional[int]:
+    normalized = str(value or "").strip()
+    return int(normalized) if normalized.isdigit() else None
+
+
 def buyer_menu() -> Dict[str, Any]:
     return keyboard([
         [{"text": "🛍️ Lihat Produk", "callback_data": "shop"}],
@@ -771,9 +776,9 @@ def handle_pending_text(chat_id: int, text: str) -> bool:
             send(chat_id, "Alasan penolakan wajib diisi.")
             return True
         result = api(f"/bot/owner/payment-proofs/{invoice}/review", "POST", {"decision": "reject", "reason": value})
-        buyer_id = result.get("buyerTelegramId")
-        if buyer_id:
-            send(int(buyer_id), f"Bukti pembayaran {invoice} ditolak. Alasan: {value}", buyer_menu())
+        buyer_id = telegram_chat_id(result.get("buyerTelegramId"))
+        if buyer_id is not None:
+            send(buyer_id, f"Bukti pembayaran {invoice} ditolak. Alasan: {value}", buyer_menu())
         send(chat_id, f"Bukti {invoice} ditolak.", main_menu())
         return True
     if action == "await_ban_hwid":
@@ -927,10 +932,10 @@ def handle_callback(chat_id: int, callback_id: str, data: str) -> None:
     if data.startswith("proof_ok:"):
         invoice = data.split(":", 1)[1]
         result = api(f"/bot/owner/payment-proofs/{invoice}/review", "POST", {"decision": "approve"})
-        buyer_id = result.get("buyerTelegramId")
+        buyer_id = telegram_chat_id(result.get("buyerTelegramId"))
         if buyer_id and result.get("fulfillmentType") == "download" and result.get("download"):
             download = result["download"]
-            send(int(buyer_id), f"Pembayaran {invoice} disetujui. Link berlaku sampai {download.get('expiresAt')} dan maksimal {download.get('remainingDownloads')} kali.", keyboard([
+            send(buyer_id, f"Pembayaran {invoice} disetujui. Link berlaku sampai {download.get('expiresAt')} dan maksimal {download.get('remainingDownloads')} kali.", keyboard([
                 [{"text": "📥 Download Sekarang", "url": download["downloadUrl"]}],
                 [{"text": "🏠 Menu", "callback_data": "menu"}],
             ]))
@@ -942,7 +947,7 @@ def handle_callback(chat_id: int, callback_id: str, data: str) -> None:
             ]))
             return
         elif buyer_id and result.get("fulfillmentType") != "download":
-            send(int(buyer_id), f"Pembayaran {invoice} disetujui. Masukkan HWID untuk membuat lisensi.", keyboard([
+            send(buyer_id, f"Pembayaran {invoice} disetujui. Masukkan HWID untuk membuat lisensi.", keyboard([
                 [{"text": "🔑 Masukkan HWID", "callback_data": f"paid_hwid:{invoice}"}],
                 [{"text": "🏠 Menu", "callback_data": "menu"}],
             ]))
@@ -1023,10 +1028,10 @@ def handle_callback(chat_id: int, callback_id: str, data: str) -> None:
     if data.startswith("direct_send:"):
         license_id = data.split(":", 1)[1]
         result = api(f"/bot/owner/licenses/{license_id}/delivery")
-        buyer_id = str(result.get("buyerTelegramId") or "")
+        buyer_id = telegram_chat_id(result.get("buyerTelegramId"))
         license_data = result.get("license", {})
-        if buyer_id:
-            send(int(buyer_id), "Lisensi Anda telah dibuat\n" + direct_license_result_text(license_data), buyer_menu())
+        if buyer_id is not None:
+            send(buyer_id, "Lisensi Anda telah dibuat\n" + direct_license_result_text(license_data), buyer_menu())
             send(chat_id, f"Lisensi dikirim ke email dan Telegram pembeli {buyer_id}.", main_menu())
         else:
             send(chat_id, f"Lisensi dikirim ke email {license_data.get('email', '-')}.", main_menu())
