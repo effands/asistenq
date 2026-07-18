@@ -942,7 +942,7 @@ def handle_callback(chat_id: int, callback_id: str, data: str) -> None:
         elif result.get("license"):
             license_data = result["license"]
             send(chat_id, f"Pembayaran {invoice} disetujui. Lisensi sudah digenerate dan siap dikirim.", keyboard([
-                [{"text": "🚀 Generate & Kirim Lisensi", "callback_data": f"direct_send:{license_data.get('id')}"}],
+                [{"text": "📨 Kirim Lisensi ke Pembeli", "callback_data": f"direct_send:{license_data.get('id')}"}],
                 [{"text": "🔍 Detail", "callback_data": f"order:{invoice}"}],
             ]))
             return

@@ -191,7 +191,7 @@ class TelegramCommerceTests(unittest.TestCase):
             BOT.handle_callback(87394692, "cb", "proof_ok:INV-L")
         owner_call = next(call for call in send.call_args_list if str(call.args[0]) == "87394692")
         button = owner_call.args[2]["inline_keyboard"][0][0]
-        self.assertEqual(button["text"], "🚀 Generate & Kirim Lisensi")
+        self.assertEqual(button["text"], "📨 Kirim Lisensi ke Pembeli")
         self.assertEqual(button["callback_data"], "direct_send:license-1")
 
     def test_owner_product_wizard_reaches_confirmation(self):
