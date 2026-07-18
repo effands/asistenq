@@ -11,6 +11,7 @@ import { clearSessionCookie, readSession, sessionCookie, signSession, requireAdm
 import { getTelegramBotStatus, startTelegramBot, stopTelegramBot } from './bot-control';
 import { buildGitHubRemote, deploymentAuditArgs, deploymentInstallArgs, deploymentPullArgs, parseDeploymentSettings, runCommand, schedulePassengerRestart } from './deploy';
 import { clearPaymentProofDirectory, removePaymentProof } from './payment-proof-storage';
+import { notifyOwnerOfPaymentProof } from './payment-proof-notifications';
 import { seedInitialData } from './seed';
 import {
   adminLicenseDashboard,
@@ -753,6 +754,7 @@ app.post('/api/license/orders/:invoice/payment-proof', desktopPaymentProofUpload
   order.paymentProofSubmittedAt = new Date().toISOString();
   store.save();
   if (previousFile && previousFile !== fileName) removePaymentProof(paymentProofDir, previousFile);
+  void notifyOwnerOfPaymentProof(store, order, path.join(paymentProofDir, fileName), 'MIXIN9/Desktop');
   res.json(desktopOrderDto(order));
 });
 
