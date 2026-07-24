@@ -1,4 +1,4 @@
 @echo off
 git add .
-git commit -m "fix: restore map closing parenthesis in App.tsx"
+git commit -m "fix: align validateCart parameters and adminSession prop references"
 git push origin master

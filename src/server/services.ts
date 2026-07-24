@@ -654,8 +654,11 @@ export async function createCartCheckout(
 ): Promise<Order> {
   return serializeCheckout(store, async () => {
     const member = store.data.members.find((item) => item.id === memberId);
-    if (!member) throw new Error('member not found');
-    const { items, amount } = validateCart(store, input.items, input.voucherCode);
+    const { items, amount } = validateCart(store, {
+      items: input.items.map((item) => ({ productId: item.productId, planId: item.planId ?? '' })),
+      voucherCode: input.voucherCode,
+      customerHwid: input.customerHwid
+    }, now);
     const uniqueCode = amount > 0 ? allocateUniquePaymentCode(store, now) : 0;
     const totalAmount = amount + uniqueCode;
     const invoiceNumber = `INV-${now.toISOString().slice(0, 10).replace(/-/g, '')}-${String(store.data.orders.length + 1).padStart(4, '0')}`;

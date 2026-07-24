@@ -2184,12 +2184,12 @@ function DeployPanel({ settings, adminSession, onDeployUpdate, onRefreshBotStatu
         <p className="form-helper">Callback Webhook URL untuk didaftarkan di dashboard SakuRupiah: <code>{window.location.origin}/api/payments/sakurupiah/callback</code></p>
         <div className="bot-control-actions" style={{ marginTop: '12px' }}>
           <button className="primary" disabled={saving}>{saving ? 'Menyimpan...' : 'Simpan Setting SakuRupiah'}</button>
-          <button className="ghost-button tiny-button" type="button" disabled={checkingBalance || !adminToken} onClick={async () => {
-            if (!adminToken) return;
+          <button className="ghost-button tiny-button" type="button" disabled={checkingBalance || !adminSession} onClick={async () => {
+            if (!adminSession) return;
             setCheckingBalance(true);
             setSakuRupiahNotice('Mengecek saldo SakuRupiah...');
             try {
-              const res = await apiRequest<{ ok: boolean; data: { merchantName: string; balance: string; availableBalance: string } }>('/admin/sakurupiah/balance', { token: adminToken });
+              const res = await apiRequest<{ ok: boolean; data: { merchantName: string; balance: string; availableBalance: string } }>('/admin/sakurupiah/balance', { token: adminSession.token });
               if (res.ok && res.data) {
                 setSakuRupiahNotice(`Merchant: ${res.data.merchantName} | Saldo: Rp ${Number(res.data.balance).toLocaleString('id-ID')} | Saldo Tersedia: Rp ${Number(res.data.availableBalance).toLocaleString('id-ID')}`);
               }
