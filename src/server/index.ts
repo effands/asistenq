@@ -28,6 +28,7 @@ import {
   invoiceReminderHours,
   createProductRecord,
   deleteProductRecord,
+  deleteOrderRecord,
   generateDirectToolLicense,
   generateToolLicense,
   generateLicenseForPaidOrder,
@@ -2164,6 +2165,15 @@ app.post('/api/admin/orders/:id/paid', requireSession, requireAdminScope('orders
     res.json({ ok: true, order: publicOrder(result.order), subscription: result.subscription, license, fulfillment });
   } catch (error) {
     res.status(400).json({ message: error instanceof Error ? error.message : 'Order gagal diverifikasi.' });
+  }
+});
+
+app.delete('/api/admin/orders/:id', requireSession, requireAdminScope('orders'), (req, res) => {
+  try {
+    const deleted = deleteOrderRecord(store, String(req.params.id));
+    res.json({ ok: true, message: `Transaksi ${deleted.invoiceNumber ?? deleted.id} berhasil dihapus.`, deleted });
+  } catch (error) {
+    res.status(400).json({ message: error instanceof Error ? error.message : 'Gagal menghapus transaksi.' });
   }
 });
 

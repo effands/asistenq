@@ -29,7 +29,7 @@ import {
   Users,
   WandSparkles
 } from 'lucide-react';
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import type { BillingPeriod, ContentPage, ProductAccessMode, ProductDestinationType, ProductFulfillmentType, ProductOpenMode, ProductPlan, ProductType, ProductVisibility } from '../shared/types';
 import { paymentProofCleanupMessage, type PaymentProofCleanupResult } from './payment-proof-cleanup';
 import { buildProductFulfillmentPatch, cleanOptionalProductUrls } from './product-form';
@@ -511,6 +511,16 @@ export function App() {
             await loadAdminSummary(adminSession.token);
             setMessage('Pembayaran berhasil diverifikasi.');
           }}
+          onDeleteOrder={async (orderId) => {
+            if (!adminSession) throw new Error('Login admin dulu.');
+            await apiRequest(`/admin/orders/${orderId}`, {
+              token: adminSession.token,
+              method: 'DELETE'
+            });
+            await loadAdminOrders(adminSession.token);
+            await loadAdminSummary(adminSession.token);
+            setMessage('Transaksi berhasil dihapus.');
+          }}
           onExportOrders={async () => {
             if (!adminSession) throw new Error('Login admin dulu.');
             const response = await fetch('/api/admin/orders/export.xls', {
@@ -940,6 +950,7 @@ function AdminPanel({
   onClearPaymentProofs,
   onDeletePaymentProof,
   onMarkOrderPaid,
+  onDeleteOrder,
   onExportOrders,
   onUpdateMember,
   onResetOperationalData,
@@ -1013,6 +1024,7 @@ function AdminPanel({
   onClearPaymentProofs: () => Promise<PaymentProofCleanupResult>;
   onDeletePaymentProof: (orderId: string) => Promise<PaymentProofCleanupResult>;
   onMarkOrderPaid: (orderId: string) => Promise<void>;
+  onDeleteOrder?: (orderId: string) => Promise<void>;
   onExportOrders: () => Promise<void>;
   onUpdateMember: (id: string, input: any) => Promise<void>;
   onResetOperationalData: () => Promise<void>;
@@ -1074,7 +1086,7 @@ function AdminPanel({
   }
 
   if (activeSection === 'orders') {
-    return <AdminOrderPanel onClearExpired={onClearExpiredOrders} onClearPaymentProofs={onClearPaymentProofs} onDeletePaymentProof={onDeletePaymentProof} onExportOrders={onExportOrders} onMarkPaid={onMarkOrderPaid} orders={orders} />;
+    return <AdminOrderPanel onClearExpired={onClearExpiredOrders} onClearPaymentProofs={onClearPaymentProofs} onDeletePaymentProof={onDeletePaymentProof} onDeleteOrder={onDeleteOrder} onExportOrders={onExportOrders} onMarkPaid={onMarkOrderPaid} orders={orders} />;
   }
 
   if (activeSection === 'members') {
@@ -1188,16 +1200,20 @@ function formatRemaining(value?: string | null) {
   return hours > 0 ? `${hours}j ${minutes}m` : `${minutes}m`;
 }
 
-function AdminOrderPanel({ orders, onClearExpired, onClearPaymentProofs, onDeletePaymentProof, onExportOrders, onMarkPaid }: {
+function AdminOrderPanel({ orders, onClearExpired, onClearPaymentProofs, onDeletePaymentProof, onExportOrders, onMarkPaid, onDeleteOrder }: {
   orders: PublicOrder[];
   onClearExpired: () => Promise<void>;
   onClearPaymentProofs: () => Promise<PaymentProofCleanupResult>;
   onDeletePaymentProof: (orderId: string) => Promise<PaymentProofCleanupResult>;
   onExportOrders: () => Promise<void>;
   onMarkPaid: (orderId: string) => Promise<void>;
+  onDeleteOrder?: (orderId: string) => Promise<void>;
 }) {
   const [busy, setBusy] = useState('');
   const [notice, setNotice] = useState('');
+  const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'paid' | 'pending' | 'expired'>('all');
+
   async function runOrderAction(name: string, action: () => Promise<void | string>) {
     setBusy(name);
     setNotice('');
@@ -1207,7 +1223,9 @@ function AdminOrderPanel({ orders, onClearExpired, onClearPaymentProofs, onDelet
         ? 'Export order berhasil dibuat.'
         : name.startsWith('paid-')
           ? 'Pembayaran berhasil diverifikasi.'
-          : 'Order expired berhasil dibersihkan.'));
+          : name.startsWith('delete-order-')
+            ? 'Transaksi berhasil dihapus.'
+            : 'Order expired berhasil dibersihkan.'));
     } catch (error) {
       setNotice(error instanceof Error ? error.message : 'Aksi order gagal.');
     } finally {
@@ -1215,56 +1233,100 @@ function AdminOrderPanel({ orders, onClearExpired, onClearPaymentProofs, onDelet
     }
   }
 
+  const processedOrders = useMemo(() => {
+    return orders
+      .slice()
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+      .filter((order) => {
+        if (statusFilter !== 'all' && order.status !== statusFilter) return false;
+        if (!search.trim()) return true;
+        const haystack = `${order.invoiceNumber ?? ''} ${order.id} ${order.memberName ?? ''} ${order.customerEmail ?? order.memberEmail ?? ''} ${order.productName ?? order.product?.name ?? ''} ${order.customerHwid ?? ''}`.toLowerCase();
+        return haystack.includes(search.trim().toLowerCase());
+      });
+  }, [orders, search, statusFilter]);
+
   return (
     <section className="panel stack">
       <div className="panel-heading">
-        <div><p className="section-kicker">Transaksi</p><h2>Daftar Order</h2></div>
+        <div><p className="section-kicker">Transaksi Pembelian</p><h2>Daftar Order</h2></div>
         <div className="order-panel-actions">
           <button className="ghost-button" disabled={!!busy} onClick={() => runOrderAction('export', onExportOrders)} type="button">Export Excel</button>
           <button className="ghost-button danger-lite" disabled={!!busy} onClick={() => {
             if (!window.confirm('Hapus seluruh file bukti pembayaran? Riwayat order tetap disimpan.')) return;
             void runOrderAction('clear-proofs', async () => paymentProofCleanupMessage(await onClearPaymentProofs()));
-          }} type="button">Bersihkan Semua Bukti Upload</button>
+          }} type="button">Bersihkan Bukti Upload</button>
           <button className="ghost-button danger-lite" disabled={!!busy} onClick={() => runOrderAction('clear', onClearExpired)} type="button">Clear Expired</button>
-          <span className="soft-badge">{orders.length} order</span>
+          <span className="soft-badge">{orders.length} total order</span>
         </div>
       </div>
+
+      <div className="order-filter-bar">
+        <div className="order-search-input">
+          <Search size={16} />
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Cari invoice, email member, HWID, atau produk..."
+          />
+          {search && <button type="button" onClick={() => setSearch('')}>×</button>}
+        </div>
+
+        <div className="order-status-tabs">
+          <button className={statusFilter === 'all' ? 'active' : ''} onClick={() => setStatusFilter('all')}>Semua ({orders.length})</button>
+          <button className={statusFilter === 'paid' ? 'active' : ''} onClick={() => setStatusFilter('paid')}>Paid ({orders.filter(o => o.status === 'paid').length})</button>
+          <button className={statusFilter === 'pending' ? 'active' : ''} onClick={() => setStatusFilter('pending')}>Pending ({orders.filter(o => o.status === 'pending').length})</button>
+          <button className={statusFilter === 'expired' ? 'active' : ''} onClick={() => setStatusFilter('expired')}>Expired ({orders.filter(o => o.status === 'expired').length})</button>
+        </div>
+      </div>
+
       <div className="order-admin-table-wrap">
-        <div className="order-admin-row order-admin-head"><span>Invoice</span><span>Member</span><span>Produk</span><span>Total</span><span>Status</span><span>Tanggal</span><span>Aksi</span></div>
-        {orders.length === 0 && <div className="empty-state">Belum ada order.</div>}
-        {orders.map((order) => (
+        <div className="order-admin-row order-admin-head">
+          <span>Invoice</span>
+          <span>Member / Pembeli</span>
+          <span>Produk Dibeli</span>
+          <span>Total Pembayaran</span>
+          <span>Status</span>
+          <span>Tanggal</span>
+          <span style={{ textAlign: 'right' }}>Aksi</span>
+        </div>
+
+        {processedOrders.length === 0 && (
+          <div className="empty-state">
+            {search || statusFilter !== 'all' ? 'Tidak ada transaksi yang sesuai filter.' : 'Belum ada order transaksi.'}
+          </div>
+        )}
+
+        {processedOrders.map((order) => (
           <div className="order-admin-row" key={order.id}>
-            <strong>{order.invoiceNumber ?? order.id}</strong>
-            <div className="order-member-col">
-              <b>{order.memberName || 'Unknown Member'}</b>
-              <span>{order.customerEmail || order.memberEmail || order.memberId}</span>
-              {order.customerHwid && <small>HWID: {order.customerHwid}</small>}
+            <div className="order-invoice-col">
+              <strong className="invoice-num">{order.invoiceNumber ?? order.id}</strong>
+              <small className="order-id-sub">{order.id}</small>
             </div>
-            <span>
-              {order.product?.name ?? order.productName ?? order.productId}
+
+            <div className="order-member-col">
+              <b>{order.memberName || 'Member AsistenQ'}</b>
+              <span>{order.customerEmail || order.memberEmail || order.memberId}</span>
+              {order.customerHwid && <small className="hwid-tag">HWID: {order.customerHwid}</small>}
+            </div>
+
+            <div className="order-product-col">
+              <b>{order.product?.name ?? order.productName ?? order.productId}</b>
               {order.paymentProofStatus === 'submitted' && (
-                <a href={`/api/admin/orders/${order.id}/payment-proof`} rel="noreferrer" target="_blank">Lihat bukti</a>
+                <a className="proof-link" href={`/api/admin/orders/${order.id}/payment-proof`} rel="noreferrer" target="_blank">📄 Bukti Transfer</a>
               )}
-            </span>
-            <b>{order.formattedTotalAmount}<small>Kode: {(order.uniqueCode ?? 0).toString().padStart(3, '0')}</small></b>
-            <span className={`status-dot status-${order.status}`}>{order.status}</span>
-            <span>{formatDate(order.createdAt)}</span>
-            <div className="order-admin-actions">
-              {order.paymentProofFileId && (
-                <button
-                  className="ghost-button danger-lite"
-                  disabled={!!busy}
-                  onClick={() => {
-                    const invoice = order.invoiceNumber ?? order.id;
-                    if (!window.confirm(`Hapus file bukti pembayaran ${invoice}?`)) return;
-                    void runOrderAction(`delete-proof-${order.id}`, async () => paymentProofCleanupMessage(await onDeletePaymentProof(order.id)));
-                  }}
-                  type="button"
-                >
-                  {busy === `delete-proof-${order.id}` ? 'Menghapus...' : 'Hapus Bukti'}
-                </button>
-              )}
-              {order.status === 'pending' && formatRemaining(order.expiresAt) !== 'Kedaluwarsa' ? (
+            </div>
+
+            <div className="order-price-col">
+              <span className="order-total-price">{order.formattedTotalAmount}</span>
+              {order.uniqueCode ? <small className="order-unique-code">Kode Unik: {order.uniqueCode.toString().padStart(3, '0')}</small> : null}
+            </div>
+
+            <span className={`status-dot status-${order.status}`}>{order.status.toUpperCase()}</span>
+            
+            <span className="order-date-col">{formatDate(order.createdAt)}</span>
+
+            <div className="order-admin-actions" style={{ justifyContent: 'flex-end', gap: '6px' }}>
+              {order.status === 'pending' && formatRemaining(order.expiresAt) !== 'Kedaluwarsa' && (
                 <button
                   className="ghost-button verify-payment-button"
                   disabled={!!busy}
@@ -1277,7 +1339,38 @@ function AdminOrderPanel({ orders, onClearExpired, onClearPaymentProofs, onDelet
                 >
                   {busy === `paid-${order.id}` ? 'Memproses...' : 'Verifikasi Dibayar'}
                 </button>
-              ) : <span className="muted">—</span>}
+              )}
+
+              {order.paymentProofFileId && (
+                <button
+                  className="ghost-button danger-lite"
+                  disabled={!!busy}
+                  onClick={() => {
+                    const invoice = order.invoiceNumber ?? order.id;
+                    if (!window.confirm(`Hapus file bukti pembayaran ${invoice}?`)) return;
+                    void runOrderAction(`delete-proof-${order.id}`, async () => paymentProofCleanupMessage(await onDeletePaymentProof(order.id)));
+                  }}
+                  type="button"
+                >
+                  Bukti
+                </button>
+              )}
+
+              {onDeleteOrder && (
+                <button
+                  className="ghost-button danger-lite"
+                  disabled={!!busy}
+                  style={{ color: '#ef4444', borderColor: 'rgba(239, 68, 68, 0.2)' }}
+                  onClick={() => {
+                    const invoice = order.invoiceNumber ?? order.id;
+                    if (!window.confirm(`Hapus permanen transaksi ${invoice}? Data ini tidak dapat dikembalikan.`)) return;
+                    void runOrderAction(`delete-order-${order.id}`, () => onDeleteOrder(order.id));
+                  }}
+                  type="button"
+                >
+                  Hapus
+                </button>
+              )}
             </div>
           </div>
         ))}

@@ -804,7 +804,7 @@ async function tryAttachSakuRupiahInvoice(store: Store, order: Order, items: Ord
   try {
     const baseUrl = process.env.APP_URL ?? 'https://asistenq.com';
     const callbackUrl = `${baseUrl}/api/payments/sakurupiah/callback`;
-    const returnUrl = `${baseUrl}/orders/${order.id}`;
+    const returnUrl = `${baseUrl}/member`;
     const res = await createSakuRupiahInvoice(settings, order, items, callbackUrl, returnUrl);
     if (res.success) {
       if (res.trxId) order.sakuRupiahTrxId = res.trxId;
@@ -1271,8 +1271,39 @@ export function markOrderPaid(store: Store, orderId: string, paidAt = new Date()
   });
 
   store.data.subscriptions.push(subscription);
+
+  // Auto generate tool license for member if HWID is attached and software/tool product
+  const member = store.data.members.find((item) => item.id === order.memberId);
+  const plans = store.data.plans.filter((p) => p.productId === product.id);
+  if (order.customerHwid && member && (product.type === 'tool' || product.fulfillmentType === 'license' || plans.length > 0)) {
+    const plan = plans.find((p) => p.id === order.planId || p.code === order.planId) ?? plans[0];
+    const planCode = plan?.code ?? '1M';
+    try {
+      const createdLicense = generateToolLicense(store, {
+        productSlug: product.slug,
+        planCode,
+        email: member.email,
+        hwid: order.customerHwid,
+        now: paidAt
+      });
+      createdLicense.orderId = order.id;
+    } catch (err) {
+      console.error('Auto license generation error:', err);
+    }
+  }
+
   store.save();
   return { order, subscription };
+}
+
+export function deleteOrderRecord(store: Store, orderId: string): Order {
+  const index = store.data.orders.findIndex((item) => item.id === orderId);
+  if (index === -1) {
+    throw new Error('order not found');
+  }
+  const [deleted] = store.data.orders.splice(index, 1);
+  store.save();
+  return deleted;
 }
 
 export function listPendingOrders(store: Store, limit = 10) {

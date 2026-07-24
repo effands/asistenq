@@ -1,4 +1,4 @@
 @echo off
 git add .
-git commit -m "fix: import ExternalLink icon in MarketplaceStorefront.tsx"
+git commit -m "feat: prioritize SakuRupiah official checkout URL and hide static fallback QR code"
 git push origin master
