@@ -1898,6 +1898,13 @@ function DeployPanel({ settings, onDeployUpdate, onRefreshBotStatus, onSaveSetti
   const [smtpNotice, setSmtpNotice] = useState('');
   const [qrisStaticPayload, setQrisStaticPayload] = useState(settings?.qrisStaticPayload ?? '');
   const [qrisNotice, setQrisNotice] = useState('');
+  const [sakuRupiahApiId, setSakuRupiahApiId] = useState(settings?.sakuRupiahApiId ?? '');
+  const [sakuRupiahApiKey, setSakuRupiahApiKey] = useState('');
+  const [sakuRupiahMode, setSakuRupiahMode] = useState<'sandbox' | 'production'>(settings?.sakuRupiahMode ?? 'sandbox');
+  const [sakuRupiahMethod, setSakuRupiahMethod] = useState(settings?.sakuRupiahMethod ?? 'QRIS');
+  const [sakuRupiahMerchantFee, setSakuRupiahMerchantFee] = useState<number>(settings?.sakuRupiahMerchantFee ?? 1);
+  const [sakuRupiahNotice, setSakuRupiahNotice] = useState('');
+  const [checkingBalance, setCheckingBalance] = useState(false);
   const botStatus = settings?.botStatus;
 
   useEffect(() => {
@@ -1910,6 +1917,10 @@ function DeployPanel({ settings, onDeployUpdate, onRefreshBotStatus, onSaveSetti
       setSmtpUser(settings.smtpUser || 'cs@asistenq.com');
       setMailFrom(settings.mailFrom || 'AsistenQ <cs@asistenq.com>');
       setQrisStaticPayload(settings.qrisStaticPayload || '');
+      if (settings.sakuRupiahApiId) setSakuRupiahApiId(settings.sakuRupiahApiId);
+      if (settings.sakuRupiahMode) setSakuRupiahMode(settings.sakuRupiahMode);
+      if (settings.sakuRupiahMethod) setSakuRupiahMethod(settings.sakuRupiahMethod);
+      if (settings.sakuRupiahMerchantFee !== undefined) setSakuRupiahMerchantFee(settings.sakuRupiahMerchantFee);
     }
   }, [settings]);
 
@@ -2134,6 +2145,60 @@ function DeployPanel({ settings, onDeployUpdate, onRefreshBotStatus, onSaveSetti
         <p className="form-helper">QRIS ini menjadi sumber merchant. Saat checkout, server otomatis memasukkan harga + kode unik tiga digit dan menghitung ulang CRC.</p>
         <button className="primary" disabled={saving || !qrisStaticPayload.trim()}>{saving ? 'Menyimpan...' : 'Validasi & Simpan QRIS'}</button>
         {qrisNotice && <p className="form-notice">{qrisNotice}</p>}
+      </form>
+      <form className="panel compact-token-card" onSubmit={async (event) => {
+        event.preventDefault();
+        setSaving(true);
+        setSakuRupiahNotice('Menyimpan konfigurasi SakuRupiah...');
+        try {
+          await onSaveSettings({
+            githubRepo: githubRepo.trim(),
+            githubBranch: githubBranch.trim(),
+            sakuRupiahApiId: sakuRupiahApiId.trim(),
+            sakuRupiahApiKey: sakuRupiahApiKey.trim(),
+            sakuRupiahMode,
+            sakuRupiahMethod,
+            sakuRupiahMerchantFee
+          });
+          setSakuRupiahApiKey('');
+          setSakuRupiahNotice('Konfigurasi SakuRupiah berhasil disimpan. Sinyal callback siap diterima!');
+        } catch (error) {
+          setSakuRupiahNotice(error instanceof Error ? error.message : 'Gagal menyimpan SakuRupiah.');
+        } finally {
+          setSaving(false);
+        }
+      }}>
+        <div className="panel-heading">
+          <div><p className="section-kicker">Payment Gateway</p><h2>SakuRupiah API (sakurupiah.id)</h2></div>
+          <span className={`soft-badge ${settings?.hasSakuRupiahApiKey || settings?.sakuRupiahApiId ? 'status-active' : ''}`}>{settings?.hasSakuRupiahApiKey ? 'SakuRupiah Aktif' : 'Belum diatur'}</span>
+        </div>
+        <div className="compact-token-fields">
+          <label>API ID<input value={sakuRupiahApiId} onChange={(e) => setSakuRupiahApiId(e.target.value)} placeholder="Contoh: SANBOX-90976113" /></label>
+          <label>API Key<input value={sakuRupiahApiKey} onChange={(e) => setSakuRupiahApiKey(e.target.value)} placeholder={settings?.maskedSakuRupiahApiKey || 'Isi API Key SakuRupiah'} type="password" /></label>
+          <label>Mode API<select value={sakuRupiahMode} onChange={(e) => setSakuRupiahMode(e.target.value as any)}><option value="sandbox">Sandbox (Pengujian)</option><option value="production">Production (Live)</option></select></label>
+          <label>Metode Default<select value={sakuRupiahMethod} onChange={(e) => setSakuRupiahMethod(e.target.value)}><option value="QRIS">QRIS</option><option value="QRISMU">QRISMU</option><option value="QRISC">QRISC</option><option value="BCAVA">BCA Virtual Account</option><option value="BRIVA">BRI Virtual Account</option><option value="BNIVA">BNI Virtual Account</option><option value="GOPAY">GoPay</option><option value="DANA">DANA</option></select></label>
+          <label className="span-two">Tanggung Biaya Fee (Merchant Fee)<select value={sakuRupiahMerchantFee} onChange={(e) => setSakuRupiahMerchantFee(Number(e.target.value))}><option value={1}>Fee Ditanggung Merchant (Penjual)</option><option value={2}>Fee Ditanggung Customer (Pembeli)</option></select></label>
+        </div>
+        <p className="form-helper">Callback Webhook URL untuk didaftarkan di dashboard SakuRupiah: <code>{window.location.origin}/api/payments/sakurupiah/callback</code></p>
+        <div className="bot-control-actions" style={{ marginTop: '12px' }}>
+          <button className="primary" disabled={saving}>{saving ? 'Menyimpan...' : 'Simpan Setting SakuRupiah'}</button>
+          <button className="ghost-button tiny-button" type="button" disabled={checkingBalance || !adminSession} onClick={async () => {
+            if (!adminSession) return;
+            setCheckingBalance(true);
+            setSakuRupiahNotice('Mengecek saldo SakuRupiah...');
+            try {
+              const res = await apiRequest<{ ok: boolean; data: { merchantName: string; balance: string; availableBalance: string } }>('/admin/sakurupiah/balance', { token: adminSession.token });
+              if (res.ok && res.data) {
+                setSakuRupiahNotice(`Merchant: ${res.data.merchantName} | Saldo: Rp ${Number(res.data.balance).toLocaleString('id-ID')} | Saldo Tersedia: Rp ${Number(res.data.availableBalance).toLocaleString('id-ID')}`);
+              }
+            } catch (err) {
+              setSakuRupiahNotice(err instanceof Error ? err.message : 'Cek saldo gagal');
+            } finally {
+              setCheckingBalance(false);
+            }
+          }}><RefreshCw size={13} /> Cek Saldo</button>
+        </div>
+        {sakuRupiahNotice && <p className="form-notice">{sakuRupiahNotice}</p>}
       </form>
     </section>
   );

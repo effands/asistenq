@@ -142,6 +142,12 @@ export type DeploymentSettingsResult = {
   maskedSmtpPass: string;
   mailFrom: string;
   qrisStaticPayload: string;
+  sakuRupiahApiId?: string;
+  hasSakuRupiahApiKey?: boolean;
+  maskedSakuRupiahApiKey?: string;
+  sakuRupiahMode?: 'sandbox' | 'production';
+  sakuRupiahMethod?: string;
+  sakuRupiahMerchantFee?: number;
   botStatus: TelegramBotStatus;
   updatedAt?: string;
 };

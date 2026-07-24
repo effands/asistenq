@@ -55,6 +55,7 @@ import { createFileStore } from './store';
 import { sendMail } from './mailer';
 import { analyticsOverview, heartbeatPresence, recordAnalyticsEvent } from './analytics';
 import { validateStaticQrisPayload } from './qris';
+import { checkSakuRupiahBalance, verifySakuRupiahCallbackSignature } from './sakurupiah';
 import {
   assertTelegramOrderOwner,
   createTelegramCheckout,
@@ -92,7 +93,11 @@ if (!isProduction) {
   app.use(cors({ origin: ['http://127.0.0.1:3000', 'http://localhost:3000'] }));
 }
 
-app.use(express.json());
+app.use(express.json({
+  verify: (req: any, _res, buf) => {
+    req.rawBody = buf.toString('utf-8');
+  }
+}));
 
 const landingImportDir = path.resolve('data/landing-imports');
 const productAssetDir = path.resolve('data/product-assets');
@@ -333,7 +338,12 @@ const deploymentSettingsSchema = z.object({
   smtpUser: z.string().optional(),
   smtpPass: z.string().optional(),
   mailFrom: z.string().optional(),
-  qrisStaticPayload: z.string().optional()
+  qrisStaticPayload: z.string().optional(),
+  sakuRupiahApiId: z.string().optional(),
+  sakuRupiahApiKey: z.string().optional(),
+  sakuRupiahMode: z.enum(['sandbox', 'production']).optional(),
+  sakuRupiahMethod: z.string().optional(),
+  sakuRupiahMerchantFee: z.number().optional()
 });
 
 function publicProduct(product: typeof store.data.products[number]) {
@@ -1572,6 +1582,12 @@ app.get('/api/admin/deploy/settings', requireSession, requireAdminScope('product
     maskedSmtpPass: maskedSecret(smtpPass),
     mailFrom: settings.mailFrom ?? process.env.MAIL_FROM ?? 'AsistenQ <cs@asistenq.com>',
     qrisStaticPayload: settings.qrisStaticPayload ?? '',
+    sakuRupiahApiId: settings.sakuRupiahApiId ?? '',
+    hasSakuRupiahApiKey: Boolean(settings.sakuRupiahApiKey),
+    maskedSakuRupiahApiKey: maskedSecret(settings.sakuRupiahApiKey ?? ''),
+    sakuRupiahMode: settings.sakuRupiahMode ?? 'sandbox',
+    sakuRupiahMethod: settings.sakuRupiahMethod ?? 'QRIS',
+    sakuRupiahMerchantFee: settings.sakuRupiahMerchantFee ?? 1,
     botStatus,
     updatedAt: settings.updatedAt
   });
@@ -1597,6 +1613,12 @@ app.post('/api/admin/deploy/settings', requireSession, requireAdminScope('produc
   const nextMailFrom = body.mailFrom?.trim() || current.mailFrom || process.env.MAIL_FROM || 'AsistenQ <cs@asistenq.com>';
   const isSmtpSave = Boolean(body.smtpHost || body.smtpPort || body.smtpUser || body.mailFrom || body.smtpPass !== undefined);
 
+  const nextSakuRupiahApiKey = body.sakuRupiahApiKey?.trim() || current.sakuRupiahApiKey || '';
+  const nextSakuRupiahApiId = body.sakuRupiahApiId !== undefined ? body.sakuRupiahApiId.trim() : (current.sakuRupiahApiId ?? '');
+  const nextSakuRupiahMode = body.sakuRupiahMode || current.sakuRupiahMode || 'sandbox';
+  const nextSakuRupiahMethod = body.sakuRupiahMethod || current.sakuRupiahMethod || 'QRIS';
+  const nextSakuRupiahMerchantFee = body.sakuRupiahMerchantFee !== undefined ? body.sakuRupiahMerchantFee : (current.sakuRupiahMerchantFee ?? 1);
+
   if (isSmtpSave && !nextSmtpPass) {
     res.status(400).json({ message: 'Password SMTP belum tersimpan. Isi kolom SMTP Password lalu klik Simpan SMTP lagi.' });
     return;
@@ -1620,6 +1642,11 @@ app.post('/api/admin/deploy/settings', requireSession, requireAdminScope('produc
       smtpPass: nextSmtpPass,
       mailFrom: nextMailFrom,
       qrisStaticPayload: nextQrisStaticPayload,
+      sakuRupiahApiId: nextSakuRupiahApiId,
+      sakuRupiahApiKey: nextSakuRupiahApiKey,
+      sakuRupiahMode: nextSakuRupiahMode,
+      sakuRupiahMethod: nextSakuRupiahMethod,
+      sakuRupiahMerchantFee: nextSakuRupiahMerchantFee,
       updatedAt: new Date().toISOString()
     };
     store.save();
@@ -1627,7 +1654,7 @@ app.post('/api/admin/deploy/settings', requireSession, requireAdminScope('produc
 
     res.json({
       ok: true,
-      message: 'Token GitHub tersimpan.',
+      message: 'Pengaturan tersimpan.',
       githubRepo: store.data.deploymentSettings.githubRepo,
       githubBranch: store.data.deploymentSettings.githubBranch,
       hasGithubToken: Boolean(nextToken),
@@ -1642,6 +1669,12 @@ app.post('/api/admin/deploy/settings', requireSession, requireAdminScope('produc
       maskedSmtpPass: maskedSecret(nextSmtpPass),
       mailFrom: nextMailFrom,
       qrisStaticPayload: nextQrisStaticPayload,
+      sakuRupiahApiId: nextSakuRupiahApiId,
+      hasSakuRupiahApiKey: Boolean(nextSakuRupiahApiKey),
+      maskedSakuRupiahApiKey: maskedSecret(nextSakuRupiahApiKey),
+      sakuRupiahMode: nextSakuRupiahMode,
+      sakuRupiahMethod: nextSakuRupiahMethod,
+      sakuRupiahMerchantFee: nextSakuRupiahMerchantFee,
       botStatus,
       updatedAt: store.data.deploymentSettings.updatedAt
     });
@@ -2192,6 +2225,85 @@ app.get('/api/admin/orders/export.xls', requireSession, requireAdminScope('order
   res.setHeader('Content-Type', 'application/vnd.ms-excel; charset=utf-8');
   res.setHeader('Content-Disposition', 'attachment; filename="asistenq-orders.xls"');
   res.send(`<!doctype html><html><head><meta charset="utf-8" /></head><body><table>${tableRows}</table></body></html>`);
+});
+
+app.post('/api/payments/sakurupiah/callback', async (req, res) => {
+  try {
+    const settings = store.data.deploymentSettings ?? {};
+    const apiKey = settings.sakuRupiahApiKey?.trim();
+    if (!apiKey) {
+      res.status(400).json({ success: false, message: 'SakuRupiah API Key belum dikonfigurasi' });
+      return;
+    }
+
+    const rawBody = (req as any).rawBody || JSON.stringify(req.body);
+    const signatureHeader = (req.headers['x-callback-signature'] || req.headers['http_x_callback_signature'] || '') as string;
+    const eventHeader = (req.headers['x-callback-event'] || req.headers['http_x_callback_event'] || '') as string;
+
+    if (signatureHeader && !verifySakuRupiahCallbackSignature(rawBody, signatureHeader, apiKey)) {
+      res.status(400).json({ success: false, message: 'Invalid signature' });
+      return;
+    }
+
+    if (eventHeader && eventHeader !== 'payment_status') {
+      res.status(400).json({ success: false, message: `Unrecognized callback event: ${eventHeader}` });
+      return;
+    }
+
+    const { trx_id, merchant_ref, status, status_kode } = req.body || {};
+    if (!merchant_ref && !trx_id) {
+      res.status(400).json({ success: false, message: 'merchant_ref / trx_id tidak ditemukan' });
+      return;
+    }
+
+    const order = store.data.orders.find(
+      (item) => item.invoiceNumber === merchant_ref || item.id === merchant_ref || (trx_id && item.sakuRupiahTrxId === trx_id)
+    );
+
+    if (!order) {
+      res.status(404).json({ success: false, message: 'Order tidak ditemukan' });
+      return;
+    }
+
+    if (status === 'berhasil' && (Number(status_kode) === 1 || status_kode === undefined)) {
+      if (order.status !== 'paid') {
+        const { order: paidOrder } = markOrderPaidByInvoice(store, order.invoiceNumber ?? order.id);
+        fulfillPaidOrder(store, paidOrder.id);
+
+        if (paidOrder.customerEmail) {
+          sendMail({
+            to: paidOrder.customerEmail,
+            subject: `[AsistenQ] Pembayaran Berhasil - Invoice ${paidOrder.invoiceNumber ?? paidOrder.id}`,
+            text: `Pembayaran Anda untuk invoice ${paidOrder.invoiceNumber ?? paidOrder.id} telah kami terima. Lisensi software / akses produk Anda sudah aktif dan dapat diakses melalui Dashboard Member AsistenQ. Terima kasih!`,
+            html: `<div style="font-family:sans-serif;padding:20px;"><h2>Pembayaran Berhasil!</h2><p>Invoice <b>${paidOrder.invoiceNumber ?? paidOrder.id}</b> senilai <b>${formatCurrency(paidOrder.totalAmount ?? paidOrder.amount)}</b> telah kami terima.</p><p>Lisensi / akses produk digital Anda sudah aktif. Silakan login ke Dashboard Member AsistenQ untuk menggunakannya.</p></div>`
+          }).catch((err) => console.error('Gagal mengirim email konfirmasi:', err));
+        }
+      }
+      res.json({ success: true, message: 'Payment status berhasil' });
+      return;
+    } else if (status === 'expired' || Number(status_kode) === 2) {
+      order.status = 'expired';
+      store.save();
+      res.json({ success: true, message: 'Payment status expired' });
+      return;
+    }
+
+    res.json({ success: true, message: `Payment status ${status || 'pending'}` });
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : 'Callback processing error';
+    res.status(500).json({ success: false, message: msg });
+  }
+});
+
+app.get('/api/admin/sakurupiah/balance', requireSession, requireAdminScope('products'), async (_req, res) => {
+  try {
+    const settings = store.data.deploymentSettings ?? {};
+    const balanceInfo = await checkSakuRupiahBalance(settings);
+    res.json({ ok: true, data: balanceInfo });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Gagal mengecek saldo SakuRupiah';
+    res.status(400).json({ ok: false, message });
+  }
 });
 
 app.post('/api/checkout', requireSession, async (req, res) => {

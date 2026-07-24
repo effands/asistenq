@@ -242,6 +242,8 @@ export interface Order {
   status: OrderStatus;
   qrisPayload: string;
   paymentQrUrl?: string;
+  sakuRupiahTrxId?: string;
+  sakuRupiahCheckoutUrl?: string;
   paymentProofFileId?: string;
   paymentProofStatus?: PaymentProofStatus;
   paymentProofSubmittedAt?: string;
@@ -350,6 +352,11 @@ export interface DeploymentSettings {
   smtpPass?: string;
   mailFrom?: string;
   qrisStaticPayload?: string;
+  sakuRupiahApiId?: string;
+  sakuRupiahApiKey?: string;
+  sakuRupiahMode?: 'sandbox' | 'production';
+  sakuRupiahMethod?: string;
+  sakuRupiahMerchantFee?: number;
   updatedAt?: string;
 }
 
