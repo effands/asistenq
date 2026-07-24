@@ -1,4 +1,4 @@
-import { ArrowLeft, ArrowRight, BadgeCheck, BookOpen, Check, ChevronRight, CreditCard, Download, Headphones, Search, ShieldCheck, ShoppingCart, Sparkles, Trash2, X } from 'lucide-react';
+import { ArrowLeft, ArrowRight, BadgeCheck, BookOpen, Check, ChevronRight, CreditCard, Download, ExternalLink, Headphones, Search, ShieldCheck, ShoppingCart, Sparkles, Trash2, X } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import type { ContentPage, ProductPlan } from '../shared/types';
 import type { PublicCatalog, PublicOrder, PublicProduct } from './api';

@@ -1,4 +1,4 @@
 @echo off
 git add .
-git commit -m "feat: show SakuRupiah automatic payment button in cart drawer"
+git commit -m "fix: import ExternalLink icon in MarketplaceStorefront.tsx"
 git push origin master
