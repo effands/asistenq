@@ -10,7 +10,9 @@ import {
   Download,
   ExternalLink,
   Film,
+  Clock,
   FileText,
+  FileX,
   GraduationCap,
   KeyRound,
   LayoutDashboard,
@@ -19,12 +21,15 @@ import {
   Mail,
   Monitor,
   PackagePlus,
+  Pencil,
   PlayCircle,
   RefreshCw,
   Search,
   ShieldCheck,
   ShoppingCart,
   Sparkles,
+  Trash2,
+  TrendingUp,
   UploadCloud,
   Users,
   WandSparkles
@@ -1233,6 +1238,33 @@ function AdminOrderPanel({ orders, onClearExpired, onClearPaymentProofs, onDelet
     }
   }
 
+  const revenueSummary = useMemo(() => {
+    let paidTotal = 0;
+    let pendingTotal = 0;
+    let paidCount = 0;
+    let pendingCount = 0;
+
+    orders.forEach((o) => {
+      const amt = o.totalAmount ?? o.amount ?? 0;
+      if (o.status === 'paid') {
+        paidTotal += amt;
+        paidCount++;
+      } else if (o.status === 'pending') {
+        pendingTotal += amt;
+        pendingCount++;
+      }
+    });
+
+    return {
+      paidTotal,
+      pendingTotal,
+      allTotal: paidTotal + pendingTotal,
+      paidCount,
+      pendingCount,
+      totalCount: orders.length
+    };
+  }, [orders]);
+
   const processedOrders = useMemo(() => {
     return orders
       .slice()
@@ -1248,15 +1280,50 @@ function AdminOrderPanel({ orders, onClearExpired, onClearPaymentProofs, onDelet
   return (
     <section className="panel stack">
       <div className="panel-heading">
-        <div><p className="section-kicker">Transaksi Pembelian</p><h2>Daftar Order</h2></div>
+        <div><p className="section-kicker">Transaksi Pembelian</p><h2>Daftar Order & Omset</h2></div>
         <div className="order-panel-actions">
-          <button className="ghost-button" disabled={!!busy} onClick={() => runOrderAction('export', onExportOrders)} type="button">Export Excel</button>
-          <button className="ghost-button danger-lite" disabled={!!busy} onClick={() => {
+          <button className="compact-action-btn" disabled={!!busy} title="Export data transaksi ke file Excel" onClick={() => runOrderAction('export', onExportOrders)} type="button">
+            <Download size={14} /> <span>Export Excel</span>
+          </button>
+          <button className="compact-action-btn danger" disabled={!!busy} title="Bersihkan seluruh file bukti transfer yang telah diupload" onClick={() => {
             if (!window.confirm('Hapus seluruh file bukti pembayaran? Riwayat order tetap disimpan.')) return;
             void runOrderAction('clear-proofs', async () => paymentProofCleanupMessage(await onClearPaymentProofs()));
-          }} type="button">Bersihkan Bukti Upload</button>
-          <button className="ghost-button danger-lite" disabled={!!busy} onClick={() => runOrderAction('clear', onClearExpired)} type="button">Clear Expired</button>
-          <span className="soft-badge">{orders.length} total order</span>
+          }} type="button">
+            <FileX size={14} /> <span>Clear Bukti Upload</span>
+          </button>
+          <button className="compact-action-btn warning" disabled={!!busy} title="Bersihkan order yang sudah expired" onClick={() => runOrderAction('clear', onClearExpired)} type="button">
+            <Clock size={14} /> <span>Clear Expired</span>
+          </button>
+          <span className="soft-badge-compact">{orders.length} Order</span>
+        </div>
+      </div>
+
+      <div className="order-stats-grid">
+        <div className="order-stat-card paid">
+          <div className="stat-icon"><CreditCard size={18} /></div>
+          <div>
+            <span className="stat-label">Total Uang Masuk (Paid)</span>
+            <strong className="stat-value">Rp{revenueSummary.paidTotal.toLocaleString('id-ID')}</strong>
+            <small className="stat-sub">{revenueSummary.paidCount} transaksi sukses</small>
+          </div>
+        </div>
+
+        <div className="order-stat-card pending">
+          <div className="stat-icon"><Clock size={18} /></div>
+          <div>
+            <span className="stat-label">Menunggu Pembayaran (Pending)</span>
+            <strong className="stat-value">Rp{revenueSummary.pendingTotal.toLocaleString('id-ID')}</strong>
+            <small className="stat-sub">{revenueSummary.pendingCount} order pending</small>
+          </div>
+        </div>
+
+        <div className="order-stat-card estimate">
+          <div className="stat-icon"><TrendingUp size={18} /></div>
+          <div>
+            <span className="stat-label">Estimasi Omset Total</span>
+            <strong className="stat-value">Rp{revenueSummary.allTotal.toLocaleString('id-ID')}</strong>
+            <small className="stat-sub">{revenueSummary.totalCount} total keseluruhan order</small>
+          </div>
         </div>
       </div>
 
@@ -1328,8 +1395,9 @@ function AdminOrderPanel({ orders, onClearExpired, onClearPaymentProofs, onDelet
             <div className="order-admin-actions" style={{ justifyContent: 'flex-end', gap: '6px' }}>
               {order.status === 'pending' && formatRemaining(order.expiresAt) !== 'Kedaluwarsa' && (
                 <button
-                  className="ghost-button verify-payment-button"
+                  className="action-icon-btn verify"
                   disabled={!!busy}
+                  title="Verifikasi Pembayaran Sukses"
                   onClick={() => {
                     const invoice = order.invoiceNumber ?? order.id;
                     if (!window.confirm(`Verifikasi pembayaran ${invoice} sebesar ${order.formattedTotalAmount}?`)) return;
@@ -1337,30 +1405,42 @@ function AdminOrderPanel({ orders, onClearExpired, onClearPaymentProofs, onDelet
                   }}
                   type="button"
                 >
-                  {busy === `paid-${order.id}` ? 'Memproses...' : 'Verifikasi Dibayar'}
+                  <CheckCircle2 size={16} />
                 </button>
               )}
 
               {order.paymentProofFileId && (
-                <button
-                  className="ghost-button danger-lite"
-                  disabled={!!busy}
-                  onClick={() => {
-                    const invoice = order.invoiceNumber ?? order.id;
-                    if (!window.confirm(`Hapus file bukti pembayaran ${invoice}?`)) return;
-                    void runOrderAction(`delete-proof-${order.id}`, async () => paymentProofCleanupMessage(await onDeletePaymentProof(order.id)));
-                  }}
-                  type="button"
-                >
-                  Bukti
-                </button>
+                <>
+                  <a
+                    className="action-icon-btn proof"
+                    href={`/api/admin/orders/${order.id}/payment-proof`}
+                    rel="noreferrer"
+                    target="_blank"
+                    title="Lihat Bukti Pembayaran Upload"
+                  >
+                    <FileText size={16} />
+                  </a>
+                  <button
+                    className="action-icon-btn proof-del"
+                    disabled={!!busy}
+                    title="Hapus File Bukti Pembayaran"
+                    onClick={() => {
+                      const invoice = order.invoiceNumber ?? order.id;
+                      if (!window.confirm(`Hapus file bukti pembayaran ${invoice}?`)) return;
+                      void runOrderAction(`delete-proof-${order.id}`, async () => paymentProofCleanupMessage(await onDeletePaymentProof(order.id)));
+                    }}
+                    type="button"
+                  >
+                    <FileX size={16} />
+                  </button>
+                </>
               )}
 
               {onDeleteOrder && (
                 <button
-                  className="ghost-button danger-lite"
+                  className="action-icon-btn delete"
                   disabled={!!busy}
-                  style={{ color: '#ef4444', borderColor: 'rgba(239, 68, 68, 0.2)' }}
+                  title="Hapus Transaksi Permanen"
                   onClick={() => {
                     const invoice = order.invoiceNumber ?? order.id;
                     if (!window.confirm(`Hapus permanen transaksi ${invoice}? Data ini tidak dapat dikembalikan.`)) return;
@@ -1368,7 +1448,7 @@ function AdminOrderPanel({ orders, onClearExpired, onClearPaymentProofs, onDelet
                   }}
                   type="button"
                 >
-                  Hapus
+                  <Trash2 size={16} />
                 </button>
               )}
             </div>
