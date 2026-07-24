@@ -1,4 +1,4 @@
 @echo off
 git add .
-git commit -m "fix: align validateCart parameters and adminSession prop references"
+git commit -m "fix: update DeploymentSettingsInput type and adminSession prop bindings"
 git push origin master

@@ -71,6 +71,11 @@ type DeploymentSettingsInput = {
   smtpPass?: string;
   mailFrom?: string;
   qrisStaticPayload?: string;
+  sakuRupiahApiId?: string;
+  sakuRupiahApiKey?: string;
+  sakuRupiahMode?: 'sandbox' | 'production';
+  sakuRupiahMethod?: string;
+  sakuRupiahMerchantFee?: number;
 };
 
 const productTypes: ProductType[] = ['tool', 'course', 'ebook', 'video', 'bundle', 'free', 'class'];
@@ -108,6 +113,10 @@ function routeFromPath(pathname: string): Route {
   if (pathname.startsWith('/adminasistenq')) return 'admin';
   if (pathname.startsWith('/member')) return 'member';
   if (pathname.startsWith('/produk/')) return 'product';
+  if (pathname.startsWith('/info/')) return 'content';
+  if (/^\/[a-z0-9-]+$/.test(pathname)) return 'product';
+  return 'home';
+}
   if (pathname.startsWith('/info/')) return 'content';
   if (/^\/[a-z0-9-]+$/.test(pathname)) return 'product';
   return 'home';
