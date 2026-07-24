@@ -1865,6 +1865,8 @@ function AdminMemberPanel({ members, onRefresh, onUpdateMember }: {
                 </>
               )}
             </article>
+          ))}
+          </div>
         </div>
       </div>
     </section>
