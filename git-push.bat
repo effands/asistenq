@@ -1,4 +1,4 @@
 @echo off
 git add .
-git commit -m "fix: clean duplicated JSX handler block in App.tsx"
+git commit -m "feat: show SakuRupiah automatic payment button in cart drawer"
 git push origin master
