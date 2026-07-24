@@ -697,6 +697,50 @@ export async function createLicenseCheckout(store: Store, input: {
     (!license.expiresAt || new Date(`${license.expiresAt}T23:59:59.999Z`) >= now)
   ));
   if (validLicense) throw new Error('Lisensi untuk perangkat ini masih aktif.');
+
+  let member = store.data.members.find((item) => item.email === email);
+  if (!member) {
+    member = await createMember(store, {
+      name: email.split('@')[0] || 'VJ Studio Buyer',
+      email,
+      password: crypto.randomBytes(24).toString('base64url')
+    });
+  }
+
+  let price = plan.price;
+  let voucherId: string | undefined;
+  let discountAmount = 0;
+  if (input.voucherCode?.trim()) {
+    const result = verifyVoucher(store, { productSlug: product.slug, code: input.voucherCode });
+    if (!result.valid || !result.voucher) throw new Error(result.message ?? 'Voucher tidak valid.');
+    voucherId = result.voucher.id;
+    discountAmount = result.voucher.discountType === 'percent'
+      ? Math.floor(price * Math.min(result.voucher.discountValue, 100) / 100)
+      : Math.min(price, result.voucher.discountValue);
+    price -= discountAmount;
+  }
+
+  const order = await createCheckout(store, member.id, product.id, now, {
+    planId: plan.id,
+    price,
+    lifetimeMinutes: 30
+  });
+  const accessToken = orderAccessToken(order.id, idempotencyKey);
+  Object.assign(order, {
+    customerEmail: email,
+    customerHwid: hwid,
+    idempotencyKey,
+    accessTokenHash: crypto.createHash('sha256').update(accessToken).digest('hex'),
+    voucherId,
+    discountAmount
+  });
+  store.save();
+  return { order, accessToken };
+}
+
+export function generateToolLicense(store: Store, input: {
+  productSlug: string;
+  planCode: string;
   email: string;
   hwid: string;
   now?: Date;
