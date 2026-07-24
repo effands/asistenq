@@ -1,4 +1,4 @@
 @echo off
 git add .
-git commit -m "fix: restore all exported services functions and UI session tokens"
+git commit -m "fix: remove stray createCheckout declaration line"
 git push origin master

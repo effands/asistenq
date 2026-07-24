@@ -792,12 +792,6 @@ export function expirePendingOrders(store: Store, now = new Date()): number {
 }
 
 export async function createCheckout(
-
-
-
-
-
-export async function createCheckout(
   store: Store,
   memberId: string,
   productId: string,
