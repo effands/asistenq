@@ -1,4 +1,4 @@
 @echo off
 git add .
-git commit -m "fix: remove duplicate lines in routeFromPath in App.tsx"
+git commit -m "fix: remove adminSession prop from AdminPanel call"
 git push origin master
