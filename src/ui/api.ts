@@ -28,7 +28,9 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
         const messages = error.map((err: any) => err.message).filter(Boolean);
         if (messages.length > 0) message = messages.join(', ');
       } else {
-        message = error.message ?? error.detail ?? message;
+        const baseMsg = error.message ?? '';
+        const detailMsg = error.detail ?? error.stderr ?? error.stdout ?? '';
+        message = baseMsg && detailMsg ? `${baseMsg}\n\nDetail:\n${detailMsg}` : (baseMsg || detailMsg || message);
       }
     } catch {
       message = rawError ? rawError.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim() : message;

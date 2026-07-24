@@ -627,14 +627,37 @@ function allocateUniquePaymentCode(store: Store, now: Date): number {
   throw new Error('kode unik pembayaran tidak tersedia');
 }
 
+
+
+
+
 export async function createCheckout(
   store: Store,
   memberId: string,
   productId: string,
   now = new Date(),
-  const left = Buffer.from(candidate, 'hex');
-  const right = Buffer.from(order.accessTokenHash, 'hex');
-  return left.length === right.length && crypto.timingSafeEqual(left, right);
+  options: CheckoutOptions = {}
+): Promise<Order> {
+  return serializeCheckout(store, () => createCheckoutLocked(store, memberId, productId, now, options));
+}
+
+async function tryAttachSakuRupiahInvoice(store: Store, order: Order, items: OrderItem[] = []): Promise<void> {
+  const settings = store.data.deploymentSettings;
+  if (!settings?.sakuRupiahApiId?.trim() || !settings?.sakuRupiahApiKey?.trim()) return;
+  try {
+    const baseUrl = process.env.APP_URL ?? 'https://asistenq.com';
+    const callbackUrl = `${baseUrl}/api/payments/sakurupiah/callback`;
+    const returnUrl = `${baseUrl}/orders/${order.id}`;
+    const res = await createSakuRupiahInvoice(settings, order, items, callbackUrl, returnUrl);
+    if (res.success) {
+      if (res.trxId) order.sakuRupiahTrxId = res.trxId;
+      if (res.checkoutUrl) order.sakuRupiahCheckoutUrl = res.checkoutUrl;
+      if (res.qrPayload) order.qrisPayload = res.qrPayload;
+      if (res.qrDataUrl || res.checkoutUrl) order.paymentQrUrl = res.qrDataUrl || res.checkoutUrl;
+    }
+  } catch (error) {
+    console.error('SakuRupiah invoice creation fallback:', error);
+  }
 }
 
 export async function createLicenseCheckout(store: Store, input: {
@@ -674,120 +697,6 @@ export async function createLicenseCheckout(store: Store, input: {
     (!license.expiresAt || new Date(`${license.expiresAt}T23:59:59.999Z`) >= now)
   ));
   if (validLicense) throw new Error('Lisensi untuk perangkat ini masih aktif.');
-
-  let member = store.data.members.find((item) => item.email === email);
-  if (!member) {
-    member = await createMember(store, {
-      name: email.split('@')[0] || 'VJ Studio Buyer',
-      email,
-      password: crypto.randomBytes(24).toString('base64url')
-    });
-  }
-
-  let price = plan.price;
-  let voucherId: string | undefined;
-  let discountAmount = 0;
-  if (input.voucherCode?.trim()) {
-    const result = verifyVoucher(store, { productSlug: product.slug, code: input.voucherCode });
-    if (!result.valid || !result.voucher) throw new Error(result.message ?? 'Voucher tidak valid.');
-    voucherId = result.voucher.id;
-    discountAmount = result.voucher.discountType === 'percent'
-      ? Math.floor(price * Math.min(result.voucher.discountValue, 100) / 100)
-      : Math.min(price, result.voucher.discountValue);
-    price -= discountAmount;
-  }
-
-  const order = await createCheckout(store, member.id, product.id, now, {
-    planId: plan.id,
-    price,
-    lifetimeMinutes: 30
-  });
-  const accessToken = orderAccessToken(order.id, idempotencyKey);
-  Object.assign(order, {
-    customerEmail: email,
-    customerHwid: hwid,
-    idempotencyKey,
-    accessTokenHash: crypto.createHash('sha256').update(accessToken).digest('hex'),
-    voucherId,
-    discountAmount
-  });
-  store.save();
-  return { order, accessToken };
-}
-
-async function createCheckoutLocked(
-  store: Store,
-  memberId: string,
-  productId: string,
-  now: Date,
-  options: CheckoutOptions
-): Promise<Order> {
-  const member = store.data.members.find((item) => item.id === memberId);
-  const product = store.data.products.find((item) => item.id === productId && item.active);
-
-  if (!member) {
-    throw new Error('member not found');
-  }
-
-  if (!product) {
-    throw new Error('product not found');
-  }
-
-  if (options.reusePending) {
-    expirePendingOrders(store, now);
-    const reusable = store.data.orders.find((order) => (
-      order.memberId === memberId &&
-      order.productId === productId &&
-      order.planId === options.planId &&
-      order.status === 'pending' &&
-      Boolean(order.expiresAt && new Date(order.expiresAt) > now)
-    ));
-    if (reusable) return reusable;
-  }
-
-  const amount = options.price ?? product.price;
-  const uniqueCode = amount > 0 ? allocateUniquePaymentCode(store, now) : 0;
-  const totalAmount = amount + uniqueCode;
-  const invoiceNumber = `INV-${now.toISOString().slice(0, 10).replace(/-/g, '')}-${String(store.data.orders.length + 1).padStart(4, '0')}`;
-  const lifetimeMs = options.lifetimeMinutes === undefined
-    ? invoiceLifetimeHours * 60 * 60 * 1000
-    : options.lifetimeMinutes * 60 * 1000;
-  const expiresAt = new Date(now.getTime() + lifetimeMs).toISOString();
-  const generatedQris = amount > 0
-    ? await generateDynamicQris(store.data.deploymentSettings?.qrisStaticPayload ?? '', totalAmount)
-    : undefined;
-
-  const order: Order = {
-    id: createId('order'),
-    memberId,
-    productId,
-    invoiceNumber,
-    productName: product.name,
-    planId: options.planId,
-    telegramId: options.telegramId,
-    uniqueCode,
-    amount,
-    totalAmount,
-    status: 'pending',
-    qrisPayload: generatedQris?.payload ?? '',
-    paymentQrUrl: generatedQris?.dataUrl,
-  for (const order of store.data.orders) {
-    const expiresAt = order.expiresAt
-      ? new Date(order.expiresAt)
-      : new Date(new Date(order.createdAt).getTime() + invoiceLifetimeHours * 60 * 60 * 1000);
-    if (order.status === 'pending' && expiresAt < now) {
-      order.status = 'expired';
-      order.expiresAt = expiresAt.toISOString();
-      count += 1;
-    }
-  }
-  if (count > 0) store.save();
-  return count;
-}
-
-export function generateToolLicense(store: Store, input: {
-  productSlug: string;
-  planCode: string;
   email: string;
   hwid: string;
   now?: Date;

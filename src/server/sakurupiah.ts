@@ -73,7 +73,7 @@ export async function createSakuRupiahInvoice(
 ): Promise<SakuRupiahCreateInvoiceResult> {
   const apiId = settings.sakuRupiahApiId?.trim();
   const apiKey = settings.sakuRupiahApiKey?.trim();
-  const isSandbox = settings.sakuRupiahMode === 'sandbox' || !settings.sakuRupiahMode;
+  const isSandbox = settings.sakuRupiahMode === 'sandbox';
   const method = settings.sakuRupiahMethod?.trim() || 'QRIS';
   const merchantFee = settings.sakuRupiahMerchantFee ?? 1;
 
@@ -178,7 +178,7 @@ export async function checkSakuRupiahBalance(settings: DeploymentSettings): Prom
 }> {
   const apiId = settings.sakuRupiahApiId?.trim();
   const apiKey = settings.sakuRupiahApiKey?.trim();
-  const isSandbox = settings.sakuRupiahMode === 'sandbox' || !settings.sakuRupiahMode;
+  const isSandbox = settings.sakuRupiahMode === 'sandbox';
 
   if (!apiId || !apiKey) {
     throw new Error('SakuRupiah API ID dan API Key belum dikonfigurasi');

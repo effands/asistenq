@@ -1,4 +1,4 @@
 @echo off
 git add .
-git commit -m "feat: integrasi SakuRupiah payment gateway dan webhook callback"
+git commit -m "fix: resolve typescript syntax error in services.ts"
 git push origin master

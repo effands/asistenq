@@ -1900,7 +1900,7 @@ function DeployPanel({ settings, onDeployUpdate, onRefreshBotStatus, onSaveSetti
   const [qrisNotice, setQrisNotice] = useState('');
   const [sakuRupiahApiId, setSakuRupiahApiId] = useState(settings?.sakuRupiahApiId ?? '');
   const [sakuRupiahApiKey, setSakuRupiahApiKey] = useState('');
-  const [sakuRupiahMode, setSakuRupiahMode] = useState<'sandbox' | 'production'>(settings?.sakuRupiahMode ?? 'sandbox');
+  const [sakuRupiahMode, setSakuRupiahMode] = useState<'sandbox' | 'production'>(settings?.sakuRupiahMode ?? 'production');
   const [sakuRupiahMethod, setSakuRupiahMethod] = useState(settings?.sakuRupiahMethod ?? 'QRIS');
   const [sakuRupiahMerchantFee, setSakuRupiahMerchantFee] = useState<number>(settings?.sakuRupiahMerchantFee ?? 1);
   const [sakuRupiahNotice, setSakuRupiahNotice] = useState('');

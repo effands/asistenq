@@ -1585,7 +1585,7 @@ app.get('/api/admin/deploy/settings', requireSession, requireAdminScope('product
     sakuRupiahApiId: settings.sakuRupiahApiId ?? '',
     hasSakuRupiahApiKey: Boolean(settings.sakuRupiahApiKey),
     maskedSakuRupiahApiKey: maskedSecret(settings.sakuRupiahApiKey ?? ''),
-    sakuRupiahMode: settings.sakuRupiahMode ?? 'sandbox',
+    sakuRupiahMode: settings.sakuRupiahMode ?? 'production',
     sakuRupiahMethod: settings.sakuRupiahMethod ?? 'QRIS',
     sakuRupiahMerchantFee: settings.sakuRupiahMerchantFee ?? 1,
     botStatus,
@@ -1615,7 +1615,7 @@ app.post('/api/admin/deploy/settings', requireSession, requireAdminScope('produc
 
   const nextSakuRupiahApiKey = body.sakuRupiahApiKey?.trim() || current.sakuRupiahApiKey || '';
   const nextSakuRupiahApiId = body.sakuRupiahApiId !== undefined ? body.sakuRupiahApiId.trim() : (current.sakuRupiahApiId ?? '');
-  const nextSakuRupiahMode = body.sakuRupiahMode || current.sakuRupiahMode || 'sandbox';
+  const nextSakuRupiahMode = body.sakuRupiahMode || current.sakuRupiahMode || 'production';
   const nextSakuRupiahMethod = body.sakuRupiahMethod || current.sakuRupiahMethod || 'QRIS';
   const nextSakuRupiahMerchantFee = body.sakuRupiahMerchantFee !== undefined ? body.sakuRupiahMerchantFee : (current.sakuRupiahMerchantFee ?? 1);
 
