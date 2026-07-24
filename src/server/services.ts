@@ -627,6 +627,172 @@ function allocateUniquePaymentCode(store: Store, now: Date): number {
   throw new Error('kode unik pembayaran tidak tersedia');
 }
 
+export function canAccessLicenseOrder(store: Store, orderId: string, accessToken: string): boolean {
+  const order = store.data.orders.find((item) => item.id === orderId);
+  if (!order || !order.accessTokenHash) return false;
+  const candidate = crypto.createHash('sha256').update(accessToken).digest('hex');
+  const left = Buffer.from(candidate, 'hex');
+  const right = Buffer.from(order.accessTokenHash, 'hex');
+  return left.length === right.length && crypto.timingSafeEqual(left, right);
+}
+
+export function orderAccessToken(orderId: string, idempotencyKey: string): string {
+  return crypto.createHmac('sha256', process.env.JWT_SECRET ?? 'vjstudio_jwt_secret_2026')
+    .update(`${orderId}:${idempotencyKey}`)
+    .digest('hex');
+}
+
+export async function createCartCheckout(
+  store: Store,
+  memberId: string,
+  items: Array<{ productId: string; planId?: string; quantity: number }>,
+  now = new Date()
+): Promise<Order> {
+  return serializeCheckout(store, async () => {
+    const member = store.data.members.find((item) => item.id === memberId);
+    if (!member) throw new Error('member not found');
+    if (items.length === 0) throw new Error('keranjang belanja kosong');
+
+    let amount = 0;
+    const orderItems: OrderItem[] = [];
+    for (const item of items) {
+      const product = store.data.products.find((p) => p.id === item.productId && p.active);
+      if (!product) throw new Error(`produk ${item.productId} tidak ditemukan`);
+      let itemPrice = product.price;
+      if (item.planId) {
+        const plan = store.data.plans.find((p) => p.id === item.planId && p.productId === product.id && p.isActive);
+        if (plan) itemPrice = plan.price;
+      }
+      const itemTotal = itemPrice * item.quantity;
+      amount += itemTotal;
+      orderItems.push({
+        productId: product.id,
+        productName: product.name,
+        planId: item.planId,
+        quantity: item.quantity,
+        price: itemPrice,
+        totalAmount: itemTotal
+      });
+    }
+
+    const uniqueCode = amount > 0 ? allocateUniquePaymentCode(store, now) : 0;
+    const totalAmount = amount + uniqueCode;
+    const invoiceNumber = `INV-${now.toISOString().slice(0, 10).replace(/-/g, '')}-${String(store.data.orders.length + 1).padStart(4, '0')}`;
+    const expiresAt = new Date(now.getTime() + invoiceLifetimeHours * 60 * 60 * 1000).toISOString();
+    const generatedQris = amount > 0
+      ? await generateDynamicQris(store.data.deploymentSettings?.qrisStaticPayload ?? '', totalAmount)
+      : undefined;
+
+    const order: Order = {
+      id: createId('order'),
+      memberId,
+      productId: orderItems[0].productId,
+      productName: orderItems.length === 1 ? orderItems[0].productName : `${orderItems[0].productName} + ${orderItems.length - 1} produk lainnya`,
+      invoiceNumber,
+      orderItems,
+      uniqueCode,
+      amount,
+      totalAmount,
+      status: 'pending',
+      qrisPayload: generatedQris?.payload ?? '',
+      paymentQrUrl: generatedQris?.dataUrl,
+      paymentProofStatus: 'none',
+      createdAt: now.toISOString(),
+      expiresAt
+    };
+
+    store.data.orders.push(order);
+    await tryAttachSakuRupiahInvoice(store, order, orderItems);
+    store.save();
+    return order;
+  });
+}
+
+async function createCheckoutLocked(
+  store: Store,
+  memberId: string,
+  productId: string,
+  now: Date,
+  options: CheckoutOptions
+): Promise<Order> {
+  const member = store.data.members.find((item) => item.id === memberId);
+  const product = store.data.products.find((item) => item.id === productId && item.active);
+
+  if (!member) {
+    throw new Error('member not found');
+  }
+
+  if (!product) {
+    throw new Error('product not found');
+  }
+
+  if (options.reusePending) {
+    expirePendingOrders(store, now);
+    const reusable = store.data.orders.find((order) => (
+      order.memberId === memberId &&
+      order.productId === productId &&
+      order.planId === options.planId &&
+      order.status === 'pending' &&
+      Boolean(order.expiresAt && new Date(order.expiresAt) > now)
+    ));
+    if (reusable) return reusable;
+  }
+
+  const amount = options.price ?? product.price;
+  const uniqueCode = amount > 0 ? allocateUniquePaymentCode(store, now) : 0;
+  const totalAmount = amount + uniqueCode;
+  const invoiceNumber = `INV-${now.toISOString().slice(0, 10).replace(/-/g, '')}-${String(store.data.orders.length + 1).padStart(4, '0')}`;
+  const lifetimeMs = options.lifetimeMinutes === undefined
+    ? invoiceLifetimeHours * 60 * 60 * 1000
+    : options.lifetimeMinutes * 60 * 1000;
+  const expiresAt = new Date(now.getTime() + lifetimeMs).toISOString();
+  const generatedQris = amount > 0
+    ? await generateDynamicQris(store.data.deploymentSettings?.qrisStaticPayload ?? '', totalAmount)
+    : undefined;
+
+  const order: Order = {
+    id: createId('order'),
+    memberId,
+    productId,
+    invoiceNumber,
+    productName: product.name,
+    planId: options.planId,
+    telegramId: options.telegramId,
+    uniqueCode,
+    amount,
+    totalAmount,
+    status: 'pending',
+    qrisPayload: generatedQris?.payload ?? '',
+    paymentQrUrl: generatedQris?.dataUrl,
+    paymentProofStatus: 'none',
+    createdAt: now.toISOString(),
+    expiresAt
+  };
+
+  store.data.orders.push(order);
+  await tryAttachSakuRupiahInvoice(store, order);
+  store.save();
+  return order;
+}
+
+export function expirePendingOrders(store: Store, now = new Date()): number {
+  let count = 0;
+  for (const order of store.data.orders) {
+    const expiresAt = order.expiresAt
+      ? new Date(order.expiresAt)
+      : new Date(new Date(order.createdAt).getTime() + invoiceLifetimeHours * 60 * 60 * 1000);
+    if (order.status === 'pending' && expiresAt < now) {
+      order.status = 'expired';
+      order.expiresAt = expiresAt.toISOString();
+      count += 1;
+    }
+  }
+  if (count > 0) store.save();
+  return count;
+}
+
+export async function createCheckout(
+
 
 
 

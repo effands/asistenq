@@ -596,6 +596,7 @@ export function App() {
             return botStatus;
           }}
           deploymentSettings={deploymentSettings}
+          adminToken={adminSession?.token}
           onSaveDeploymentSettings={async (input) => {
             if (!adminSession) throw new Error('Login admin dulu.');
             const result = await apiRequest<DeploymentSettingsResult>('/admin/deploy/settings', {
@@ -1871,8 +1872,9 @@ function AdminMemberPanel({ members, onRefresh, onUpdateMember }: {
     </section>
   );
 }
-function DeployPanel({ settings, onDeployUpdate, onRefreshBotStatus, onSaveSettings, onStartBot, onStopBot }: {
+function DeployPanel({ settings, adminToken, onDeployUpdate, onRefreshBotStatus, onSaveSettings, onStartBot, onStopBot }: {
   settings: DeploymentSettingsResult | null;
+  adminToken?: string;
   onDeployUpdate: () => Promise<{ ok: boolean; message: string; stdout?: string; stderr?: string; detail?: string }>;
   onRefreshBotStatus: () => Promise<TelegramBotStatus>;
   onSaveSettings: (input: DeploymentSettingsInput) => Promise<DeploymentSettingsResult>;
@@ -2182,12 +2184,12 @@ function DeployPanel({ settings, onDeployUpdate, onRefreshBotStatus, onSaveSetti
         <p className="form-helper">Callback Webhook URL untuk didaftarkan di dashboard SakuRupiah: <code>{window.location.origin}/api/payments/sakurupiah/callback</code></p>
         <div className="bot-control-actions" style={{ marginTop: '12px' }}>
           <button className="primary" disabled={saving}>{saving ? 'Menyimpan...' : 'Simpan Setting SakuRupiah'}</button>
-          <button className="ghost-button tiny-button" type="button" disabled={checkingBalance || !adminSession} onClick={async () => {
-            if (!adminSession) return;
+          <button className="ghost-button tiny-button" type="button" disabled={checkingBalance || !adminToken} onClick={async () => {
+            if (!adminToken) return;
             setCheckingBalance(true);
             setSakuRupiahNotice('Mengecek saldo SakuRupiah...');
             try {
-              const res = await apiRequest<{ ok: boolean; data: { merchantName: string; balance: string; availableBalance: string } }>('/admin/sakurupiah/balance', { token: adminSession.token });
+              const res = await apiRequest<{ ok: boolean; data: { merchantName: string; balance: string; availableBalance: string } }>('/admin/sakurupiah/balance', { token: adminToken });
               if (res.ok && res.data) {
                 setSakuRupiahNotice(`Merchant: ${res.data.merchantName} | Saldo: Rp ${Number(res.data.balance).toLocaleString('id-ID')} | Saldo Tersedia: Rp ${Number(res.data.availableBalance).toLocaleString('id-ID')}`);
               }

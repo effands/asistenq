@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import crypto from 'node:crypto';
 import { buildSakuRupiahSignature, verifySakuRupiahCallbackSignature } from '../src/server/sakurupiah';
 
 describe('SakuRupiah Integration Module', () => {
@@ -42,8 +43,7 @@ describe('SakuRupiah Integration Module', () => {
     );
 
     // Test helper directly
-    const expectedSig = crypto.createHmac ? 
-      require('crypto').createHmac('sha256', apiKey).update(callbackPayload).digest('hex') : '';
+    const expectedSig = crypto.createHmac('sha256', apiKey).update(callbackPayload).digest('hex');
       
     const isVerified = verifySakuRupiahCallbackSignature(callbackPayload, expectedSig, apiKey);
     expect(isVerified).toBe(true);
