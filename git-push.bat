@@ -1,4 +1,4 @@
 @echo off
 git add .
-git commit -m "fix: update DeploymentSettingsInput type and adminSession prop bindings"
+git commit -m "fix: remove duplicate lines in routeFromPath in App.tsx"
 git push origin master

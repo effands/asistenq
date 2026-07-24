@@ -117,10 +117,6 @@ function routeFromPath(pathname: string): Route {
   if (/^\/[a-z0-9-]+$/.test(pathname)) return 'product';
   return 'home';
 }
-  if (pathname.startsWith('/info/')) return 'content';
-  if (/^\/[a-z0-9-]+$/.test(pathname)) return 'product';
-  return 'home';
-}
 
 function contentSlugFromPath(pathname: string): string {
   return pathname.startsWith('/info/') ? decodeURIComponent(pathname.replace('/info/', '').split('/')[0]) : '';
