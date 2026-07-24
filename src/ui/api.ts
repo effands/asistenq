@@ -1,4 +1,6 @@
-import type { BannedHwid, CourseMaterial, MemberAccount, Order, Product, ProductPlan, Subscription, ToolLicense } from '../shared/types';
+import type { BannedHwid, CourseMaterial, DeploymentSettings, MemberAccount, Order, Product, ProductPlan, Subscription, ToolLicense } from '../shared/types';
+
+export type DeploymentSettingsInput = Partial<DeploymentSettings>;
 
 const API_BASE = '/api';
 

@@ -596,7 +596,7 @@ export function App() {
             return botStatus;
           }}
           deploymentSettings={deploymentSettings}
-          adminToken={adminSession?.token}
+          adminSession={adminSession}
           onSaveDeploymentSettings={async (input) => {
             if (!adminSession) throw new Error('Login admin dulu.');
             const result = await apiRequest<DeploymentSettingsResult>('/admin/deploy/settings', {
@@ -1865,16 +1865,14 @@ function AdminMemberPanel({ members, onRefresh, onUpdateMember }: {
                 </>
               )}
             </article>
-          ))}
-          </div>
         </div>
       </div>
     </section>
   );
 }
-function DeployPanel({ settings, adminToken, onDeployUpdate, onRefreshBotStatus, onSaveSettings, onStartBot, onStopBot }: {
+function DeployPanel({ settings, adminSession, onDeployUpdate, onRefreshBotStatus, onSaveSettings, onStartBot, onStopBot }: {
   settings: DeploymentSettingsResult | null;
-  adminToken?: string;
+  adminSession?: LoginResult | null;
   onDeployUpdate: () => Promise<{ ok: boolean; message: string; stdout?: string; stderr?: string; detail?: string }>;
   onRefreshBotStatus: () => Promise<TelegramBotStatus>;
   onSaveSettings: (input: DeploymentSettingsInput) => Promise<DeploymentSettingsResult>;

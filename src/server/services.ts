@@ -20,6 +20,7 @@ import type {
   LicenseStatus,
   MemberAccount,
   Order,
+  OrderItem,
   Product,
   ProductAccessMode,
   ProductDestinationType,
@@ -627,8 +628,7 @@ function allocateUniquePaymentCode(store: Store, now: Date): number {
   throw new Error('kode unik pembayaran tidak tersedia');
 }
 
-export function canAccessLicenseOrder(store: Store, orderId: string, accessToken: string): boolean {
-  const order = store.data.orders.find((item) => item.id === orderId);
+export function canAccessLicenseOrder(order: Order | undefined, accessToken: string): boolean {
   if (!order || !order.accessTokenHash) return false;
   const candidate = crypto.createHash('sha256').update(accessToken).digest('hex');
   const left = Buffer.from(candidate, 'hex');
@@ -645,36 +645,17 @@ export function orderAccessToken(orderId: string, idempotencyKey: string): strin
 export async function createCartCheckout(
   store: Store,
   memberId: string,
-  items: Array<{ productId: string; planId?: string; quantity: number }>,
+  input: {
+    items: Array<{ productId: string; planId?: string; quantity?: number }>;
+    customerHwid?: string;
+    voucherCode?: string;
+  },
   now = new Date()
 ): Promise<Order> {
   return serializeCheckout(store, async () => {
     const member = store.data.members.find((item) => item.id === memberId);
     if (!member) throw new Error('member not found');
-    if (items.length === 0) throw new Error('keranjang belanja kosong');
-
-    let amount = 0;
-    const orderItems: OrderItem[] = [];
-    for (const item of items) {
-      const product = store.data.products.find((p) => p.id === item.productId && p.active);
-      if (!product) throw new Error(`produk ${item.productId} tidak ditemukan`);
-      let itemPrice = product.price;
-      if (item.planId) {
-        const plan = store.data.plans.find((p) => p.id === item.planId && p.productId === product.id && p.isActive);
-        if (plan) itemPrice = plan.price;
-      }
-      const itemTotal = itemPrice * item.quantity;
-      amount += itemTotal;
-      orderItems.push({
-        productId: product.id,
-        productName: product.name,
-        planId: item.planId,
-        quantity: item.quantity,
-        price: itemPrice,
-        totalAmount: itemTotal
-      });
-    }
-
+    const { items, amount } = validateCart(store, input.items, input.voucherCode);
     const uniqueCode = amount > 0 ? allocateUniquePaymentCode(store, now) : 0;
     const totalAmount = amount + uniqueCode;
     const invoiceNumber = `INV-${now.toISOString().slice(0, 10).replace(/-/g, '')}-${String(store.data.orders.length + 1).padStart(4, '0')}`;
@@ -683,13 +664,26 @@ export async function createCartCheckout(
       ? await generateDynamicQris(store.data.deploymentSettings?.qrisStaticPayload ?? '', totalAmount)
       : undefined;
 
+    const orderItems: OrderItem[] = items.map((item) => ({
+      id: createId('orderitem'),
+      productId: item.productId,
+      planId: item.planId,
+      productName: item.productName,
+      planName: item.planName,
+      unitAmount: item.unitAmount,
+      fulfillmentType: item.fulfillmentType,
+      fulfillmentStatus: 'pending'
+    }));
+
     const order: Order = {
       id: createId('order'),
       memberId,
       productId: orderItems[0].productId,
+      planId: orderItems[0].planId,
       productName: orderItems.length === 1 ? orderItems[0].productName : `${orderItems[0].productName} + ${orderItems.length - 1} produk lainnya`,
       invoiceNumber,
       orderItems,
+      customerHwid: input.customerHwid ? normalizeHwid(input.customerHwid) : undefined,
       uniqueCode,
       amount,
       totalAmount,
