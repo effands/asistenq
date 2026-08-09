@@ -3860,13 +3860,26 @@ function InvoiceModal({ order, onClose }: { order: PublicOrder; onClose: () => v
             <span>Sisa waktu<b>{formatRemaining(order.expiresAt)}</b></span>
           </div>
           <div className="qris-box">
-            {order.paymentQrUrl && <img src={order.paymentQrUrl} alt="QRIS pembayaran" />}
-            <p>Scan QRIS ini dan bayar persis sesuai total invoice. Nominal harga + kode unik sudah terisi otomatis.</p>
-            <div className="payment-confirm-box">
-              <strong>Sudah bayar?</strong>
-              <span>Kirim konfirmasi dan bukti transfer via Telegram agar admin bisa cek lalu kirim lisensi.</span>
-              <a className="primary" href={telegramConfirmUrl} target="_blank" rel="noreferrer">Konfirmasi via Telegram</a>
-            </div>
+            {order.sakuRupiahCheckoutUrl ? (
+              <div className="payment-confirm-box" style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                <strong>Selesaikan Pembayaran</strong>
+                <span>Silakan selesaikan pembayaran kamu secara otomatis via SakuRupiah Gateway melalui tombol di bawah ini:</span>
+                <a className="primary" href={order.sakuRupiahCheckoutUrl} target="_blank" rel="noreferrer" style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '8px', padding: '12px', borderRadius: '8px', fontWeight: 'bold', textDecoration: 'none' }}>
+                  Bayar via Web Gateway SakuRupiah
+                </a>
+                <span className="muted" style={{ fontSize: '11px', marginTop: '5px' }}>Pembayaran akan diverifikasi secara otomatis dalam beberapa menit setelah transfer berhasil.</span>
+              </div>
+            ) : (
+              <>
+                {order.paymentQrUrl && <img src={order.paymentQrUrl} alt="QRIS pembayaran" />}
+                <p>Scan QRIS ini dan bayar persis sesuai total invoice. Nominal harga + kode unik sudah terisi otomatis.</p>
+                <div className="payment-confirm-box">
+                  <strong>Sudah bayar?</strong>
+                  <span>Kirim konfirmasi dan bukti transfer via Telegram agar admin bisa cek lalu kirim lisensi.</span>
+                  <a className="primary" href={telegramConfirmUrl} target="_blank" rel="noreferrer">Konfirmasi via Telegram</a>
+                </div>
+              </>
+            )}
           </div>
         </div>
       </article>
