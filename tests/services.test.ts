@@ -120,6 +120,7 @@ describe('server services', () => {
   it('creates license plans when a product is created with tiered pricing', () => {
     const product = createProductRecord(store, {
       name: 'VJ Studio Pro',
+      slug: 'vjstudio-pro',
       type: 'tool',
       billingPeriod: 'monthly',
       price: 99000,
