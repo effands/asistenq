@@ -34,7 +34,7 @@ import type {
   ToolLicense,
   Voucher
 } from '../shared/types';
-import type { Store } from './store';
+import { defaultQrisStaticPayload, type Store } from './store';
 import { generateDynamicQris } from './qris';
 import { createSakuRupiahInvoice } from './sakurupiah';
 import { validateCart, type CartInput } from './cart-checkout';
@@ -812,22 +812,64 @@ export async function createCheckout(
 
 async function tryAttachSakuRupiahInvoice(store: Store, order: Order, items: OrderItem[] = []): Promise<void> {
   const settings = store.data.deploymentSettings;
-  if (!settings?.sakuRupiahApiId?.trim() || !settings?.sakuRupiahApiKey?.trim()) return;
-  try {
-    const baseUrl = process.env.APP_URL ?? 'https://asistenq.com';
-    const callbackUrl = `${baseUrl}/api/payments/sakurupiah/callback`;
-    const returnUrl = `${baseUrl}/member`;
-    const res = await createSakuRupiahInvoice(settings, order, items, callbackUrl, returnUrl);
-    if (res.success) {
-      if (res.trxId) order.sakuRupiahTrxId = res.trxId;
-      if (res.checkoutUrl) {
+  let attached = false;
+
+  if (settings?.sakuRupiahApiId?.trim() && settings?.sakuRupiahApiKey?.trim()) {
+    try {
+      const baseUrl = process.env.APP_URL ?? 'https://asistenq.com';
+      const callbackUrl = `${baseUrl}/api/payments/sakurupiah/callback`;
+      const returnUrl = `${baseUrl}/member`;
+      const orderItems: OrderItem[] = items.length > 0 ? items : [{
+        id: createId('orderitem'),
+        productId: order.productId,
+        planId: order.planId ?? '',
+        productName: order.productName ?? 'Produk Digital',
+        planName: order.planId ?? '',
+        unitAmount: order.amount,
+        fulfillmentType: 'license',
+        fulfillmentStatus: 'pending'
+      }];
+
+      const res = await createSakuRupiahInvoice(settings, order, orderItems, callbackUrl, returnUrl);
+      if (res.success && res.checkoutUrl) {
+        order.sakuRupiahTrxId = res.trxId;
         order.sakuRupiahCheckoutUrl = res.checkoutUrl;
         order.paymentQrUrl = undefined;
+        if (res.qrPayload) order.qrisPayload = res.qrPayload;
+        attached = true;
+      } else {
+        console.warn('[SakuRupiah] Invoice creation response missing checkoutUrl:', res);
       }
-      if (res.qrPayload) order.qrisPayload = res.qrPayload;
+    } catch (error) {
+      console.error('[SakuRupiah] Invoice creation error:', error instanceof Error ? error.message : error);
     }
-  } catch (error) {
-    console.error('SakuRupiah invoice creation fallback:', error);
+  }
+
+  if (!attached) {
+    await ensureQrisFallback(store, order);
+  }
+}
+
+async function ensureQrisFallback(store: Store, order: Order): Promise<void> {
+  if (!order.sakuRupiahCheckoutUrl && (!order.qrisPayload || !order.paymentQrUrl)) {
+    if (order.amount > 0 && (!order.uniqueCode || order.uniqueCode === 0)) {
+      try {
+        order.uniqueCode = allocateUniquePaymentCode(store, new Date());
+        order.totalAmount = order.amount + order.uniqueCode;
+      } catch (err) {
+        console.warn('[QRIS Fallback] Unique code allocation error:', err);
+      }
+    }
+    try {
+      const payload = store.data.deploymentSettings?.qrisStaticPayload || defaultQrisStaticPayload;
+      const generatedQris = await generateDynamicQris(payload, order.totalAmount ?? order.amount);
+      if (generatedQris) {
+        order.qrisPayload = generatedQris.payload;
+        order.paymentQrUrl = generatedQris.dataUrl;
+      }
+    } catch (err) {
+      console.error('[QRIS Fallback] QRIS generation error:', err);
+    }
   }
 }
 

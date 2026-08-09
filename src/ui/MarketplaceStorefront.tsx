@@ -1,5 +1,5 @@
 import { ArrowLeft, ArrowRight, BadgeCheck, BookOpen, Check, ChevronRight, CreditCard, Download, ExternalLink, Headphones, Search, ShieldCheck, ShoppingCart, Sparkles, Trash2, X } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { ContentPage, ProductPlan } from '../shared/types';
 import type { PublicCatalog, PublicOrder, PublicProduct } from './api';
 import { cartSubtotal, type MarketplaceCartItem } from './cart-store';
@@ -76,7 +76,14 @@ export function MarketplaceProductDetail({ product, onBack, onAdd, onBuy }: { pr
 
 export function MarketplaceCart({ open, items, order, busy, onClose, onRemove, onCheckout }: { open: boolean; items: MarketplaceCartItem[]; order: PublicOrder | null; busy: boolean; onClose: () => void; onRemove: (productId: string) => void; onCheckout: () => void }) {
   if (!open) return null;
-  const qrImg = (order && !order.sakuRupiahCheckoutUrl) ? (
+
+  useEffect(() => {
+    if (order?.sakuRupiahCheckoutUrl) {
+      window.location.href = order.sakuRupiahCheckoutUrl;
+    }
+  }, [order?.sakuRupiahCheckoutUrl]);
+
+  const qrImg = order ? (
     (order.paymentQrUrl && (order.paymentQrUrl.startsWith('data:') || order.paymentQrUrl.startsWith('http')))
       ? order.paymentQrUrl
       : (order.qrisPayload && !order.qrisPayload.startsWith('http'))
