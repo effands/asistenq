@@ -1131,7 +1131,7 @@ function AdminPanel({
   }
 
   if (activeSection === 'landing') {
-    return <LandingManager products={products} onUpdateProduct={onUpdateProduct} onCreateProduct={onCreateProduct} />;
+    return <LandingManager products={products} onUpdateProduct={onUpdateProduct} onCreateProduct={onCreateProduct} onDeleteProduct={onDeleteProduct} />;
   }
 
   if (activeSection === 'products') {
@@ -1885,10 +1885,11 @@ function AdminLicensePanel({ dashboard, products, onGenerateLicense, onRefresh, 
 
 
 
-function LandingManager({ products, onUpdateProduct, onCreateProduct }: { 
+function LandingManager({ products, onUpdateProduct, onCreateProduct, onDeleteProduct }: { 
   products: PublicProduct[]; 
   onUpdateProduct?: (id: string, input: Partial<PublicProduct>) => Promise<void>;
   onCreateProduct?: (input: any) => Promise<void>;
+  onDeleteProduct?: (id: string) => Promise<void>;
 }) {
   const [selectedSlug, setSelectedSlug] = useState(products[0]?.slug ?? '');
   const selected = products.find((product) => product.slug === selectedSlug);
@@ -1967,6 +1968,23 @@ function LandingManager({ products, onUpdateProduct, onCreateProduct }: {
     setBusy(false);
   };
 
+  const handleDelete = async () => {
+    if (!onDeleteProduct || !selected) return;
+    if (!window.confirm(`Hapus landing & produk "${selected.name}"? Produk yang sudah memiliki transaksi tidak dapat dihapus.`)) return;
+    setBusy(true);
+    setNotice('');
+    try {
+      await onDeleteProduct(selected.id);
+      setNotice(`Produk ${selected.name} berhasil dihapus.`);
+      const remaining = products.filter((p) => p.id !== selected.id);
+      if (remaining[0]) setSelectedSlug(remaining[0].slug);
+    } catch (err: any) {
+      setNotice(err.message || 'Gagal menghapus produk.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const updateConfig = (key: keyof LandingConfig, value: any) => {
     setConfig(prev => ({ ...prev, [key]: value }));
   };
@@ -1997,9 +2015,14 @@ function LandingManager({ products, onUpdateProduct, onCreateProduct }: {
             <p className="section-kicker">Landing Builder Pro</p>
             <h2>{isCreating ? 'Buat Produk & Landing Baru' : `Builder: ${selected?.name}`}</h2>
           </div>
-          <div style={{ display: 'flex', gap: '8px' }}>
+          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
              {!isCreating && <button className="ghost-button" onClick={startCreate}>+ Buat Baru</button>}
              {isCreating && <button className="ghost-button" onClick={cancelCreate}>Batal</button>}
+             {!isCreating && selected && onDeleteProduct && (
+               <button className="ghost-button danger" onClick={handleDelete} disabled={busy}>
+                 <Trash2 size={16} /> Hapus Produk
+               </button>
+             )}
              <button className="primary" onClick={handleSave} disabled={busy || (!onUpdateProduct && !isCreating) || (!onCreateProduct && isCreating)}>
                {busy ? 'Menyimpan...' : 'Simpan Perubahan'}
              </button>

@@ -69,7 +69,9 @@ function syncLegacyMixin9Plans(store: Store, product: Product): void {
     { code: '1Y', name: 'Lisensi 1 Tahun', price: 155000, billingPeriod: 'annual' as const, durationDays: 365, isFree: false, isActive: true, sortOrder: 30 }
   ].forEach((plan) => {
     const record = createPlanRecord(store, { productId: product.id, ...plan });
-    if (record.price === 0 || record.code === plan.code) Object.assign(record, plan);
+    if (record.price === 0 && plan.price !== 0) {
+      record.price = plan.price;
+    }
   });
   store.save();
 }

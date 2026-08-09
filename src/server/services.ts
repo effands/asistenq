@@ -494,6 +494,18 @@ export function updateProductRecord(store: Store, productId: string, input: Part
     ...input,
     updatedAt: new Date().toISOString()
   });
+
+  if (input.price !== undefined) {
+    const plans = store.data.plans.filter((plan) => plan.productId === productId);
+    if (plans.length > 0) {
+      const primaryPlan = plans.find((plan) => plan.code === '1M' || plan.code === 'DEFAULT') || plans[0];
+      if (primaryPlan) {
+        primaryPlan.price = input.price;
+        primaryPlan.isFree = input.price === 0;
+      }
+    }
+  }
+
   store.save();
   return product;
 }
