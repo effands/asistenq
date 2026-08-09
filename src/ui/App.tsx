@@ -1656,32 +1656,112 @@ function AdminLicensePanel({ dashboard, products, onGenerateLicense, onRefresh, 
               ...current,
               [plan.id]: { ...(current[plan.id] ?? {}), ...patch }
             }));
+            const isModified = Boolean(planDrafts[plan.id]);
             return (
-              <div className={`license-plan-editor ${draft.isActive ? 'is-active' : ''}`} key={plan.id}>
-                <div className="license-plan-code"><b>{plan.code}</b><small>{draft.isActive ? 'Aktif' : 'Nonaktif'}</small></div>
-                <input value={draft.name} onChange={(event) => setPlanDraft({ name: event.target.value })} aria-label={`Nama ${plan.code}`} />
-                <input value={draft.price} onChange={(event) => setPlanDraft({ price: Number(event.target.value) })} min="0" type="number" aria-label={`Harga ${plan.code}`} />
-                <input value={draft.durationDays ?? ''} onChange={(event) => setPlanDraft({ durationDays: event.target.value ? Number(event.target.value) : null })} min="1" type="number" aria-label={`Durasi ${plan.code}`} />
-                <input value={draft.badge ?? ''} onChange={(event) => setPlanDraft({ badge: event.target.value })} placeholder="Badge, mis. Best Seller" aria-label={`Badge ${plan.code}`} />
-                <input value={draft.sortOrder ?? 0} onChange={(event) => setPlanDraft({ sortOrder: Number(event.target.value) })} type="number" aria-label={`Urutan ${plan.code}`} />
-                <label className="plan-check"><input checked={draft.isActive} onChange={(event) => setPlanDraft({ isActive: event.target.checked })} type="checkbox" /> Aktif</label>
-                <label className="plan-check"><input checked={draft.highlighted ?? false} onChange={(event) => setPlanDraft({ highlighted: event.target.checked })} type="checkbox" /> Best Seller</label>
-                <button className="ghost-button" disabled={busy} type="button" onClick={() => runAction(async () => {
-                  await onUpdatePlan(plan.id, {
-                    name: draft.name,
-                    price: draft.price,
-                    durationDays: draft.durationDays,
-                    isActive: draft.isActive,
-                    badge: draft.badge?.trim() || '',
-                    highlighted: draft.highlighted ?? false,
-                    sortOrder: draft.sortOrder ?? 0
-                  });
-                  setPlanDrafts((current) => {
-                    const next = { ...current };
-                    delete next[plan.id];
-                    return next;
-                  });
-                }, `Paket ${plan.code} tersimpan.`)}>Simpan Paket</button>
+              <div className={`license-plan-card ${draft.isActive ? 'is-active' : 'is-disabled'} ${isModified ? 'is-modified' : ''}`} key={plan.id}>
+                <div className="plan-card-badge-col">
+                  <span className="plan-code-tag">{plan.code}</span>
+                  <small>{draft.isActive ? 'Aktif' : 'Nonaktif'}</small>
+                </div>
+
+                <div className="plan-field">
+                  <label>Nama Paket</label>
+                  <input
+                    value={draft.name}
+                    onChange={(event) => setPlanDraft({ name: event.target.value })}
+                    placeholder="Nama paket"
+                    aria-label={`Nama ${plan.code}`}
+                  />
+                </div>
+
+                <div className="plan-field">
+                  <label>Harga (Rp)</label>
+                  <input
+                    value={draft.price}
+                    onChange={(event) => setPlanDraft({ price: Number(event.target.value) })}
+                    min="0"
+                    type="number"
+                    placeholder="Harga"
+                    aria-label={`Harga ${plan.code}`}
+                  />
+                </div>
+
+                <div className="plan-field">
+                  <label>Durasi (Hari)</label>
+                  <input
+                    value={draft.durationDays ?? ''}
+                    onChange={(event) => setPlanDraft({ durationDays: event.target.value ? Number(event.target.value) : null })}
+                    min="1"
+                    type="number"
+                    placeholder="Selamanya"
+                    aria-label={`Durasi ${plan.code}`}
+                  />
+                </div>
+
+                <div className="plan-field">
+                  <label>Badge Highlight</label>
+                  <input
+                    value={draft.badge ?? ''}
+                    onChange={(event) => setPlanDraft({ badge: event.target.value })}
+                    placeholder="mis. Best Seller"
+                    aria-label={`Badge ${plan.code}`}
+                  />
+                </div>
+
+                <div className="plan-field">
+                  <label>Urutan</label>
+                  <input
+                    value={draft.sortOrder ?? 0}
+                    onChange={(event) => setPlanDraft({ sortOrder: Number(event.target.value) })}
+                    type="number"
+                    aria-label={`Urutan ${plan.code}`}
+                  />
+                </div>
+
+                <div className="plan-card-toggles">
+                  <label className="plan-toggle-label">
+                    <input
+                      checked={draft.isActive}
+                      onChange={(event) => setPlanDraft({ isActive: event.target.checked })}
+                      type="checkbox"
+                    />
+                    Aktif
+                  </label>
+                  <label className="plan-toggle-label">
+                    <input
+                      checked={draft.highlighted ?? false}
+                      onChange={(event) => setPlanDraft({ highlighted: event.target.checked })}
+                      type="checkbox"
+                    />
+                    Best Seller
+                  </label>
+                </div>
+
+                <div className="plan-card-actions">
+                  <button
+                    className={isModified ? 'primary-button' : 'ghost-button'}
+                    disabled={busy}
+                    type="button"
+                    onClick={() => runAction(async () => {
+                      await onUpdatePlan(plan.id, {
+                        name: draft.name,
+                        price: draft.price,
+                        durationDays: draft.durationDays,
+                        isActive: draft.isActive,
+                        badge: draft.badge?.trim() || '',
+                        highlighted: draft.highlighted ?? false,
+                        sortOrder: draft.sortOrder ?? 0
+                      });
+                      setPlanDrafts((current) => {
+                        const next = { ...current };
+                        delete next[plan.id];
+                        return next;
+                      });
+                    }, `Paket ${plan.code} tersimpan.`)}
+                  >
+                    Simpan Paket
+                  </button>
+                </div>
               </div>
             );
           })}

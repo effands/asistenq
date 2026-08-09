@@ -2032,7 +2032,7 @@ textarea {
 
 .license-plan-card {
   display: grid;
-  grid-template-columns: 80px minmax(140px, 1.2fr) 130px 110px minmax(130px, 1fr) 170px 90px;
+  grid-template-columns: 75px minmax(130px, 1.2fr) 115px 95px minmax(115px, 1fr) 65px 115px 125px;
   gap: 12px;
   align-items: center;
   padding: 12px 16px;
