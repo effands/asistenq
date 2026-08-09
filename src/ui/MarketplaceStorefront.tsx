@@ -76,7 +76,7 @@ export function MarketplaceProductDetail({ product, onBack, onAdd, onBuy }: { pr
 
 export function MarketplaceCart({ open, items, order, busy, onClose, onRemove, onCheckout }: { open: boolean; items: MarketplaceCartItem[]; order: PublicOrder | null; busy: boolean; onClose: () => void; onRemove: (productId: string) => void; onCheckout: () => void }) {
   if (!open) return null;
-  const qrImg = order ? (
+  const qrImg = (order && !order.sakuRupiahCheckoutUrl) ? (
     (order.paymentQrUrl && (order.paymentQrUrl.startsWith('data:') || order.paymentQrUrl.startsWith('http')))
       ? order.paymentQrUrl
       : (order.qrisPayload && !order.qrisPayload.startsWith('http'))
