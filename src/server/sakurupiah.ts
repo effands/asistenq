@@ -143,18 +143,24 @@ export async function createSakuRupiahInvoice(
   }
 
   const data = json.data[0];
-  const qrPayload = data.qr || '';
+  const qrPayload = data.qr || data.qr_content || data.qr_payload || '';
   let qrDataUrl: string | undefined;
 
-  if (qrPayload) {
-    try {
-      qrDataUrl = await QRCode.toDataURL(qrPayload, {
-        errorCorrectionLevel: 'M',
-        margin: 2,
-        width: 320
-      });
-    } catch {
-      // Fallback if QRCode generation fails
+  if (data.qr_image || data.qr_url) {
+    qrDataUrl = data.qr_image || data.qr_url;
+  } else if (qrPayload) {
+    if (qrPayload.startsWith('http://') || qrPayload.startsWith('https://') || qrPayload.startsWith('data:image')) {
+      qrDataUrl = qrPayload;
+    } else {
+      try {
+        qrDataUrl = await QRCode.toDataURL(qrPayload, {
+          errorCorrectionLevel: 'M',
+          margin: 2,
+          width: 320
+        });
+      } catch {
+        qrDataUrl = `https://api.qrserver.com/v1/create-qr-code/?size=320x320&data=${encodeURIComponent(qrPayload)}`;
+      }
     }
   }
 

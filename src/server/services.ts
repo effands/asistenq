@@ -620,10 +620,11 @@ function allocateUniquePaymentCode(store: Store, now: Date): number {
       return expiresAt > now;
     })
     .map((order) => order.uniqueCode));
-  const firstCode = Math.floor(Math.random() * 99) + 1;
+  const limit = 29;
+  const firstCode = Math.floor(Math.random() * limit) + 1;
 
-  for (let offset = 0; offset < 99; offset += 1) {
-    const candidate = 1 + ((firstCode - 1 + offset) % 99);
+  for (let offset = 0; offset < limit; offset += 1) {
+    const candidate = 1 + ((firstCode - 1 + offset) % limit);
     if (!usedCodes.has(candidate)) return candidate;
   }
 
@@ -821,7 +822,11 @@ async function tryAttachSakuRupiahInvoice(store: Store, order: Order, items: Ord
       if (res.trxId) order.sakuRupiahTrxId = res.trxId;
       if (res.checkoutUrl) order.sakuRupiahCheckoutUrl = res.checkoutUrl;
       if (res.qrPayload) order.qrisPayload = res.qrPayload;
-      if (res.qrDataUrl || res.checkoutUrl) order.paymentQrUrl = res.qrDataUrl || res.checkoutUrl;
+      if (res.qrDataUrl) {
+        order.paymentQrUrl = res.qrDataUrl;
+      } else if (res.qrPayload) {
+        order.paymentQrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=320x320&data=${encodeURIComponent(res.qrPayload)}`;
+      }
     }
   } catch (error) {
     console.error('SakuRupiah invoice creation fallback:', error);
