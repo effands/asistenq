@@ -213,7 +213,7 @@ describe('license services', () => {
     expect(plans.map((item) => item.code)).toEqual(['1M', '3M', '6M', '1Y']);
     expect(plans.every((item) => item.productSlug === 'vjstudio')).toBe(true);
     expect(plans.find((item) => item.code === '6M')).toMatchObject({
-      price: 225900,
+      price: 225000,
       badge: 'Best Seller',
       highlighted: true
     });
@@ -245,10 +245,10 @@ describe('license services', () => {
       version: 1,
       product: 'vjstudio',
       plans: [
-        { code: '1M', price: 49900 },
-        { code: '3M', price: 129900 },
-        { code: '6M', price: 225900, badge: 'Best Seller', highlighted: true },
-        { code: '1Y', price: 399000 }
+        { code: '1M', price: 50000 },
+        { code: '3M', price: 130000 },
+        { code: '6M', price: 225000, badge: 'Best Seller', highlighted: true },
+        { code: '1Y', price: 400000 }
       ]
     });
   });

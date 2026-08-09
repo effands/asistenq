@@ -134,6 +134,14 @@ export async function seedInitialData(store: Store): Promise<void> {
     { title: 'Update Berkala', description: 'Pembaruan fitur dan perbaikan tersedia selama lisensi aktif.' }
   ];
   vjStudio.features ??= vjStudio.benefits;
+  vjStudio.badge ??= 'PRO';
+  vjStudio.fulfillmentType ??= 'license';
+  vjStudio.benefits ??= [
+    { title: 'Workflow Otomatis', description: 'Membantu proses produksi video lebih cepat dan konsisten.' },
+    { title: 'Ringan & Cepat', description: 'Dirancang untuk workflow creator pada perangkat Windows.' },
+    { title: 'Update Berkala', description: 'Pembaruan fitur dan perbaikan tersedia selama lisensi aktif.' }
+  ];
+  vjStudio.features ??= vjStudio.benefits;
   vjStudio.targetUsers ??= ['YouTuber', 'Content Creator', 'Digital Agency', 'Freelancer'];
   vjStudio.developer ??= 'AsistenQ Team';
   vjStudio.compatibility ??= 'Windows 10/11 (64-bit)';
@@ -142,12 +150,12 @@ export async function seedInitialData(store: Store): Promise<void> {
 
   [
     { code: 'TRIAL', name: 'Trial 1 Hari', price: 0, billingPeriod: 'trial' as const, durationDays: 1, isFree: true, isActive: false },
-    { code: '1M', name: 'Lisensi 1 Bulan', price: 49900, billingPeriod: 'monthly' as const, durationDays: 30, isFree: false, isActive: true, sortOrder: 10 },
-    { code: '2M', name: 'Lisensi 2 Bulan', price: 85900, billingPeriod: 'monthly' as const, durationDays: 60, isFree: false, isActive: false },
-    { code: '3M', name: 'Lisensi 3 Bulan', price: 129900, billingPeriod: 'monthly' as const, durationDays: 90, isFree: false, isActive: true, sortOrder: 20 },
-    { code: '6M', name: 'Lisensi 6 Bulan', price: 225900, billingPeriod: 'monthly' as const, durationDays: 180, isFree: false, isActive: true, sortOrder: 30, badge: 'Best Seller', highlighted: true },
-    { code: '1Y', name: 'Lisensi 1 Tahun', price: 399000, billingPeriod: 'annual' as const, durationDays: 365, isFree: false, isActive: true, sortOrder: 40 },
-    { code: 'LIFETIME', name: 'Lisensi Lifetime', price: 799000, billingPeriod: 'lifetime' as const, durationDays: null, isFree: false, isActive: false }
+    { code: '1M', name: 'Lisensi 1 Bulan', price: 50000, billingPeriod: 'monthly' as const, durationDays: 30, isFree: false, isActive: true, sortOrder: 10 },
+    { code: '2M', name: 'Lisensi 2 Bulan', price: 85000, billingPeriod: 'monthly' as const, durationDays: 60, isFree: false, isActive: false },
+    { code: '3M', name: 'Lisensi 3 Bulan', price: 130000, billingPeriod: 'monthly' as const, durationDays: 90, isFree: false, isActive: true, sortOrder: 20 },
+    { code: '6M', name: 'Lisensi 6 Bulan', price: 225000, billingPeriod: 'monthly' as const, durationDays: 180, isFree: false, isActive: true, sortOrder: 30, badge: 'Best Seller', highlighted: true },
+    { code: '1Y', name: 'Lisensi 1 Tahun', price: 400000, billingPeriod: 'annual' as const, durationDays: 365, isFree: false, isActive: true, sortOrder: 40 },
+    { code: 'LIFETIME', name: 'Lisensi Lifetime', price: 800000, billingPeriod: 'lifetime' as const, durationDays: null, isFree: false, isActive: false }
   ].forEach((plan) => {
     const record = createPlanRecord(store, {
       productId: vjStudio.id,
@@ -168,7 +176,7 @@ export async function seedInitialData(store: Store): Promise<void> {
     category: 'E-Learning',
     visibility: 'public',
     billingPeriod: 'annual',
-    price: 799000,
+    price: 800000,
     featured: true,
     headline: 'Kelas tahunan untuk membangun channel YouTube dengan workflow yang rapi.',
     description: 'Akses video tutorial, materi pendukung, dan update kelas untuk produksi konten YouTube.',
@@ -258,7 +266,7 @@ export async function seedInitialData(store: Store): Promise<void> {
       category: 'Video Editing',
       visibility: 'private',
       billingPeriod: 'monthly',
-      price: 99000,
+      price: 100000,
       featured: false,
       headline: 'Rapikan workflow editing YouTube lebih cepat.',
       description: 'Tools awal untuk membantu creator memangkas proses kerja video harian.',
@@ -275,7 +283,7 @@ export async function seedInitialData(store: Store): Promise<void> {
       category: 'E-Learning',
       visibility: 'private',
       billingPeriod: 'annual',
-      price: 799000,
+      price: 800000,
       featured: false,
       headline: 'Akses tahunan ke kelas video dan materi creator.',
       description: 'Materi premium untuk editing, produksi konten, dan workflow YouTube.',
@@ -287,6 +295,17 @@ export async function seedInitialData(store: Store): Promise<void> {
   for (const product of store.data.products.filter((row) => row.active && row.visibility === 'public')) {
     if (!store.data.plans.some((plan) => plan.productId === product.id)) {
       createPlanRecord(store, { productId: product.id, code: 'DEFAULT', name: product.price === 0 ? 'Akses Gratis' : 'Paket Produk', price: product.price, billingPeriod: product.billingPeriod, durationDays: product.billingPeriod === 'annual' ? 365 : product.billingPeriod === 'monthly' ? 30 : null, isFree: product.price === 0, isActive: true, sortOrder: 10 });
+    }
+  }
+
+  for (const plan of store.data.plans) {
+    if (plan.price % 1000 === 900 || plan.price % 1000 === 990) {
+      plan.price = Math.round(plan.price / 1000) * 1000;
+    }
+  }
+  for (const product of store.data.products) {
+    if (product.price % 1000 === 900 || product.price % 1000 === 990) {
+      product.price = Math.round(product.price / 1000) * 1000;
     }
   }
 

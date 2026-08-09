@@ -84,7 +84,7 @@ describe('Telegram commerce API boundaries', () => {
       hwid: 'CA00E2C30BA61C8D', idempotencyKey: 'desktop-route-001'
     });
     expect(created.status).toBe(201);
-    expect(created.body.totalAmount).toBe(49900 + created.body.uniqueCode);
+    expect(created.body.totalAmount).toBe(50000 + created.body.uniqueCode);
     expect(created.body.uniqueCode).toBeGreaterThanOrEqual(1);
     expect(created.body.uniqueCode).toBeLessThanOrEqual(99);
     expect(created.body).not.toHaveProperty('qrisPayload');

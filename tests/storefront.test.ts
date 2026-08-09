@@ -151,12 +151,12 @@ describe('initial catalog seed', () => {
 
     expect(vjPlans).toEqual([
       { code: 'TRIAL', price: 0, billingPeriod: 'trial', durationDays: 1, isFree: true },
-      { code: '1M', price: 49900, billingPeriod: 'monthly', durationDays: 30, isFree: false },
-      { code: '2M', price: 85900, billingPeriod: 'monthly', durationDays: 60, isFree: false },
-      { code: '3M', price: 129900, billingPeriod: 'monthly', durationDays: 90, isFree: false },
-      { code: '6M', price: 225900, billingPeriod: 'monthly', durationDays: 180, isFree: false },
-      { code: '1Y', price: 399000, billingPeriod: 'annual', durationDays: 365, isFree: false },
-      { code: 'LIFETIME', price: 799000, billingPeriod: 'lifetime', durationDays: null, isFree: false }
+      { code: '1M', price: 50000, billingPeriod: 'monthly', durationDays: 30, isFree: false },
+      { code: '2M', price: 85000, billingPeriod: 'monthly', durationDays: 60, isFree: false },
+      { code: '3M', price: 130000, billingPeriod: 'monthly', durationDays: 90, isFree: false },
+      { code: '6M', price: 225000, billingPeriod: 'monthly', durationDays: 180, isFree: false },
+      { code: '1Y', price: 400000, billingPeriod: 'annual', durationDays: 365, isFree: false },
+      { code: 'LIFETIME', price: 800000, billingPeriod: 'lifetime', durationDays: null, isFree: false }
     ]);
   });
 });
