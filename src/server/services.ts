@@ -591,6 +591,8 @@ type CheckoutOptions = {
   telegramId?: string;
   lifetimeMinutes?: number;
   reusePending?: boolean;
+  customerEmail?: string;
+  customerHwid?: string;
 };
 
 const checkoutQueues = new WeakMap<Store, Promise<void>>();
@@ -659,11 +661,14 @@ export async function createCartCheckout(
       voucherCode: input.voucherCode,
       customerHwid: input.customerHwid
     }, now);
-    const uniqueCode = amount > 0 ? allocateUniquePaymentCode(store, now) : 0;
+    const settings = store.data.deploymentSettings;
+    const hasSakuRupiah = Boolean(settings?.sakuRupiahApiId?.trim() && settings?.sakuRupiahApiKey?.trim());
+
+    const uniqueCode = (amount > 0 && !hasSakuRupiah) ? allocateUniquePaymentCode(store, now) : 0;
     const totalAmount = amount + uniqueCode;
     const invoiceNumber = `INV-${now.toISOString().slice(0, 10).replace(/-/g, '')}-${String(store.data.orders.length + 1).padStart(4, '0')}`;
     const expiresAt = new Date(now.getTime() + invoiceLifetimeHours * 60 * 60 * 1000).toISOString();
-    const generatedQris = amount > 0
+    const generatedQris = (amount > 0 && !hasSakuRupiah)
       ? await generateDynamicQris(store.data.deploymentSettings?.qrisStaticPayload ?? '', totalAmount)
       : undefined;
 
@@ -686,6 +691,7 @@ export async function createCartCheckout(
       productName: orderItems.length === 1 ? orderItems[0].productName : `${orderItems[0].productName} + ${orderItems.length - 1} produk lainnya`,
       invoiceNumber,
       orderItems,
+      customerEmail: member?.email,
       customerHwid: input.customerHwid ? normalizeHwid(input.customerHwid) : undefined,
       uniqueCode,
       amount,
@@ -735,15 +741,18 @@ async function createCheckoutLocked(
     if (reusable) return reusable;
   }
 
+  const settings = store.data.deploymentSettings;
+  const hasSakuRupiah = Boolean(settings?.sakuRupiahApiId?.trim() && settings?.sakuRupiahApiKey?.trim());
+
   const amount = options.price ?? product.price;
-  const uniqueCode = amount > 0 ? allocateUniquePaymentCode(store, now) : 0;
+  const uniqueCode = (amount > 0 && !hasSakuRupiah) ? allocateUniquePaymentCode(store, now) : 0;
   const totalAmount = amount + uniqueCode;
   const invoiceNumber = `INV-${now.toISOString().slice(0, 10).replace(/-/g, '')}-${String(store.data.orders.length + 1).padStart(4, '0')}`;
   const lifetimeMs = options.lifetimeMinutes === undefined
     ? invoiceLifetimeHours * 60 * 60 * 1000
     : options.lifetimeMinutes * 60 * 1000;
   const expiresAt = new Date(now.getTime() + lifetimeMs).toISOString();
-  const generatedQris = amount > 0
+  const generatedQris = (amount > 0 && !hasSakuRupiah)
     ? await generateDynamicQris(store.data.deploymentSettings?.qrisStaticPayload ?? '', totalAmount)
     : undefined;
 
@@ -755,6 +764,8 @@ async function createCheckoutLocked(
     productName: product.name,
     planId: options.planId,
     telegramId: options.telegramId,
+    customerEmail: options.customerEmail ?? member.email,
+    customerHwid: options.customerHwid,
     uniqueCode,
     amount,
     totalAmount,
@@ -880,7 +891,9 @@ export async function createLicenseCheckout(store: Store, input: {
   const order = await createCheckout(store, member.id, product.id, now, {
     planId: plan.id,
     price,
-    lifetimeMinutes: 30
+    lifetimeMinutes: 30,
+    customerEmail: email,
+    customerHwid: hwid
   });
   const accessToken = orderAccessToken(order.id, idempotencyKey);
   Object.assign(order, {
