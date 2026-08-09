@@ -45,7 +45,14 @@ function syncLegacyMixin9Plans(store: Store, product: Product): void {
   const hasLegacyFreePlan = productPlans.some((plan) => plan.code === 'DEFAULT' && plan.price === 0);
   const hasExpectedPlans = ['1M', '6M', '1Y'].every((code) => productPlans.some((plan) => plan.code === code));
 
-  if (product.price !== 0 && !hasLegacyFreePlan && hasExpectedPlans) return;
+  if (!hasLegacyFreePlan && hasExpectedPlans) {
+    const plan1M = productPlans.find((p) => p.code === '1M');
+    if (plan1M && product.price > 0 && plan1M.price !== product.price) {
+      plan1M.price = product.price;
+      store.save();
+    }
+    return;
+  }
 
   Object.assign(product, {
     accessMode: 'paid' as const,

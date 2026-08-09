@@ -590,6 +590,15 @@ export function updatePlanRecord(store: Store, planId: string, input: Partial<Pi
   }
   Object.assign(plan, input);
   if (plan.badge !== undefined) plan.badge = plan.badge.trim() || undefined;
+
+  if (input.price !== undefined && (plan.code === '1M' || plan.code === 'DEFAULT')) {
+    const product = store.data.products.find((item) => item.id === plan.productId);
+    if (product) {
+      product.price = input.price;
+      product.updatedAt = new Date().toISOString();
+    }
+  }
+
   store.save();
   return plan;
 }
