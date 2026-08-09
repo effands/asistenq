@@ -42,8 +42,8 @@ describe('cart checkout validation', () => {
     expect(order.orderItems).toHaveLength(2);
     expect(order.amount).toBe(79800);
     expect(order.uniqueCode).toBeGreaterThanOrEqual(1);
-    expect(order.uniqueCode).toBeLessThanOrEqual(99);
-    expect(order.totalAmount).toBe(order.amount + order.uniqueCode!);
+    expect(order.uniqueCode).toBeLessThanOrEqual(250);
+    expect(order.totalAmount).toBe(order.amount + Math.ceil(order.amount * 0.007) + order.uniqueCode!);
     expect(store.data.orders).toHaveLength(1);
     expect(order.customerHwid).toBe('ABCDEF1234567890');
   });

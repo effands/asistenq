@@ -84,9 +84,9 @@ describe('Telegram commerce API boundaries', () => {
       hwid: 'CA00E2C30BA61C8D', idempotencyKey: 'desktop-route-001'
     });
     expect(created.status).toBe(201);
-    expect(created.body.totalAmount).toBe(50000 + created.body.uniqueCode);
+    expect(created.body.totalAmount).toBe(50000 + Math.ceil(50000 * 0.007) + created.body.uniqueCode);
     expect(created.body.uniqueCode).toBeGreaterThanOrEqual(1);
-    expect(created.body.uniqueCode).toBeLessThanOrEqual(99);
+    expect(created.body.uniqueCode).toBeLessThanOrEqual(250);
     expect(created.body).not.toHaveProperty('qrisPayload');
 
     const invoice = created.body.invoiceNumber;
@@ -111,7 +111,7 @@ describe('Telegram commerce API boundaries', () => {
     expect(created.status).toBe(201);
     expect(created.body.product.slug).toBe('mixin9');
     expect(created.body.amount).toBe(47000);
-    expect(created.body.totalAmount).toBe(47000 + created.body.uniqueCode);
+    expect(created.body.totalAmount).toBe(47000 + Math.ceil(47000 * 0.007) + created.body.uniqueCode);
     expect(store.data.orders.at(-1)?.customerHwid).toBeUndefined();
   });
 

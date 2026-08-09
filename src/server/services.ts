@@ -620,7 +620,7 @@ function allocateUniquePaymentCode(store: Store, now: Date): number {
       return expiresAt > now;
     })
     .map((order) => order.uniqueCode));
-  const limit = 29;
+  const limit = 250;
   const firstCode = Math.floor(Math.random() * limit) + 1;
 
   for (let offset = 0; offset < limit; offset += 1) {
@@ -665,8 +665,9 @@ export async function createCartCheckout(
     const settings = store.data.deploymentSettings;
     const hasSakuRupiah = Boolean(settings?.sakuRupiahApiId?.trim() && settings?.sakuRupiahApiKey?.trim());
 
+    const qrisFee = amount > 0 ? Math.ceil(amount * 0.007) : 0;
     const uniqueCode = (amount > 0 && !hasSakuRupiah) ? allocateUniquePaymentCode(store, now) : 0;
-    const totalAmount = amount + uniqueCode;
+    const totalAmount = amount + qrisFee + uniqueCode;
     const invoiceNumber = `INV-${now.toISOString().slice(0, 10).replace(/-/g, '')}-${String(store.data.orders.length + 1).padStart(4, '0')}`;
     const expiresAt = new Date(now.getTime() + invoiceLifetimeHours * 60 * 60 * 1000).toISOString();
     const generatedQris = (amount > 0 && !hasSakuRupiah)
@@ -746,8 +747,9 @@ async function createCheckoutLocked(
   const hasSakuRupiah = Boolean(settings?.sakuRupiahApiId?.trim() && settings?.sakuRupiahApiKey?.trim());
 
   const amount = options.price ?? product.price;
+  const qrisFee = amount > 0 ? Math.ceil(amount * 0.007) : 0;
   const uniqueCode = (amount > 0 && !hasSakuRupiah) ? allocateUniquePaymentCode(store, now) : 0;
-  const totalAmount = amount + uniqueCode;
+  const totalAmount = amount + qrisFee + uniqueCode;
   const invoiceNumber = `INV-${now.toISOString().slice(0, 10).replace(/-/g, '')}-${String(store.data.orders.length + 1).padStart(4, '0')}`;
   const lifetimeMs = options.lifetimeMinutes === undefined
     ? invoiceLifetimeHours * 60 * 60 * 1000
@@ -855,7 +857,8 @@ async function ensureQrisFallback(store: Store, order: Order): Promise<void> {
     if (order.amount > 0 && (!order.uniqueCode || order.uniqueCode === 0)) {
       try {
         order.uniqueCode = allocateUniquePaymentCode(store, new Date());
-        order.totalAmount = order.amount + order.uniqueCode;
+        const qrisFee = Math.ceil(order.amount * 0.007);
+        order.totalAmount = order.amount + qrisFee + order.uniqueCode;
       } catch (err) {
         console.warn('[QRIS Fallback] Unique code allocation error:', err);
       }

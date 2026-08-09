@@ -2273,55 +2273,6 @@ textarea {
 
 .plan-field input:focus {
   border-color: #14b8a6;
-  outline: none;
-}
-
-.plan-card-toggles {
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-}
-
-.plan-toggle-label {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 0.78rem;
-  font-weight: 500;
-  cursor: pointer;
-  white-space: nowrap;
-}
-
-.plan-toggle-label input[type="checkbox"] {
-  width: 15px;
-  height: 15px;
-  accent-color: #14b8a6;
-  cursor: pointer;
-}
-
-.plan-card-actions {
-  display: flex;
-  justify-content: flex-end;
-}
-
-@media (max-width: 1100px) {
-  .plan-editor-table-header {
-    display: none;
-  }
-  .license-plan-card {
-    grid-template-columns: 1fr 1fr;
-  }
-  .plan-card-actions {
-    grid-column: 1 / -1;
-    justify-content: stretch;
-  }
-  .plan-card-actions button {
-    width: 100%;
-  }
-}
-
-.product-admin-card {
-  border: none;
   border-bottom: 1px solid var(--line);
   border-radius: 0;
   background: transparent;

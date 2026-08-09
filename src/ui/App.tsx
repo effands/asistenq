@@ -1690,6 +1690,16 @@ function AdminLicensePanel({ dashboard, products, onGenerateLicense, onRefresh, 
         </div>
         <p className="muted">Kode paket tidak berubah agar lisensi dan transaksi lama tetap terhubung.</p>
         <div className="license-plan-editor-list">
+          <div className="plan-editor-table-header">
+            <span>Kode</span>
+            <span>Nama Paket</span>
+            <span>Harga (Rp)</span>
+            <span>Durasi (Hari)</span>
+            <span>Badge Highlight</span>
+            <span>Urutan</span>
+            <span>Status / Best Seller</span>
+            <span style={{ textAlign: 'right' }}>Aksi</span>
+          </div>
           {managedPlans.map((plan) => {
             const draft = { ...plan, ...(planDrafts[plan.id] ?? {}) };
             const setPlanDraft = (patch: Partial<typeof plan>) => setPlanDrafts((current) => ({
@@ -2882,9 +2892,29 @@ function ProductForm({ onCreateProduct }: {
           <label className="col-1">Jenis produk<select value={type} onChange={(event) => setType(event.target.value as ProductType)}>{productTypes.map((item) => <option key={item}>{item}</option>)}</select></label>
           <label className="col-2">Kategori marketplace<input value={category} onChange={(event) => setCategory(event.target.value)} placeholder="Tools Creator" /></label>
           <label className="col-4">
-            <span>URL Cover Thumbnail Marketplace (Rasio 16:9)</span>
-            <input value={marketplaceCoverUrl} onChange={(event) => setMarketplaceCoverUrl(event.target.value)} placeholder="https://.../cover-16x9.jpg" />
-            <small style={{ color: 'var(--muted-color)', fontSize: '11px', marginTop: '4px' }}>Gunakan gambar rasio 16:9 (contoh: 1280x720 / 1920x1080) agar proporsional di seluruh katalog & halaman member.</small>
+            <span>URL / File Cover Thumbnail Marketplace (Rasio 16:9)</span>
+            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+              <label style={{ cursor: 'pointer', background: '#00473d', color: '#fff', padding: '10px 16px', borderRadius: '10px', fontSize: '13px', fontWeight: '800', display: 'inline-flex', gap: '6px', alignItems: 'center', margin: 0, whiteSpace: 'nowrap' }}>
+                📁 Browse / Import Gambar
+                <input
+                  type="file"
+                  accept="image/*"
+                  style={{ display: 'none' }}
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) {
+                      const reader = new FileReader();
+                      reader.onload = (evt) => {
+                        if (evt.target?.result) setMarketplaceCoverUrl(evt.target.result as string);
+                      };
+                      reader.readAsDataURL(file);
+                    }
+                  }}
+                />
+              </label>
+              <input value={marketplaceCoverUrl} onChange={(event) => setMarketplaceCoverUrl(event.target.value)} placeholder="Atau tempel URL gambar: https://.../cover-16x9.jpg" style={{ flex: 1 }} />
+            </div>
+            <small style={{ color: 'var(--muted-color)', fontSize: '11px', marginTop: '4px' }}>Klik tombol &quot;Browse / Import Gambar&quot; untuk memilih file dari komputer, atau tempel link URL. Gambar rasio 16:9 ideal.</small>
             {marketplaceCoverUrl && (
               <div style={{ width: '220px', aspectRatio: '16 / 9', borderRadius: '8px', overflow: 'hidden', border: '1px solid var(--line)', marginTop: '8px' }}>
                 <img src={marketplaceCoverUrl} alt="Preview 16:9" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />

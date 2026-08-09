@@ -61,6 +61,7 @@ describe('server services', () => {
     ).rejects.toThrow('email already exists');
   });
 
+
   it('creates QRIS checkout and activates monthly subscription after payment', async () => {
     const member = await createMember(store, { name: 'Member', email: 'member@asistenq.com', password: 'secret123' });
     const product = createProductRecord(store, {
@@ -75,8 +76,8 @@ describe('server services', () => {
     expect(order.status).toBe('pending');
     expect(order.invoiceNumber).toMatch(/^INV-/);
     expect(order.uniqueCode).toBeGreaterThanOrEqual(1);
-    expect(order.uniqueCode).toBeLessThanOrEqual(99);
-    expect(order.totalAmount).toBe(order.amount + (order.uniqueCode ?? 0));
+    expect(order.uniqueCode).toBeLessThanOrEqual(250);
+    expect(order.totalAmount).toBe(order.amount + Math.ceil(order.amount * 0.007) + (order.uniqueCode ?? 0));
     expect(order.expiresAt).toBeTruthy();
     expect(order.paymentQrUrl).toMatch(/^data:image\/png;base64,/);
     expect(order.qrisPayload).toContain(`54${String(order.totalAmount).length.toString().padStart(2, '0')}${order.totalAmount}`);
@@ -119,7 +120,6 @@ describe('server services', () => {
   it('creates license plans when a product is created with tiered pricing', () => {
     const product = createProductRecord(store, {
       name: 'VJ Studio Pro',
-      slug: 'vjstudio-pro',
       type: 'tool',
       billingPeriod: 'monthly',
       price: 99000,
@@ -256,7 +256,7 @@ describe('server services', () => {
     const product = createProductRecord(store, {
       name: 'Exhausted Product', slug: 'exhausted-product', type: 'tool', billingPeriod: 'monthly', price: 99000
     });
-    store.data.orders = Array.from({ length: 99 }, (_, index) => ({
+    store.data.orders = Array.from({ length: 250 }, (_, index) => ({
       id: `pending_${index}`,
       memberId: member.id,
       productId: product.id,
@@ -271,7 +271,7 @@ describe('server services', () => {
     await expect(createCheckout(
       store, member.id, product.id, new Date('2026-07-17T08:00:00.000Z')
     )).rejects.toThrow('kode unik pembayaran tidak tersedia');
-    expect(store.data.orders).toHaveLength(99);
+    expect(store.data.orders).toHaveLength(250);
   });
 
   it('serializes direct concurrent checkouts with distinct invoices and payment codes', async () => {
@@ -442,8 +442,8 @@ describe('server services', () => {
     expect(first.accessToken).toBe(second.accessToken);
     expect(canAccessLicenseOrder(second.order, second.accessToken)).toBe(true);
     expect(first.order.uniqueCode).toBeGreaterThanOrEqual(1);
-    expect(first.order.uniqueCode).toBeLessThanOrEqual(99);
-    expect(first.order.totalAmount).toBe(49900 + first.order.uniqueCode!);
+    expect(first.order.uniqueCode).toBeLessThanOrEqual(250);
+    expect(first.order.totalAmount).toBe(49900 + Math.ceil(49900 * 0.007) + first.order.uniqueCode!);
     expect(first.order.customerHwid).toBe('CA00E2C30BA61C8D');
   });
 

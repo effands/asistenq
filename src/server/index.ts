@@ -2131,8 +2131,25 @@ app.post('/api/admin/deploy/update', requireSession, requireAdminScope('products
   }
 });
 
-app.get('/api/admin/orders', requireSession, requireAdminScope('orders'), (_req, res) => {
+app.get('/api/admin/orders', requireSession, requireAdminScope('orders'), async (_req, res) => {
   expirePendingOrders(store);
+  const settings = store.data.deploymentSettings;
+  if (settings?.sakuRupiahApiId?.trim() && settings?.sakuRupiahApiKey?.trim()) {
+    const pendingOrders = store.data.orders.filter((o) => o.status === 'pending');
+    for (const order of pendingOrders.slice(0, 10)) {
+      try {
+        const check = await checkSakuRupiahTransactionStatus(settings, order.invoiceNumber ?? order.id, order.sakuRupiahTrxId);
+        if (check.isPaid && order.status !== 'paid') {
+          const { order: paidOrder } = markOrderPaidByInvoice(store, order.invoiceNumber ?? order.id);
+          const previousItems = paidOrder.orderItems ? JSON.parse(JSON.stringify(paidOrder.orderItems)) : [];
+          fulfillPaidOrder(store, paidOrder.id);
+          void dispatchFulfillmentEmails(store, paidOrder, previousItems);
+        }
+      } catch (e) {
+        console.warn('Auto-check SakuRupiah status failed:', e);
+      }
+    }
+  }
   void sendPendingOrderReminders();
   res.json(store.data.orders.map(publicOrder));
 });
@@ -2302,7 +2319,10 @@ app.post('/api/payments/sakurupiah/callback', async (req, res) => {
       return;
     }
 
-    if (status === 'berhasil' && (Number(status_kode) === 1 || status_kode === undefined)) {
+    const normStatus = String(status ?? '').toLowerCase();
+    const isPaid = normStatus === 'berhasil' || normStatus === 'paid' || normStatus === 'success' || Number(status_kode) === 1;
+
+    if (isPaid) {
       if (order.status !== 'paid') {
         const { order: paidOrder } = markOrderPaidByInvoice(store, order.invoiceNumber ?? order.id);
         const previousItems = paidOrder.orderItems ? JSON.parse(JSON.stringify(paidOrder.orderItems)) : [];
