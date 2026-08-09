@@ -35,6 +35,8 @@ export function fulfillPaidOrder(store: Store, orderId: string, now = new Date()
         const license = existing ?? generateToolLicense(store, { productSlug: product.slug, planCode: plan.code, email: order.customerEmail ?? member.email, hwid: order.customerHwid, now });
         license.orderId = order.id;
         item.fulfillmentReference = license.id;
+        item.fulfillmentStatus = 'fulfilled';
+        delete item.fulfillmentError;
       } else if (item.fulfillmentType === 'download') {
         if (!product.downloadSourceUrl) throw new Error('file produk digital belum diatur');
         validateDownloadSource(product.downloadSourceUrl);
@@ -45,6 +47,8 @@ export function fulfillPaidOrder(store: Store, orderId: string, now = new Date()
           store.data.downloadGrants.push(grant);
           item.fulfillmentReference = token;
         }
+        item.fulfillmentStatus = 'fulfilled';
+        delete item.fulfillmentError;
       } else {
         const type = item.fulfillmentType;
         let grant = store.data.accessGrants.find((row) => row.orderId === order.id && row.orderItemId === item.id);
@@ -55,9 +59,9 @@ export function fulfillPaidOrder(store: Store, orderId: string, now = new Date()
           store.data.accessGrants.push(grant);
         }
         item.fulfillmentReference = grant.id;
+        item.fulfillmentStatus = 'fulfilled';
+        delete item.fulfillmentError;
       }
-      item.fulfillmentStatus = 'fulfilled';
-      delete item.fulfillmentError;
     } catch (error) {
       item.fulfillmentStatus = 'failed';
       item.fulfillmentError = error instanceof Error ? error.message : 'fulfillment gagal';

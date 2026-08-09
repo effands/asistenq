@@ -3451,6 +3451,10 @@ function MemberPanel({ session, products, dashboard, orders, onRegister, onLogin
   const ownedProducts = paidProducts.filter((product) => ownedProductIds.has(product.id));
   const installerProducts = paidProducts.filter((product) => product.installerConfigured);
   const pendingOrders = orders.filter((order) => order.status === 'pending').length;
+  const pendingHwidOrders = orders.filter((order) => (
+    order.status === 'paid' &&
+    order.orderItems?.some((item) => item.fulfillmentType === 'license' && item.fulfillmentStatus !== 'fulfilled')
+  ));
   const filteredLicenses = ownedLicenses.filter((license) => {
     const matchesStatus = licenseStatusFilter === 'all' || groupLicenseStatus(license) === licenseStatusFilter;
     const query = licenseSearch.trim().toLowerCase();
@@ -3551,7 +3555,28 @@ function MemberPanel({ session, products, dashboard, orders, onRegister, onLogin
               </div>
               <span className="soft-badge">{ownedLicenses.length} lisensi</span>
             </div>
-            {ownedLicenses.length === 0 && (
+            {pendingHwidOrders.length > 0 && (
+              <div style={{ background: 'rgba(234, 179, 8, 0.1)', border: '1px solid rgba(234, 179, 8, 0.3)', borderRadius: '12px', padding: '16px', marginBottom: '16px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 600, color: '#ca8a04', marginBottom: '8px' }}>
+                  <Sparkles size={18} />
+                  <span>Pesanan Lunas Menunggu Input HWID ({pendingHwidOrders.length})</span>
+                </div>
+                <p style={{ margin: '0 0 12px 0', fontSize: '0.88rem', color: 'var(--muted-color)' }}>
+                  Pembayaran Anda sudah berhasil! Masukkan 16 karakter HWID perangkat Anda untuk menerbitkan token lisensi:
+                </p>
+                {pendingHwidOrders.map((ord) => (
+                  <div key={ord.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px', background: 'var(--card-bg, #ffffff)', padding: '12px 16px', borderRadius: '8px', border: '1px solid var(--border-color)', marginTop: '8px' }}>
+                    <div>
+                      <strong>{ord.productName}</strong> <small style={{ color: 'var(--muted-color)' }}>({ord.invoiceNumber ?? ord.id})</small>
+                    </div>
+                    <button className="primary-button" style={{ padding: '6px 14px', fontSize: '0.85rem' }} onClick={() => setActiveMemberTab('orders')}>
+                      Input HWID Sekarang &rarr;
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+            {ownedLicenses.length === 0 && pendingHwidOrders.length === 0 && (
               <div className="empty-state">
                 Belum ada lisensi aktif untuk akun anda, silahkan order tools sesuai kebutuhan.
               </div>
