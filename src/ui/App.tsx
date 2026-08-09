@@ -2900,10 +2900,10 @@ function ProductForm({ onCreateProduct }: {
           ⚡ Pilih Preset Jenis Produk (Klik Sekali):
         </strong>
         <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-          <button type="button" className={`ghost-button ${type === 'tool' && fulfillmentType === 'license' ? 'primary' : ''}`} onClick={() => applyPreset('tool')}>🛠️ Software / Tools Lisensi</button>
-          <button type="button" className={`ghost-button ${type === 'bundle' && fulfillmentType === 'download' ? 'primary' : ''}`} onClick={() => applyPreset('download')}>📦 Asset / File Download</button>
-          <button type="button" className={`ghost-button ${type === 'course' ? 'primary' : ''}`} onClick={() => applyPreset('course')}>🎓 Kelas / E-Learning</button>
-          <button type="button" className={`ghost-button ${type === 'free' ? 'primary' : ''}`} onClick={() => applyPreset('free')}>🎁 Free Tools (Gratis)</button>
+          <button type="button" className={`preset-btn ${type === 'tool' && fulfillmentType === 'license' ? 'active' : ''}`} onClick={() => applyPreset('tool')}>🛠️ Software / Tools Lisensi</button>
+          <button type="button" className={`preset-btn ${type === 'bundle' && fulfillmentType === 'download' ? 'active' : ''}`} onClick={() => applyPreset('download')}>📦 Asset / File Download</button>
+          <button type="button" className={`preset-btn ${type === 'course' ? 'active' : ''}`} onClick={() => applyPreset('course')}>🎓 Kelas / E-Learning</button>
+          <button type="button" className={`preset-btn ${type === 'free' ? 'active' : ''}`} onClick={() => applyPreset('free')}>🎁 Free Tools (Gratis)</button>
         </div>
       </div>
 
