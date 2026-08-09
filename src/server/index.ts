@@ -52,11 +52,11 @@ import {
   updateOwnMemberProfile,
   verifyVoucher
 } from './services';
-import { createFileStore } from './store';
+import { createFileStore, type Store } from './store';
 import { sendMail } from './mailer';
 import { analyticsOverview, heartbeatPresence, recordAnalyticsEvent } from './analytics';
 import { validateStaticQrisPayload } from './qris';
-import { checkSakuRupiahBalance, verifySakuRupiahCallbackSignature } from './sakurupiah';
+import { checkSakuRupiahBalance, checkSakuRupiahTransactionStatus, verifySakuRupiahCallbackSignature } from './sakurupiah';
 import {
   assertTelegramOrderOwner,
   createTelegramCheckout,
@@ -95,6 +95,13 @@ if (!isProduction) {
 }
 
 app.use(express.json({
+  verify: (req: any, _res, buf) => {
+    req.rawBody = buf.toString('utf-8');
+  }
+}));
+
+app.use(express.urlencoded({
+  extended: true,
   verify: (req: any, _res, buf) => {
     req.rawBody = buf.toString('utf-8');
   }
@@ -2363,13 +2370,40 @@ app.post('/api/checkout', requireSession, async (req, res) => {
   }
 });
 
-app.get('/api/member/orders', requireSession, (req, res) => {
+async function syncPendingSakuRupiahOrders(store: Store, memberId?: string): Promise<void> {
+  const settings = store.data.deploymentSettings;
+  if (!settings?.sakuRupiahApiId?.trim() || !settings?.sakuRupiahApiKey?.trim()) return;
+
+  const pendingOrders = store.data.orders.filter((order) => (
+    order.status === 'pending' &&
+    (!memberId || order.memberId === memberId) &&
+    Boolean(order.sakuRupiahCheckoutUrl || order.sakuRupiahTrxId)
+  ));
+
+  for (const order of pendingOrders) {
+    try {
+      const merchantRef = order.invoiceNumber ?? order.id;
+      const { isPaid } = await checkSakuRupiahTransactionStatus(settings, merchantRef, order.sakuRupiahTrxId);
+      if (isPaid && order.status !== 'paid') {
+        const { order: paidOrder } = markOrderPaidByInvoice(store, merchantRef);
+        const previousItems = paidOrder.orderItems ? JSON.parse(JSON.stringify(paidOrder.orderItems)) : [];
+        fulfillPaidOrder(store, paidOrder.id);
+        void dispatchFulfillmentEmails(store, paidOrder, previousItems);
+      }
+    } catch (err) {
+      console.error('Auto SakuRupiah sync error for order:', order.id, err);
+    }
+  }
+}
+
+app.get('/api/member/orders', requireSession, async (req, res) => {
   if (req.user?.type !== 'member') {
     res.status(403).json({ message: 'member access required' });
     return;
   }
 
   expirePendingOrders(store);
+  await syncPendingSakuRupiahOrders(store, req.user.id);
   void sendPendingOrderReminders();
   res.json(store.data.orders
     .filter((order) => order.memberId === req.user?.id)
@@ -2393,6 +2427,9 @@ app.post('/api/member/orders/:id/hwid', requireSession, (req, res) => {
     }
     const previousItems = order.orderItems ? JSON.parse(JSON.stringify(order.orderItems)) : [];
     order.customerHwid = hwid.toUpperCase();
+    try {
+      generateLicenseForPaidOrder(store, { invoiceNumber: order.invoiceNumber ?? order.id, hwid: order.customerHwid });
+    } catch {}
     fulfillPaidOrder(store, order.id);
     void dispatchFulfillmentEmails(store, order, previousItems);
     res.status(201).json(publicOrder(order));
@@ -2439,12 +2476,13 @@ app.get('/api/member/orders/:id/invoice.html', requireSession, (req, res) => {
   }
 });
 
-app.get('/api/member/licenses', requireSession, (req, res) => {
+app.get('/api/member/licenses', requireSession, async (req, res) => {
   if (req.user?.type !== 'member') {
     res.status(403).json({ message: 'member access required' });
     return;
   }
 
+  await syncPendingSakuRupiahOrders(store, req.user.id);
   res.json(memberLicenseDashboard(store, req.user.id));
 });
 

@@ -217,3 +217,47 @@ export async function checkSakuRupiahBalance(settings: DeploymentSettings): Prom
     availableBalance: json.data.saldo_tersedia || '0'
   };
 }
+
+export async function checkSakuRupiahTransactionStatus(
+  settings: DeploymentSettings,
+  merchantRef: string,
+  trxId?: string
+): Promise<{ status: 'berhasil' | 'pending' | 'expired' | 'failed'; isPaid: boolean }> {
+  const apiId = settings.sakuRupiahApiId?.trim();
+  const apiKey = settings.sakuRupiahApiKey?.trim();
+  const isSandbox = settings.sakuRupiahMode === 'sandbox';
+
+  if (!apiId || !apiKey) return { status: 'pending', isPaid: false };
+
+  const baseUrl = isSandbox ? 'https://sakurupiah.id/api-sanbox/' : 'https://sakurupiah.id/api/';
+  const detailUrl = `${baseUrl}detail.php`;
+  const signature = crypto.createHmac('sha256', apiKey).update(`${apiId}${trxId ?? merchantRef}`).digest('hex');
+
+  const formParams = new URLSearchParams();
+  formParams.append('api_id', apiId);
+  if (trxId) formParams.append('trx_id', trxId);
+  formParams.append('merchant_ref', merchantRef);
+  formParams.append('signature', signature);
+
+  try {
+    const res = await fetch(detailUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        Authorization: `Bearer ${apiKey}`
+      },
+      body: formParams.toString()
+    });
+    const json: any = await res.json();
+    if (String(json.status) === '200' && Array.isArray(json.data) && json.data.length > 0) {
+      const data = json.data[0];
+      const st = String(data.status ?? '').toLowerCase();
+      const code = Number(data.status_kode);
+      const isPaid = st === 'berhasil' || code === 1 || st === 'paid' || st === 'success';
+      return { status: isPaid ? 'berhasil' : (st === 'expired' ? 'expired' : 'pending'), isPaid };
+    }
+  } catch (err) {
+    console.error('SakuRupiah detail status check failed:', err);
+  }
+  return { status: 'pending', isPaid: false };
+}

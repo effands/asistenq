@@ -1295,14 +1295,17 @@ export function markOrderPaid(store: Store, orderId: string, paidAt = new Date()
     const plan = plans.find((p) => p.id === order.planId || p.code === order.planId) ?? plans[0];
     const planCode = plan?.code ?? '1M';
     try {
-      const createdLicense = generateToolLicense(store, {
-        productSlug: product.slug,
-        planCode,
-        email: member.email,
-        hwid: order.customerHwid,
-        now: paidAt
-      });
-      createdLicense.orderId = order.id;
+      const existing = store.data.licenses.find((l) => l.orderId === order.id);
+      if (!existing) {
+        const createdLicense = generateToolLicense(store, {
+          productSlug: product.slug,
+          planCode,
+          email: member.email,
+          hwid: order.customerHwid,
+          now: paidAt
+        });
+        createdLicense.orderId = order.id;
+      }
     } catch (err) {
       console.error('Auto license generation error:', err);
     }
@@ -1384,7 +1387,13 @@ export function generateLicenseForPaidOrder(store: Store, input: {
   }
 
   const existing = store.data.licenses.find((item) => item.orderId === order.id);
-  if (existing) return existing;
+  if (existing) {
+    if (input.hwid && existing.hwid !== input.hwid) {
+      existing.hwid = input.hwid;
+      store.save();
+    }
+    return existing;
+  }
 
   const product = store.data.products.find((item) => item.id === order.productId);
   const member = store.data.members.find((item) => item.id === order.memberId);
