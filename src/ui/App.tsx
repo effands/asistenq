@@ -1,4 +1,5 @@
 import {
+  AlertTriangle,
   ArrowRight,
   BadgeCheck,
   BookOpen,
@@ -160,6 +161,21 @@ export function App() {
   const [cartBusy, setCartBusy] = useState(false);
   const [visitorId] = useState(() => browserIdentity(window.localStorage, 'asistenq-visitor-id'));
   const [instanceId] = useState(() => browserIdentity(window.sessionStorage, 'asistenq-site-instance-id'));
+  const [confirmDialog, setConfirmDialog] = useState<ConfirmDialogState | null>(null);
+
+  function askConfirm(options: {
+    title: string;
+    message: string;
+    confirmText?: string;
+    cancelText?: string;
+    type?: 'danger' | 'warning' | 'info';
+    onConfirm: () => void | Promise<void>;
+  }) {
+    setConfirmDialog({
+      isOpen: true,
+      ...options
+    });
+  }
 
   function navigate(nextRoute: Route) {
     const path = nextRoute === 'home' ? '/' : nextRoute === 'admin' ? '/adminasistenq' : nextRoute === 'product' ? `/produk/${productSlug}` : nextRoute === 'content' ? window.location.pathname : `/${nextRoute}`;
@@ -352,6 +368,7 @@ export function App() {
         theme={adminTheme}
       >
         <AdminPanel
+          onAskConfirm={askConfirm}
           onUpdateMember={onUpdateMember}
           activeSection={adminSection}
           onSectionChange={setAdminSection}
@@ -631,6 +648,7 @@ export function App() {
             return result;
           }}
         />
+        <CustomConfirmModal dialog={confirmDialog} onClose={() => setConfirmDialog(null)} />
       </AdminShell>
     );
   }
@@ -728,17 +746,23 @@ export function App() {
           }}
         />
         <MarketplaceCart open={cartOpen} items={cart} order={cartOrder} busy={cartBusy} onClose={() => setCartOpen(false)} onRemove={(productId) => setCart((current) => removeCartItem(current, productId))} onCheckout={() => void checkoutCart()} />
+        <CustomConfirmModal dialog={confirmDialog} onClose={() => setConfirmDialog(null)} />
       </PublicShell>
     );
   }
 
   const selectedProduct = products.find((item) => item.slug === productSlug || item.landingPath === `/${productSlug}`);
-  return <PublicShell navigate={navigate} activeRoute="home" memberSession={memberSession} cartCount={cart.length} onCart={() => setCartOpen(true)}>
-    {route === 'content' ? <ManagedContent page={contentPage} loading={contentLoading} /> : route === 'product'
-      ? <MarketplaceProductDetail product={selectedProduct} onBack={() => navigate('home')} onAdd={(product, plan) => addProductToCart(product, plan)} onBuy={(product, plan) => addProductToCart(product, plan, true)} />
-      : <MarketplaceHome catalog={catalog} onOpen={navigateProduct} onAdd={(product) => addProductToCart(product, product.plans?.[0])} />}
-    <MarketplaceCart open={cartOpen} items={cart} order={cartOrder} busy={cartBusy} onClose={() => setCartOpen(false)} onRemove={(productId) => setCart((current) => removeCartItem(current, productId))} onCheckout={() => void checkoutCart()} />
-  </PublicShell>;
+  return (
+    <>
+      <PublicShell navigate={navigate} activeRoute="home" memberSession={memberSession} cartCount={cart.length} onCart={() => setCartOpen(true)}>
+        {route === 'content' ? <ManagedContent page={contentPage} loading={contentLoading} /> : route === 'product'
+          ? <MarketplaceProductDetail product={selectedProduct} onBack={() => navigate('home')} onAdd={(product, plan) => addProductToCart(product, plan)} onBuy={(product, plan) => addProductToCart(product, plan, true)} />
+          : <MarketplaceHome catalog={catalog} onOpen={navigateProduct} onAdd={(product) => addProductToCart(product, product.plans?.[0])} />}
+        <MarketplaceCart open={cartOpen} items={cart} order={cartOrder} busy={cartBusy} onClose={() => setCartOpen(false)} onRemove={(productId) => setCart((current) => removeCartItem(current, productId))} onCheckout={() => void checkoutCart()} />
+      </PublicShell>
+      <CustomConfirmModal dialog={confirmDialog} onClose={() => setConfirmDialog(null)} />
+    </>
+  );
 }
 
 function Brand({ compact = false }: { compact?: boolean }) {
@@ -974,7 +998,8 @@ function AdminPanel({
   onStartBot,
   onStopBot,
   deploymentSettings,
-  onSaveDeploymentSettings
+  onSaveDeploymentSettings,
+  onAskConfirm
 }: {
   activeSection: AdminSection;
   onSectionChange: (section: AdminSection) => void;
@@ -1049,6 +1074,7 @@ function AdminPanel({
   onStopBot: () => Promise<TelegramBotStatus>;
   deploymentSettings: DeploymentSettingsResult | null;
   onSaveDeploymentSettings: (input: DeploymentSettingsInput) => Promise<DeploymentSettingsResult>;
+  onAskConfirm?: (options: { title: string; message: string; confirmText?: string; cancelText?: string; type?: 'danger' | 'warning' | 'info'; onConfirm: () => void | Promise<void>; }) => void;
 }) {
   if (!session) {
     return (
@@ -1097,7 +1123,7 @@ function AdminPanel({
   }
 
   if (activeSection === 'orders') {
-    return <AdminOrderPanel onClearExpired={onClearExpiredOrders} onClearPaymentProofs={onClearPaymentProofs} onDeletePaymentProof={onDeletePaymentProof} onDeleteOrder={onDeleteOrder} onExportOrders={onExportOrders} onMarkPaid={onMarkOrderPaid} orders={orders} />;
+    return <AdminOrderPanel onAskConfirm={onAskConfirm} onClearExpired={onClearExpiredOrders} onClearPaymentProofs={onClearPaymentProofs} onDeletePaymentProof={onDeletePaymentProof} onDeleteOrder={onDeleteOrder} onExportOrders={onExportOrders} onMarkPaid={onMarkOrderPaid} orders={orders} />;
   }
 
   if (activeSection === 'members') {
@@ -1211,7 +1237,7 @@ function formatRemaining(value?: string | null) {
   return hours > 0 ? `${hours}j ${minutes}m` : `${minutes}m`;
 }
 
-function AdminOrderPanel({ orders, onClearExpired, onClearPaymentProofs, onDeletePaymentProof, onExportOrders, onMarkPaid, onDeleteOrder }: {
+function AdminOrderPanel({ orders, onClearExpired, onClearPaymentProofs, onDeletePaymentProof, onExportOrders, onMarkPaid, onDeleteOrder, onAskConfirm }: {
   orders: PublicOrder[];
   onClearExpired: () => Promise<void>;
   onClearPaymentProofs: () => Promise<PaymentProofCleanupResult>;
@@ -1219,6 +1245,7 @@ function AdminOrderPanel({ orders, onClearExpired, onClearPaymentProofs, onDelet
   onExportOrders: () => Promise<void>;
   onMarkPaid: (orderId: string) => Promise<void>;
   onDeleteOrder?: (orderId: string) => Promise<void>;
+  onAskConfirm?: (options: { title: string; message: string; confirmText?: string; cancelText?: string; type?: 'danger' | 'warning' | 'info'; onConfirm: () => void | Promise<void>; }) => void;
 }) {
   const [busy, setBusy] = useState('');
   const [notice, setNotice] = useState('');
@@ -1292,8 +1319,18 @@ function AdminOrderPanel({ orders, onClearExpired, onClearPaymentProofs, onDelet
             <Download size={14} /> <span>Export Excel</span>
           </button>
           <button className="compact-action-btn danger" disabled={!!busy} title="Bersihkan seluruh file bukti transfer yang telah diupload" onClick={() => {
-            if (!window.confirm('Hapus seluruh file bukti pembayaran? Riwayat order tetap disimpan.')) return;
-            void runOrderAction('clear-proofs', async () => paymentProofCleanupMessage(await onClearPaymentProofs()));
+            const run = () => runOrderAction('clear-proofs', async () => paymentProofCleanupMessage(await onClearPaymentProofs()));
+            if (onAskConfirm) {
+              onAskConfirm({
+                title: 'Hapus Seluruh Bukti Transfer',
+                message: 'Hapus seluruh file bukti pembayaran yang diupload? Riwayat order tetap disimpan.',
+                confirmText: 'Hapus Semua',
+                type: 'danger',
+                onConfirm: run
+              });
+            } else if (window.confirm('Hapus seluruh file bukti pembayaran? Riwayat order tetap disimpan.')) {
+              void run();
+            }
           }} type="button">
             <FileX size={14} /> <span>Clear Bukti Upload</span>
           </button>
@@ -1406,8 +1443,18 @@ function AdminOrderPanel({ orders, onClearExpired, onClearPaymentProofs, onDelet
                   title="Verifikasi Pembayaran Sukses"
                   onClick={() => {
                     const invoice = order.invoiceNumber ?? order.id;
-                    if (!window.confirm(`Verifikasi pembayaran ${invoice} sebesar ${order.formattedTotalAmount}?`)) return;
-                    void runOrderAction(`paid-${order.id}`, () => onMarkPaid(order.id));
+                    const run = () => onMarkPaid(order.id);
+                    if (onAskConfirm) {
+                      onAskConfirm({
+                        title: 'Verifikasi Pembayaran',
+                        message: `Verifikasi pembayaran ${invoice} sebesar ${order.formattedTotalAmount}?`,
+                        confirmText: 'Verifikasi Lunas',
+                        type: 'info',
+                        onConfirm: () => void runOrderAction(`paid-${order.id}`, run)
+                      });
+                    } else if (window.confirm(`Verifikasi pembayaran ${invoice} sebesar ${order.formattedTotalAmount}?`)) {
+                      void runOrderAction(`paid-${order.id}`, run);
+                    }
                   }}
                   type="button"
                 >
@@ -1432,8 +1479,18 @@ function AdminOrderPanel({ orders, onClearExpired, onClearPaymentProofs, onDelet
                     title="Hapus File Bukti Pembayaran"
                     onClick={() => {
                       const invoice = order.invoiceNumber ?? order.id;
-                      if (!window.confirm(`Hapus file bukti pembayaran ${invoice}?`)) return;
-                      void runOrderAction(`delete-proof-${order.id}`, async () => paymentProofCleanupMessage(await onDeletePaymentProof(order.id)));
+                      const run = async () => paymentProofCleanupMessage(await onDeletePaymentProof(order.id));
+                      if (onAskConfirm) {
+                        onAskConfirm({
+                          title: 'Hapus File Bukti Transfer',
+                          message: `Hapus file bukti pembayaran ${invoice}?`,
+                          confirmText: 'Hapus Bukti',
+                          type: 'danger',
+                          onConfirm: () => void runOrderAction(`delete-proof-${order.id}`, run)
+                        });
+                      } else if (window.confirm(`Hapus file bukti pembayaran ${invoice}?`)) {
+                        void runOrderAction(`delete-proof-${order.id}`, run);
+                      }
                     }}
                     type="button"
                   >
@@ -1449,8 +1506,18 @@ function AdminOrderPanel({ orders, onClearExpired, onClearPaymentProofs, onDelet
                   title="Hapus Transaksi Permanen"
                   onClick={() => {
                     const invoice = order.invoiceNumber ?? order.id;
-                    if (!window.confirm(`Hapus permanen transaksi ${invoice}? Data ini tidak dapat dikembalikan.`)) return;
-                    void runOrderAction(`delete-order-${order.id}`, () => onDeleteOrder(order.id));
+                    const run = () => onDeleteOrder(order.id);
+                    if (onAskConfirm) {
+                      onAskConfirm({
+                        title: 'Hapus Transaksi Permanen',
+                        message: `Hapus permanen transaksi ${invoice}? Data ini tidak dapat dikembalikan.`,
+                        confirmText: 'Hapus Transaksi',
+                        type: 'danger',
+                        onConfirm: () => void runOrderAction(`delete-order-${order.id}`, run)
+                      });
+                    } else if (window.confirm(`Hapus permanen transaksi ${invoice}? Data ini tidak dapat dikembalikan.`)) {
+                      void runOrderAction(`delete-order-${order.id}`, run);
+                    }
                   }}
                   type="button"
                 >
@@ -3865,6 +3932,60 @@ function MemberPanel({ session, products, dashboard, orders, onRegister, onLogin
       </section>
       {activeOrder && <InvoiceModal order={activeOrder} onClose={() => setActiveOrder(null)} />}
     </main>
+  );
+}
+
+export interface ConfirmDialogState {
+  isOpen: boolean;
+  title: string;
+  message: string;
+  confirmText?: string;
+  cancelText?: string;
+  type?: 'danger' | 'warning' | 'info';
+  onConfirm: () => void | Promise<void>;
+}
+
+function CustomConfirmModal({
+  dialog,
+  onClose
+}: {
+  dialog: ConfirmDialogState | null;
+  onClose: () => void;
+}) {
+  if (!dialog || !dialog.isOpen) return null;
+
+  const isDanger = dialog.type === 'danger' || !dialog.type;
+  const isWarning = dialog.type === 'warning';
+
+  return (
+    <div className="custom-modal-backdrop" onClick={onClose} role="dialog" aria-modal="true">
+      <div className="custom-modal-content" onClick={(e) => e.stopPropagation()}>
+        <div className={`custom-modal-icon-badge ${dialog.type || 'danger'}`}>
+          {isDanger ? <AlertTriangle size={28} /> : isWarning ? <Clock size={28} /> : <CheckCircle2 size={28} />}
+        </div>
+        <h3>{dialog.title}</h3>
+        <p>{dialog.message}</p>
+        <div className="custom-modal-actions">
+          <button
+            className="custom-modal-btn cancel"
+            onClick={onClose}
+            type="button"
+          >
+            {dialog.cancelText || 'Batal'}
+          </button>
+          <button
+            className={`custom-modal-btn confirm ${dialog.type || 'danger'}`}
+            onClick={async () => {
+              onClose();
+              await dialog.onConfirm();
+            }}
+            type="button"
+          >
+            {dialog.confirmText || (isDanger ? 'Hapus' : 'Ya, Lanjutkan')}
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 
