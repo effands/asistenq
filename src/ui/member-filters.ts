@@ -20,6 +20,7 @@ export function groupOrderStatus(order: Pick<FilterableOrder, 'status' | 'paymen
 export function filterMemberOrders<T extends FilterableOrder>(orders: T[], filter: MemberOrderFilter, search: string): T[] {
   const query = search.trim().toLowerCase();
   return orders.filter((order) => {
+    if (order.status === 'expired') return false;
     if (filter !== 'all' && groupOrderStatus(order) !== filter) return false;
     return !query || `${order.invoiceNumber ?? ''} ${order.product?.name ?? order.productName ?? ''}`.toLowerCase().includes(query);
   });

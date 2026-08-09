@@ -2406,7 +2406,7 @@ app.get('/api/member/orders', requireSession, async (req, res) => {
   await syncPendingSakuRupiahOrders(store, req.user.id);
   void sendPendingOrderReminders();
   res.json(store.data.orders
-    .filter((order) => order.memberId === req.user?.id)
+    .filter((order) => order.memberId === req.user?.id && order.status !== 'expired')
     .sort((left, right) => right.createdAt.localeCompare(left.createdAt))
     .map(publicOrder));
 });

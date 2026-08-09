@@ -3517,6 +3517,7 @@ function MemberPanel({ session, products, dashboard, orders, onRegister, onLogin
 }) {
   const [checkoutNotice, setCheckoutNotice] = useState('');
   const [licenseNotice, setLicenseNotice] = useState('');
+  const [copiedTokenId, setCopiedTokenId] = useState('');
   const [memberResetValues, setMemberResetValues] = useState<Record<string, string>>({});
   const [memberResetBusy, setMemberResetBusy] = useState('');
   const [orderHwidValues, setOrderHwidValues] = useState<Record<string, string>>({});
@@ -3748,7 +3749,7 @@ function MemberPanel({ session, products, dashboard, orders, onRegister, onLogin
                     <span className="license-detail-action">{open ? 'Tutup' : 'Detail'} <ArrowRight /></span>
                   </button>
                   {open && <div className="license-compact-detail">
-                    <div className="member-token-box"><small>Token Lisensi</small><code>{license.key}</code><button className="primary" onClick={() => navigator.clipboard.writeText(license.key)}>Copy Token</button></div>
+                    <div className="member-token-box"><small>Token Lisensi</small><code>{license.key}</code><button className="primary" onClick={async () => { await navigator.clipboard.writeText(license.key); setCopiedTokenId(license.id); setLicenseNotice('✓ Token lisensi berhasil disalin ke clipboard!'); setTimeout(() => setCopiedTokenId(''), 2500); }}>{copiedTokenId === license.id ? '✓ Disalin!' : 'Copy Token'}</button></div>
                     <div className="member-reset-box"><small>Reset lisensi ke device baru</small><b>Sisa reset minggu ini: {license.resetQuota?.remaining ?? 2} dari {license.resetQuota?.limit ?? 2}</b><small>HWID lama akan berhenti berlaku. Masa aktif lisensi tidak berubah.</small>{(license.resetQuota?.remaining ?? 2) === 0 && <small>Reset tersedia kembali {license.resetQuota.nextAvailableAt ? formatDate(license.resetQuota.nextAvailableAt) : 'setelah 7 hari'} atau hubungi admin.</small>}<input disabled={(license.resetQuota?.remaining ?? 2) === 0} value={memberResetValues[license.id] ?? ''} onChange={(event) => setMemberResetValues((current) => ({ ...current, [license.id]: event.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '') }))} maxLength={16} placeholder="16 karakter HWID baru" /><button className="ghost-button" disabled={(license.resetQuota?.remaining ?? 2) === 0 || memberResetBusy === license.id || (memberResetValues[license.id]?.length ?? 0) !== 16} onClick={async () => { setMemberResetBusy(license.id); setLicenseNotice(''); try { await onResetLicense(license.id, memberResetValues[license.id]); setMemberResetValues((current) => ({ ...current, [license.id]: '' })); setLicenseNotice('HWID berhasil diganti. Salin token terbaru dan aktifkan di perangkat baru.'); } catch (error) { setLicenseNotice(error instanceof Error ? error.message : 'Reset lisensi gagal.'); } finally { setMemberResetBusy(''); } }}>Reset Lisensi</button></div>
                   </div>}
                 </article>;
