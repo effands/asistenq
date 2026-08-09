@@ -3152,59 +3152,171 @@ function ProductTable({ products, onUpdateProduct, onDeleteProduct, onImportLand
             </div>
             {editingId === product.id && (
               <div className="product-edit-box">
-                <div className="form-grid">
-                  <input value={draft.name ?? ''} onChange={(event) => setDraft({ ...draft, name: event.target.value })} placeholder="Nama" />
-                  <input value={draft.slug ?? ''} onChange={(event) => setDraft({ ...draft, slug: event.target.value })} placeholder="slug" />
-                  <input value={draft.category ?? ''} onChange={(event) => setDraft({ ...draft, category: event.target.value })} placeholder="Kategori marketplace" />
-                  <select value={draft.visibility ?? 'public'} onChange={(event) => setDraft({ ...draft, visibility: event.target.value as ProductVisibility })}>
-                    {productVisibilities.map((item) => <option key={item} value={item}>{item === 'public' ? 'Public marketplace' : item === 'private' ? 'Private link' : 'Draft/admin only'}</option>)}
-                  </select>
-                  <select value={draft.accessMode ?? 'public'} onChange={(event) => setDraft({ ...draft, accessMode: event.target.value as ProductAccessMode })}>
-                    {productAccessModes.map((item) => <option key={item} value={item}>{item === 'public' ? 'Public page' : item === 'free_member' ? 'Free member' : item === 'trial' ? 'Trial/subscription' : item === 'paid' ? 'Paid only' : 'Admin only'}</option>)}
-                  </select>
-                  <input value={draft.price ?? 0} onChange={(event) => setDraft({ ...draft, price: Number(event.target.value) })} type="number" placeholder="Harga" />
-                  <input value={draft.compareAtPrice ?? 0} onChange={(event) => setDraft({ ...draft, compareAtPrice: Number(event.target.value) || undefined })} type="number" placeholder="Harga coret" />
-                  <input value={draft.discountLabel ?? ''} onChange={(event) => setDraft({ ...draft, discountLabel: event.target.value })} placeholder="Badge promo" />
-                  <input value={draft.promoText ?? ''} onChange={(event) => setDraft({ ...draft, promoText: event.target.value })} placeholder="Promo text" />
-                  <input value={draft.logoUrl ?? ''} onChange={(event) => setDraft({ ...draft, logoUrl: event.target.value })} placeholder="URL logo" />
-                  <input value={draft.landingPath ?? ''} onChange={(event) => setDraft({ ...draft, landingPath: event.target.value })} placeholder="/mixin9" />
-                  <input value={draft.landingTemplate ?? ''} onChange={(event) => setDraft({ ...draft, landingTemplate: event.target.value })} placeholder="mixin9 / zip-html" />
-                  <select value={draft.destinationType ?? 'internal'} onChange={(event) => setDraft({ ...draft, destinationType: event.target.value as ProductDestinationType })}><option value="internal">Internal</option><option value="hosted">Upload HTML/ZIP</option><option value="external">External</option></select>
-                  <select value={draft.openMode ?? 'same_tab'} onChange={(event) => setDraft({ ...draft, openMode: event.target.value as ProductOpenMode })}><option value="same_tab">Tab yang sama</option><option value="new_tab">Tab baru</option><option value="wrapper">Wrapper</option></select>
-                  <input value={draft.externalUrl ?? ''} onChange={(event) => setDraft({ ...draft, externalUrl: event.target.value })} placeholder="URL external" type="url" />
-                  <input value={draft.ctaLabel ?? ''} onChange={(event) => setDraft({ ...draft, ctaLabel: event.target.value })} placeholder="CTA" />
-                  <select value={draft.fulfillmentType ?? 'license'} onChange={(event) => setDraft({ ...draft, fulfillmentType: event.target.value as ProductFulfillmentType, downloadSourceUrl: '' })}><option value="license">Lisensi software</option><option value="download">Download digital</option><option value="url">Link URL</option><option value="course">Akses kelas</option></select>
-                  {draft.fulfillmentType === 'download' && <input value={draft.downloadSourceUrl ?? ''} onChange={(event) => setDraft({ ...draft, downloadSourceUrl: event.target.value })} placeholder="URL HTTPS baru (kosong = pertahankan)" type="url" />}
-                  <input value={draft.installerUrl ?? ''} onChange={(event) => setDraft({ ...draft, installerUrl: event.target.value })} placeholder="Link installer publik baru (kosong = pertahankan)" type="url" />
-                </div>
-                {product.fulfillmentType === 'download' && product.downloadSourceConfigured && <p className="form-notice">File atau URL sumber digital sudah tersimpan (path privat disembunyikan).</p>}
-                {product.installerConfigured && <p className="form-notice">Link installer publik sudah tersimpan. Isi link baru hanya jika ingin menggantinya.</p>}
-                <textarea value={draft.headline ?? ''} onChange={(event) => setDraft({ ...draft, headline: event.target.value })} placeholder="Headline" />
-                <textarea value={draft.description ?? ''} onChange={(event) => setDraft({ ...draft, description: event.target.value })} placeholder="Deskripsi" />
-                <textarea value={draft.accessRequirement ?? ''} onChange={(event) => setDraft({ ...draft, accessRequirement: event.target.value })} placeholder="Syarat akses" />
-                <div className="marketplace-admin-fields">
-                  <h3>Tampilan Marketplace</h3>
-                  <div className="form-grid">
-                    <input value={draft.cardDescription ?? ''} onChange={(event) => setDraft({ ...draft, cardDescription: event.target.value })} placeholder="Deskripsi singkat kartu produk" />
-                    <input value={draft.badge ?? ''} onChange={(event) => setDraft({ ...draft, badge: event.target.value })} placeholder="Badge: PRO / HOT / NEW" />
-                    <input type="color" value={draft.marketplaceAccent ?? '#075e4c'} onChange={(event) => setDraft({ ...draft, marketplaceAccent: event.target.value })} title="Warna cover fallback" />
-                    <input value={draft.tags?.join(', ') ?? ''} onChange={(event) => setDraft({ ...draft, tags: event.target.value.split(',').map((item) => item.trim()).filter(Boolean) })} placeholder="Tag, pisahkan dengan koma" />
-                    <input value={draft.developer ?? ''} onChange={(event) => setDraft({ ...draft, developer: event.target.value })} placeholder="Developer" />
-                    <input value={draft.version ?? ''} onChange={(event) => setDraft({ ...draft, version: event.target.value })} placeholder="Versi" />
-                    <input value={draft.fileSize ?? ''} onChange={(event) => setDraft({ ...draft, fileSize: event.target.value })} placeholder="Ukuran file" />
-                    <input value={draft.compatibility ?? ''} onChange={(event) => setDraft({ ...draft, compatibility: event.target.value })} placeholder="Kompatibilitas" />
-                    <input value={draft.language ?? ''} onChange={(event) => setDraft({ ...draft, language: event.target.value })} placeholder="Bahasa" />
-                    <input value={draft.sku ?? ''} onChange={(event) => setDraft({ ...draft, sku: event.target.value })} placeholder="SKU" />
-                    <input type="url" value={draft.demoUrl ?? ''} onChange={(event) => setDraft({ ...draft, demoUrl: event.target.value })} placeholder="URL demo" />
-                    <input type="url" value={draft.documentationUrl ?? ''} onChange={(event) => setDraft({ ...draft, documentationUrl: event.target.value })} placeholder="URL dokumentasi" />
-                  </div>
-                  <div className="marketplace-media-admin">
-                    <label>Upload thumbnail utama<input type="file" accept="image/jpeg,image/png,image/webp" onChange={async (event) => { const file = event.target.files?.[0]; if (file) await onUploadProductMedia(product.id, 'cover', file); event.target.value = ''; }} /></label>
-                    <label>Tambah gambar/video galeri<input type="file" accept="image/jpeg,image/png,image/webp,video/mp4,video/webm" onChange={async (event) => { const file = event.target.files?.[0]; if (file) await onUploadProductMedia(product.id, 'gallery', file); event.target.value = ''; }} /></label>
-                    {product.marketplaceCoverUrl && <img src={product.marketplaceCoverUrl} alt="Thumbnail marketplace" />}
-                    {product.gallery?.map((item) => <span key={item.id}>{item.type === 'image' ? <img src={item.url} alt="" /> : <video src={item.url} />}<button type="button" onClick={() => onDeleteProductMedia(product.id, item.id)}>Hapus</button></span>)}
+                <div className="product-edit-header">
+                  <div>
+                    <h4>Edit Produk: {product.name}</h4>
+                    <small>Atur informasi umum, harga, lisensi, cover 16:9, dan detail marketplace.</small>
                   </div>
                 </div>
+
+                {/* Section 01: Informasi Utama & Cover */}
+                <div className="product-form-section">
+                  <div className="product-form-section-header">
+                    <span className="step-badge">01</span>
+                    <div>
+                      <h3>Informasi Utama & Cover 16:9</h3>
+                      <p>Nama produk, slug, jenis, dan thumbnail utama produk.</p>
+                    </div>
+                  </div>
+                  <div className="product-form-grid four">
+                    <label className="col-2">Nama produk <span className="required">*</span>
+                      <input required value={draft.name ?? ''} onChange={(event) => setDraft({ ...draft, name: event.target.value })} placeholder="Contoh: VJ STUDIO" />
+                    </label>
+                    <label className="col-2">Slug / URL <span className="required">*</span>
+                      <input required value={draft.slug ?? ''} onChange={(event) => setDraft({ ...draft, slug: event.target.value })} placeholder="vjstudio" />
+                    </label>
+                    <label className="col-2">Jenis produk
+                      <select value={draft.type ?? 'tool'} onChange={(event) => setDraft({ ...draft, type: event.target.value as ProductType })}>
+                        {productTypes.map((item) => <option key={item} value={item}>{item === 'tool' ? 'Software / Tools Lisensi' : item === 'course' ? 'Kelas / Tutorial Video' : 'Produk Digital Lainnya'}</option>)}
+                      </select>
+                    </label>
+                    <label className="col-2">Kategori marketplace
+                      <input value={draft.category ?? ''} onChange={(event) => setDraft({ ...draft, category: event.target.value })} placeholder="Contoh: Video Tools" />
+                    </label>
+                    <label className="col-4">Thumbnail produk (Rasio 16:9)
+                      <div className="cover-input-group">
+                        <label className="file-browse-btn">
+                          📁 Browse / Import Gambar
+                          <input type="file" accept="image/*" style={{ display: 'none' }} onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) {
+                              const reader = new FileReader();
+                              reader.onload = (ev) => setDraft({ ...draft, marketplaceCoverUrl: ev.target?.result as string });
+                              reader.readAsDataURL(file);
+                            }
+                          }} />
+                        </label>
+                        <input value={draft.marketplaceCoverUrl ?? draft.coverUrl ?? ''} onChange={(event) => setDraft({ ...draft, marketplaceCoverUrl: event.target.value, coverUrl: event.target.value })} placeholder="Atau tempel URL gambar (https://...)" />
+                      </div>
+                      {(draft.marketplaceCoverUrl || draft.coverUrl) && (
+                        <div className="cover-preview-box" style={{ marginTop: '8px' }}>
+                          <img src={draft.marketplaceCoverUrl || draft.coverUrl} alt="Preview 16:9" />
+                          <span>Preview Cover 16:9</span>
+                        </div>
+                      )}
+                    </label>
+                  </div>
+                </div>
+
+                {/* Section 02: Akses & Harga */}
+                <div className="product-form-section">
+                  <div className="product-form-section-header">
+                    <span className="step-badge">02</span>
+                    <div>
+                      <h3>Akses & Harga Produk</h3>
+                      <p>Visibilitas katalog, mode akses pembeli, dan harga dasar.</p>
+                    </div>
+                  </div>
+                  <div className="product-form-grid four">
+                    <label className="col-2">Tampil di katalog
+                      <select value={draft.visibility ?? 'public'} onChange={(event) => setDraft({ ...draft, visibility: event.target.value as ProductVisibility })}>
+                        {productVisibilities.map((item) => <option key={item} value={item}>{item === 'public' ? 'Public marketplace' : item === 'private' ? 'Private link' : 'Draft / admin only'}</option>)}
+                      </select>
+                    </label>
+                    <label className="col-2">Mode akses pembeli
+                      <select value={draft.accessMode ?? 'public'} onChange={(event) => setDraft({ ...draft, accessMode: event.target.value as ProductAccessMode })}>
+                        {productAccessModes.map((item) => <option key={item} value={item}>{item === 'public' ? 'Public page' : item === 'free_member' ? 'Free member' : item === 'trial' ? 'Trial / subscription' : item === 'paid' ? 'Paid only' : 'Admin only'}</option>)}
+                      </select>
+                    </label>
+                    <label className="col-2">Harga produk (Rp)
+                      <input value={draft.price ?? 0} onChange={(event) => setDraft({ ...draft, price: Number(event.target.value) })} type="number" placeholder="99000" />
+                    </label>
+                    <label className="col-2">Harga coret (Rp)
+                      <input value={draft.compareAtPrice ?? 0} onChange={(event) => setDraft({ ...draft, compareAtPrice: Number(event.target.value) || undefined })} type="number" placeholder="199000" />
+                    </label>
+                    <label className="col-2">Badge promo
+                      <input value={draft.discountLabel ?? ''} onChange={(event) => setDraft({ ...draft, discountLabel: event.target.value })} placeholder="Contoh: BEST SELLER" />
+                    </label>
+                    <label className="col-2">Teks promo
+                      <input value={draft.promoText ?? ''} onChange={(event) => setDraft({ ...draft, promoText: event.target.value })} placeholder="Diskon khusus minggu ini" />
+                    </label>
+                  </div>
+                </div>
+
+                {/* Section 03: Pemenuhan Pesanan & Installer */}
+                <div className="product-form-section">
+                  <div className="product-form-section-header">
+                    <span className="step-badge">03</span>
+                    <div>
+                      <h3>Pemenuhan Pesanan & Link Installer</h3>
+                      <p>Tipe pemenuhan order, link installer, dan copywriting.</p>
+                    </div>
+                  </div>
+                  <div className="product-form-grid four">
+                    <label className="col-2">Tipe pemenuhan
+                      <select value={draft.fulfillmentType ?? 'license'} onChange={(event) => setDraft({ ...draft, fulfillmentType: event.target.value as ProductFulfillmentType, downloadSourceUrl: '' })}>
+                        <option value="license">Lisensi software</option>
+                        <option value="download">Download digital</option>
+                        <option value="url">Link URL</option>
+                        <option value="course">Akses kelas</option>
+                      </select>
+                    </label>
+                    <label className="col-2">Teks tombol CTA
+                      <input value={draft.ctaLabel ?? ''} onChange={(event) => setDraft({ ...draft, ctaLabel: event.target.value })} placeholder="Contoh: Beli VJ STUDIO Sekarang" />
+                    </label>
+                    {draft.fulfillmentType === 'download' && (
+                      <label className="col-4">URL sumber HTTPS (Privat)
+                        <input value={draft.downloadSourceUrl ?? ''} onChange={(event) => setDraft({ ...draft, downloadSourceUrl: event.target.value })} placeholder="https://files.example.com/produk.zip" type="url" />
+                      </label>
+                    )}
+                    <label className="col-4">Link installer publik
+                      <input value={draft.installerUrl ?? ''} onChange={(event) => setDraft({ ...draft, installerUrl: event.target.value })} placeholder="https://drive.google.com/... atau https://.../setup.exe" type="url" />
+                      <small style={{ display: 'block', marginTop: '4px', color: '#00473d' }}>Dapat diakses publik dari menu Download tanpa harus beli.</small>
+                    </label>
+                    <label className="col-4">Headline ringkas
+                      <input value={draft.headline ?? ''} onChange={(event) => setDraft({ ...draft, headline: event.target.value })} placeholder="Manfaat utama produk dalam 1 kalimat" />
+                    </label>
+                    <label className="col-2">Deskripsi produk
+                      <textarea value={draft.description ?? ''} onChange={(event) => setDraft({ ...draft, description: event.target.value })} placeholder="Jelaskan fitur dan keunggulan produk secara lengkap" rows={3} />
+                    </label>
+                    <label className="col-2">Syarat akses / Catatan
+                      <textarea value={draft.accessRequirement ?? ''} onChange={(event) => setDraft({ ...draft, accessRequirement: event.target.value })} placeholder="Contoh: Pembayaran QRIS otomatis konfirmasi" rows={3} />
+                    </label>
+                  </div>
+                </div>
+
+                {/* Section 04: Detail Tampilan Marketplace (Opsional) */}
+                <details className="product-advanced" open={false}>
+                  <summary>
+                    <span>Detail Tambahan Marketplace & Galeri Media</span>
+                    <small>Klik untuk mengisi spesifikasi SKU, versi, developer, dan galeri.</small>
+                  </summary>
+                  <div className="product-advanced-content">
+                    <div className="product-form-grid four">
+                      <label className="col-2">Deskripsi singkat kartu<input value={draft.cardDescription ?? ''} onChange={(event) => setDraft({ ...draft, cardDescription: event.target.value })} placeholder="Muncul di kartu katalog" /></label>
+                      <label className="col-2">Badge khusus<input value={draft.badge ?? ''} onChange={(event) => setDraft({ ...draft, badge: event.target.value })} placeholder="PRO / HOT / NEW" /></label>
+                      <label>Developer<input value={draft.developer ?? ''} onChange={(event) => setDraft({ ...draft, developer: event.target.value })} placeholder="AsistenQ Studio" /></label>
+                      <label>Versi<input value={draft.version ?? ''} onChange={(event) => setDraft({ ...draft, version: event.target.value })} placeholder="v2.1" /></label>
+                      <label>Ukuran file<input value={draft.fileSize ?? ''} onChange={(event) => setDraft({ ...draft, fileSize: event.target.value })} placeholder="150 MB" /></label>
+                      <label>Kompatibilitas<input value={draft.compatibility ?? ''} onChange={(event) => setDraft({ ...draft, compatibility: event.target.value })} placeholder="Windows 10/11" /></label>
+                      <label className="col-2">Tag (pisahkan koma)<input value={draft.tags?.join(', ') ?? ''} onChange={(event) => setDraft({ ...draft, tags: event.target.value.split(',').map((item) => item.trim()).filter(Boolean) })} placeholder="audio, mixing, batch" /></label>
+                      <label className="col-2">SKU<input value={draft.sku ?? ''} onChange={(event) => setDraft({ ...draft, sku: event.target.value })} placeholder="SKU-VJ001" /></label>
+                      <label className="col-2">URL demo<input type="url" value={draft.demoUrl ?? ''} onChange={(event) => setDraft({ ...draft, demoUrl: event.target.value })} placeholder="https://youtube.com/..." /></label>
+                      <label className="col-2">URL dokumentasi<input type="url" value={draft.documentationUrl ?? ''} onChange={(event) => setDraft({ ...draft, documentationUrl: event.target.value })} placeholder="https://docs.asistenq.com" /></label>
+                    </div>
+                    <div className="marketplace-media-admin" style={{ marginTop: '16px' }}>
+                      <label className="file-browse-btn">Galeri Media Tambahan
+                        <input type="file" accept="image/jpeg,image/png,image/webp,video/mp4,video/webm" onChange={async (event) => { const file = event.target.files?.[0]; if (file) await onUploadProductMedia(product.id, 'gallery', file); event.target.value = ''; }} />
+                      </label>
+                      {product.gallery?.map((item) => (
+                        <span key={item.id} className="gallery-preview-item">
+                          {item.type === 'image' ? <img src={item.url} alt="" /> : <video src={item.url} />}
+                          <button type="button" onClick={() => onDeleteProductMedia(product.id, item.id)}>Hapus</button>
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                </details>
                 <div className="product-edit-actions">
                   <button className="primary" type="button" onClick={async () => {
                     setBusyId(product.id);
