@@ -521,6 +521,23 @@ async function emailLicense(license: ReturnType<typeof generateToolLicense>, inv
   }
 }
 
+async function dispatchFulfillmentEmails(store: Store, order: Order, previousItems: OrderItem[]) {
+  if (!order.orderItems) return;
+  const newlyFulfilled = order.orderItems.filter((item) =>
+    item.fulfillmentStatus === 'fulfilled' &&
+    (!previousItems || !previousItems.find((p) => p.id === item.id && p.fulfillmentStatus === 'fulfilled'))
+  );
+
+  for (const item of newlyFulfilled) {
+    if (item.fulfillmentType === 'license' && item.fulfillmentReference) {
+      const license = store.data.licenses.find((l) => l.id === item.fulfillmentReference);
+      if (license) {
+        await emailLicense(license, order.invoiceNumber ?? order.id).catch((err) => console.error('Gagal mengirim auto lisensi:', err));
+      }
+    }
+  }
+}
+
 function hasActiveProductAccess(memberId: string, productId: string): boolean {
   const now = new Date();
   return store.data.subscriptions.some((subscription) => (
@@ -2153,6 +2170,7 @@ app.delete('/api/admin/payment-proofs', requireSession, requireAdminScope('order
 app.post('/api/admin/orders/:id/paid', requireSession, requireAdminScope('orders'), (req, res) => {
   try {
     const result = markOrderPaid(store, String(req.params.id));
+    const previousItems = result.order.orderItems ? JSON.parse(JSON.stringify(result.order.orderItems)) : [];
     const fulfillment = result.order.orderItems ? fulfillPaidOrder(store, result.order.id) : undefined;
     const license = !result.order.orderItems && result.order.customerHwid
       ? generateLicenseForPaidOrder(store, { invoiceNumber: result.order.invoiceNumber ?? result.order.id, hwid: result.order.customerHwid })
@@ -2161,6 +2179,9 @@ app.post('/api/admin/orders/:id/paid', requireSession, requireAdminScope('orders
       result.order.licenseId = license.id;
       store.save();
       void emailLicense(license, result.order.invoiceNumber ?? result.order.id);
+    }
+    if (result.order.orderItems) {
+      void dispatchFulfillmentEmails(store, result.order, previousItems);
     }
     res.json({ ok: true, order: publicOrder(result.order), subscription: result.subscription, license, fulfillment });
   } catch (error) {
@@ -2278,7 +2299,9 @@ app.post('/api/payments/sakurupiah/callback', async (req, res) => {
     if (status === 'berhasil' && (Number(status_kode) === 1 || status_kode === undefined)) {
       if (order.status !== 'paid') {
         const { order: paidOrder } = markOrderPaidByInvoice(store, order.invoiceNumber ?? order.id);
+        const previousItems = paidOrder.orderItems ? JSON.parse(JSON.stringify(paidOrder.orderItems)) : [];
         fulfillPaidOrder(store, paidOrder.id);
+        void dispatchFulfillmentEmails(store, paidOrder, previousItems);
 
         if (paidOrder.customerEmail) {
           sendMail({
@@ -2369,8 +2392,10 @@ app.post('/api/member/orders/:id/hwid', requireSession, (req, res) => {
     if (!order.orderItems?.some((item) => item.fulfillmentType === 'license' && item.fulfillmentStatus !== 'fulfilled')) {
       throw new Error('Pesanan ini tidak menunggu HWID lisensi.');
     }
+    const previousItems = order.orderItems ? JSON.parse(JSON.stringify(order.orderItems)) : [];
     order.customerHwid = hwid.toUpperCase();
     fulfillPaidOrder(store, order.id);
+    void dispatchFulfillmentEmails(store, order, previousItems);
     res.status(201).json(publicOrder(order));
   } catch (error) {
     const message = error instanceof z.ZodError
