@@ -231,12 +231,16 @@ export async function checkSakuRupiahTransactionStatus(
 
   const baseUrl = isSandbox ? 'https://sakurupiah.id/api-sanbox/' : 'https://sakurupiah.id/api/';
   const detailUrl = `${baseUrl}detail.php`;
-  const signature = crypto.createHmac('sha256', apiKey).update(`${apiId}${trxId ?? merchantRef}`).digest('hex');
+  const refParam = trxId ? trxId : merchantRef;
+  const signature = crypto.createHmac('sha256', apiKey).update(`${apiId}${refParam}`).digest('hex');
 
   const formParams = new URLSearchParams();
   formParams.append('api_id', apiId);
-  if (trxId) formParams.append('trx_id', trxId);
-  formParams.append('merchant_ref', merchantRef);
+  if (trxId) {
+    formParams.append('trx_id', trxId);
+  } else {
+    formParams.append('merchant_ref', merchantRef);
+  }
   formParams.append('signature', signature);
 
   try {
@@ -249,10 +253,10 @@ export async function checkSakuRupiahTransactionStatus(
       body: formParams.toString()
     });
     const json: any = await res.json();
-    if (String(json.status) === '200' && Array.isArray(json.data) && json.data.length > 0) {
-      const data = json.data[0];
+    const data = Array.isArray(json.data) ? json.data[0] : json.data;
+    if (String(json.status) === '200' && data) {
       const st = String(data.status ?? '').toLowerCase();
-      const code = Number(data.status_kode);
+      const code = Number(data.status_kode ?? data.status_code);
       const isPaid = st === 'berhasil' || code === 1 || st === 'paid' || st === 'success';
       return { status: isPaid ? 'berhasil' : (st === 'expired' ? 'expired' : 'pending'), isPaid };
     }

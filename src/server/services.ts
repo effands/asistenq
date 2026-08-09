@@ -1248,7 +1248,7 @@ export function publicCatalog(store: Store) {
   };
 }
 
-export function markOrderPaid(store: Store, orderId: string, paidAt = new Date()): {
+export function markOrderPaid(store: Store, orderId: string, paidAt = new Date(), options?: { allowExpired?: boolean }): {
   order: Order;
   subscription: Subscription;
 } {
@@ -1272,7 +1272,7 @@ export function markOrderPaid(store: Store, orderId: string, paidAt = new Date()
     return { order, subscription };
   }
 
-  if (order.status !== 'pending') {
+  if (order.status !== 'pending' && (!options?.allowExpired || order.status !== 'expired')) {
     throw new Error(`order ${order.status} cannot be marked paid`);
   }
 
@@ -1321,6 +1321,7 @@ export function deleteOrderRecord(store: Store, orderId: string): Order {
     throw new Error('order not found');
   }
   const [deleted] = store.data.orders.splice(index, 1);
+  store.data.licenses = store.data.licenses.filter((license) => license.orderId !== orderId);
   store.save();
   return deleted;
 }
@@ -1364,7 +1365,7 @@ export function markOrderPaidByInvoice(store: Store, invoiceNumber: string, paid
     if (subscription) return { order, subscription };
   }
 
-  return markOrderPaid(store, order.id, paidAt);
+  return markOrderPaid(store, order.id, paidAt, { allowExpired: true });
 }
 
 export function generateLicenseForPaidOrder(store: Store, input: {
