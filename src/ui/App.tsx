@@ -3485,7 +3485,7 @@ function ProductLanding({ isLoading, product, onJoin, onAccess }: {
     );
   }
 
-  if (product.landingTemplate === 'mixin9' || product.slug === 'mixin9') {
+  if (product.landingTemplate === 'mixin9') {
     return <Mixin9Landing product={product} onJoin={onJoin} />;
   }
 
