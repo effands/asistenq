@@ -2602,7 +2602,7 @@ if (shouldServeFrontend) {
     express.static(path.join(bundledToolDir, req.params.slug))(req, res, next);
   });
   app.get(/^\/[a-z0-9-]+$/, (req, res, next) => {
-    const product = store.data.products.find((item) => item.landingPath === req.path || `/${item.slug}` === req.path);
+    const product = store.data.products.find((item) => Boolean(item.landingPath && item.landingPath === req.path));
     if (!product) {
       next();
       return;
