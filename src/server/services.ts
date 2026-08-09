@@ -820,13 +820,11 @@ async function tryAttachSakuRupiahInvoice(store: Store, order: Order, items: Ord
     const res = await createSakuRupiahInvoice(settings, order, items, callbackUrl, returnUrl);
     if (res.success) {
       if (res.trxId) order.sakuRupiahTrxId = res.trxId;
-      if (res.checkoutUrl) order.sakuRupiahCheckoutUrl = res.checkoutUrl;
-      if (res.qrPayload) order.qrisPayload = res.qrPayload;
-      if (res.qrDataUrl) {
-        order.paymentQrUrl = res.qrDataUrl;
-      } else if (res.qrPayload) {
-        order.paymentQrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=320x320&data=${encodeURIComponent(res.qrPayload)}`;
+      if (res.checkoutUrl) {
+        order.sakuRupiahCheckoutUrl = res.checkoutUrl;
+        order.paymentQrUrl = undefined;
       }
+      if (res.qrPayload) order.qrisPayload = res.qrPayload;
     }
   } catch (error) {
     console.error('SakuRupiah invoice creation fallback:', error);

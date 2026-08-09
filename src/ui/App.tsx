@@ -194,7 +194,7 @@ export function App() {
       await loadMemberOrders(memberSession.token);
       setMessage(`Invoice ${order.invoiceNumber} berhasil dibuat.`);
       if (order.sakuRupiahCheckoutUrl) {
-        window.open(order.sakuRupiahCheckoutUrl, '_blank');
+        window.location.href = order.sakuRupiahCheckoutUrl;
       }
     } finally { setCartBusy(false); }
   }
@@ -694,6 +694,9 @@ export function App() {
             setMessage(`Invoice ${order.invoiceNumber} dibuat.`);
             await loadLicenses(memberSession.token);
             await loadMemberOrders(memberSession.token);
+            if (order.sakuRupiahCheckoutUrl) {
+              window.location.href = order.sakuRupiahCheckoutUrl;
+            }
             return order;
           }}
           onResetLicense={async (licenseId, newHwid) => {
