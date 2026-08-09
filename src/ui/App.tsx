@@ -162,6 +162,7 @@ export function App() {
   const [visitorId] = useState(() => browserIdentity(window.localStorage, 'asistenq-visitor-id'));
   const [instanceId] = useState(() => browserIdentity(window.sessionStorage, 'asistenq-site-instance-id'));
   const [confirmDialog, setConfirmDialog] = useState<ConfirmDialogState | null>(null);
+  const [previousPaidOrderIds, setPreviousPaidOrderIds] = useState<Set<string>>(() => new Set());
 
   function askConfirm(options: {
     title: string;
@@ -343,6 +344,40 @@ export function App() {
     }, 20_000);
     return () => window.clearInterval(timer);
   }, [instanceId, visitorId]);
+
+  useEffect(() => {
+    if (!memberSession) return;
+    const hasPending = memberOrders.some((o) => o.status === 'pending') || cartOrder?.status === 'pending';
+    if (!hasPending) return;
+
+    const checkPendingOrders = async () => {
+      try {
+        const freshOrders = await apiRequest<PublicOrder[]>('/member/orders', { token: memberSession.token });
+        if (freshOrders) {
+          setMemberOrders(freshOrders);
+          freshOrders.forEach((ord) => {
+            if (ord.status === 'paid' && !previousPaidOrderIds.has(ord.id)) {
+              setMessage(`🎉 Pembayaran Sukses! Invoice ${ord.invoiceNumber ?? ord.id} telah dikonfirmasi lunas.`);
+              setPreviousPaidOrderIds((prev) => new Set([...prev, ord.id]));
+              void loadLicenses(memberSession.token);
+            }
+          });
+          if (cartOrder && freshOrders.some((o) => o.id === cartOrder.id && o.status === 'paid')) {
+            const updated = freshOrders.find((o) => o.id === cartOrder.id);
+            if (updated) setCartOrder(updated);
+          }
+        }
+      } catch {
+        // Suppress polling error
+      }
+    };
+
+    void checkPendingOrders();
+    const timer = window.setInterval(() => {
+      void checkPendingOrders();
+    }, 4000);
+    return () => window.clearInterval(timer);
+  }, [memberSession, memberOrders, cartOrder, previousPaidOrderIds]);
 
   const onUpdateMember = async (memberId: string, input: any) => {
     if (!adminSession) return;
@@ -3551,6 +3586,15 @@ function MemberPanel({ session, products, dashboard, orders, onRegister, onLogin
     setProfileTelegram(session.user.telegramId ?? '');
   }, [session?.user.id, session?.user.name, session?.user.whatsapp, session?.user.telegramId]);
 
+  useEffect(() => {
+    if (activeOrder) {
+      const updated = orders.find((o) => o.id === activeOrder.id);
+      if (updated && updated.status !== activeOrder.status) {
+        setActiveOrder(updated);
+      }
+    }
+  }, [orders, activeOrder]);
+
   if (!session) {
     return (
       <main className="member-page member-auth-page">
@@ -4083,49 +4127,68 @@ function InvoiceModal({ order, onClose }: { order: PublicOrder; onClose: () => v
           </div>
           <button className="ghost-button" onClick={onClose}>Tutup</button>
         </div>
-        <div className="invoice-body">
-          <div className="invoice-summary">
-            <span>Produk<b>{order.product?.name ?? order.productName ?? order.productId}</b></span>
-            <span>Harga<b>{order.formattedAmount}</b></span>
-            <span>Kode unik<b>{order.uniqueCode ?? 0}</b></span>
-            <span>Total bayar<b>{order.formattedTotalAmount}</b></span>
-            <span>Status<b>{order.status}</b></span>
-            <span>Sisa waktu<b>{formatRemaining(order.expiresAt)}</b></span>
+        {order.status === 'paid' ? (
+          <div className="invoice-body" style={{ padding: '32px 24px', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '14px' }}>
+            <div style={{ width: '64px', height: '64px', borderRadius: '50%', background: 'rgba(34, 197, 94, 0.15)', color: '#22c55e', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <CheckCircle2 size={40} />
+            </div>
+            <h3 style={{ margin: 0, fontSize: '1.4rem' }}>Pembayaran Berhasil Diterima!</h3>
+            <p style={{ margin: 0, color: 'var(--muted-color)', fontSize: '0.9rem', maxWidth: '340px' }}>
+              Invoice <strong>{order.invoiceNumber ?? order.id}</strong> telah terkonfirmasi lunas. Silakan masukkan HWID di area member untuk mengaktifkan lisensi.
+            </p>
+            <button className="primary" style={{ marginTop: '12px', padding: '12px 28px', fontWeight: 'bold' }} onClick={onClose}>
+              Tutup & Masukkan HWID &rarr;
+            </button>
           </div>
-          <div className="qris-box">
-            {order.sakuRupiahCheckoutUrl ? (
-              <div className="payment-confirm-box" style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '10px' }}>
-                <strong>SakuRupiah Payment Gateway</strong>
-                <span>Silakan selesaikan pembayaran invoice kamu via Halaman Resmi Gateway SakuRupiah melalui tombol di bawah ini:</span>
-                <a className="primary" href={order.sakuRupiahCheckoutUrl} target="_blank" rel="noreferrer" style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '8px', padding: '14px', borderRadius: '10px', fontWeight: 'bold', fontSize: '14px', textDecoration: 'none' }}>
-                  Bayar via Web Gateway SakuRupiah <ExternalLink size={18} />
-                </a>
-                <span className="muted" style={{ fontSize: '11px', marginTop: '4px', textAlign: 'center' }}>Setelah transaksi berhasil, kamu akan otomatis dikembalikan ke Halaman Member & Lisensi.</span>
-              </div>
-            ) : (
-              <>
-                {(() => {
-                  const qrImg = (order.paymentQrUrl && (order.paymentQrUrl.startsWith('data:') || order.paymentQrUrl.startsWith('http')))
-                    ? order.paymentQrUrl
-                    : (order.qrisPayload && !order.qrisPayload.startsWith('http'))
-                      ? `https://api.qrserver.com/v1/create-qr-code/?size=280x280&data=${encodeURIComponent(order.qrisPayload)}`
-                      : undefined;
-                  return qrImg ? (
-                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', margin: '10px 0' }}>
-                      <img src={qrImg} alt="QRIS pembayaran" style={{ width: '220px', height: '220px', objectFit: 'contain', background: '#fff', padding: '10px', borderRadius: '12px', border: '1px solid var(--line)' }} />
-                      <p style={{ marginTop: '8px', fontSize: '12px', textAlign: 'center' }}>Scan QRIS ini dan bayar tepat sesuai nominal invoice di atas.</p>
-                    </div>
-                  ) : null;
-                })()}
-                <div className="payment-confirm-box" style={{ marginTop: '10px' }}>
-                  <strong>Sudah bayar?</strong>
-                  <span>Kirim konfirmasi dan bukti transfer via Telegram agar admin bisa cek lalu kirim lisensi.</span>
-                  <a className="primary" href={telegramConfirmUrl} target="_blank" rel="noreferrer">Konfirmasi via Telegram</a>
+        ) : (
+          <div className="invoice-body">
+            <div className="invoice-summary">
+              <span>Produk<b>{order.product?.name ?? order.productName ?? order.productId}</b></span>
+              <span>Harga<b>{order.formattedAmount}</b></span>
+              <span>Kode unik<b>{order.uniqueCode ?? 0}</b></span>
+              <span>Total bayar<b>{order.formattedTotalAmount}</b></span>
+              <span>Status<b>{order.status}</b></span>
+              <span>Sisa waktu<b>{formatRemaining(order.expiresAt)}</b></span>
+            </div>
+            <div className="qris-box">
+              {order.sakuRupiahCheckoutUrl ? (
+                <div className="payment-confirm-box" style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '10px' }}>
+                  <strong>SakuRupiah Payment Gateway</strong>
+                  <span>Silakan selesaikan pembayaran invoice kamu via Halaman Resmi Gateway SakuRupiah melalui tombol di bawah ini:</span>
+                  <a className="primary" href={order.sakuRupiahCheckoutUrl} target="_blank" rel="noreferrer" style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '8px', padding: '14px', borderRadius: '10px', fontWeight: 'bold', fontSize: '14px', textDecoration: 'none' }}>
+                    Bayar via Web Gateway SakuRupiah <ExternalLink size={18} />
+                  </a>
+                  <span className="muted" style={{ fontSize: '11px', marginTop: '4px', textAlign: 'center' }}>Setelah transaksi berhasil, kamu akan otomatis dikembalikan ke Halaman Member & Lisensi.</span>
                 </div>
-              </>
-            )}
+              ) : (
+                <>
+                  {(() => {
+                    const qrImg = (order.paymentQrUrl && (order.paymentQrUrl.startsWith('data:') || order.paymentQrUrl.startsWith('http')))
+                      ? order.paymentQrUrl
+                      : (order.qrisPayload && !order.qrisPayload.startsWith('http'))
+                        ? `https://api.qrserver.com/v1/create-qr-code/?size=280x280&data=${encodeURIComponent(order.qrisPayload)}`
+                        : undefined;
+                    return qrImg ? (
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', margin: '10px 0' }}>
+                        <img src={qrImg} alt="QRIS pembayaran" style={{ width: '220px', height: '220px', objectFit: 'contain', background: '#fff', padding: '10px', borderRadius: '12px', border: '1px solid var(--line)' }} />
+                        <p style={{ marginTop: '8px', fontSize: '12px', textAlign: 'center' }}>Scan QRIS ini dan bayar tepat sesuai nominal invoice di atas.</p>
+                      </div>
+                    ) : null;
+                  })()}
+                  <div className="payment-confirm-box" style={{ marginTop: '10px' }}>
+                    <strong>Sudah bayar?</strong>
+                    <span>Kirim konfirmasi dan bukti transfer via Telegram agar admin bisa cek lalu kirim lisensi.</span>
+                    <a className="primary" href={telegramConfirmUrl} target="_blank" rel="noreferrer">Konfirmasi via Telegram</a>
+                  </div>
+                </>
+              )}
+              <div className="payment-live-check">
+                <span className="pulsing-dot" />
+                <span>Auto-Confirm Aktif · Memeriksa pembayaran otomatis...</span>
+              </div>
+            </div>
           </div>
-        </div>
+        )}
       </article>
     </div>
   );
