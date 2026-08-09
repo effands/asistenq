@@ -2703,14 +2703,15 @@ function ProductForm({ onCreateProduct }: {
     description: string;
   }) => Promise<void>;
 }) {
-  const [name, setName] = useState('AsistenQ Video Helper');
-  const [slug, setSlug] = useState('video-helper');
+  const [name, setName] = useState('');
+  const [slug, setSlug] = useState('');
   const [type, setType] = useState<ProductType>('tool');
   const [category, setCategory] = useState('Tools Creator');
   const [visibility, setVisibility] = useState<ProductVisibility>('public');
   const [accessMode, setAccessMode] = useState<ProductAccessMode>('free_member');
   const [planPrices, setPlanPrices] = useState<Record<string, number>>(() => Object.fromEntries(tieredPlanTemplates.map((plan) => [plan.code, plan.defaultPrice])));
   const [activePlans, setActivePlans] = useState<Record<string, boolean>>(() => Object.fromEntries(tieredPlanTemplates.map((plan) => [plan.code, true])));
+  const [marketplaceCoverUrl, setMarketplaceCoverUrl] = useState('');
   const [compareAtPrice, setCompareAtPrice] = useState(0);
   const [discountLabel, setDiscountLabel] = useState('');
   const [promoText, setPromoText] = useState('');
@@ -2726,10 +2727,57 @@ function ProductForm({ onCreateProduct }: {
   const [installerUrl, setInstallerUrl] = useState('');
   const [ctaLabel, setCtaLabel] = useState('Daftar jadi member');
   const [accessRequirement, setAccessRequirement] = useState('Daftar jadi member untuk membuka akses.');
-  const [headline, setHeadline] = useState('Bantu produksi video lebih cepat.');
-  const [description, setDescription] = useState('Produk AsistenQ untuk workflow editing dan YouTube.');
+  const [headline, setHeadline] = useState('');
+  const [description, setDescription] = useState('');
   const [createBusy, setCreateBusy] = useState(false);
   const [createNotice, setCreateNotice] = useState('');
+
+  function handleNameChange(newName: string) {
+    setName(newName);
+    const autoSlug = newName.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+    setSlug(autoSlug);
+  }
+
+  function applyPreset(presetType: 'tool' | 'download' | 'course' | 'free') {
+    if (presetType === 'tool') {
+      setType('tool');
+      setCategory('Tools Creator');
+      setFulfillmentType('license');
+      setAccessMode('free_member');
+      setAccessRequirement('Daftar jadi member untuk membuka akses.');
+      setCtaLabel('Daftar jadi member');
+      setHeadline('Bantu produksi video & konten lebih cepat.');
+      setDescription('Software tools AsistenQ untuk workflow editing.');
+    } else if (presetType === 'download') {
+      setType('preset');
+      setCategory('Template & Asset');
+      setFulfillmentType('download');
+      setAccessMode('free_member');
+      setAccessRequirement('Daftar jadi member untuk mengunduh.');
+      setCtaLabel('Download sekarang');
+      setHeadline('Asset & Template siap pakai.');
+      setDescription('Bundle template dan resource siap pakai.');
+    } else if (presetType === 'course') {
+      setType('course');
+      setCategory('E-Learning');
+      setFulfillmentType('license');
+      setAccessMode('paid');
+      setAccessRequirement('Beli produk untuk membuka materi kelas.');
+      setCtaLabel('Beli Kelas');
+      setHeadline('Kelas dan panduan praktis.');
+      setDescription('Materi e-learning dan kelas online.');
+    } else if (presetType === 'free') {
+      setType('free');
+      setCategory('Free Tools');
+      setFulfillmentType('license');
+      setAccessMode('free_member');
+      setAccessRequirement('Daftar member gratis.');
+      setCtaLabel('Ambil Gratis');
+      setHeadline('Tools 100% gratis untuk member.');
+      setDescription('Tools gratis tanpa biaya.');
+      setPlanPrices((curr) => Object.fromEntries(Object.keys(curr).map((k) => [k, 0])));
+    }
+  }
   const primaryPaidTemplate = tieredPlanTemplates.find((plan) => activePlans[plan.code] && !plan.isFree);
   const primarySalePrice = primaryPaidTemplate ? Number(planPrices[primaryPaidTemplate.code] ?? 0) : 0;
   const discountPercent = compareAtPrice > primarySalePrice && compareAtPrice > 0
@@ -2788,8 +2836,9 @@ function ProductForm({ onCreateProduct }: {
           installerUrl: installerUrl.trim() || undefined,
           ctaLabel: ctaLabel.trim() || undefined,
           accessRequirement: accessRequirement.trim() || undefined,
-          headline,
-          description
+          headline: headline.trim() || name,
+          description: description.trim() || name,
+          marketplaceCoverUrl: marketplaceCoverUrl.trim() || undefined
         });
         setCreateNotice('Produk baru berhasil ditambahkan.');
       } catch (error) {
@@ -2801,18 +2850,41 @@ function ProductForm({ onCreateProduct }: {
       <div className="panel-heading product-create-heading">
         <div>
           <p className="section-kicker">Catalog control</p>
-          <h2>Tambah Produk</h2>
-          <p className="form-intro">Isi singkat saja: identitas, akses, paket harga. Landing bisa dibuka saat dibutuhkan.</p>
+          <h2>Tambah Produk Baru</h2>
+          <p className="form-intro">Pilih jenis produk untuk mengatur pilihan default secara otomatis, atau isi singkat di bawah ini.</p>
         </div>
         <span className="soft-badge">{type}</span>
       </div>
+
+      <div style={{ background: 'rgba(20, 184, 166, 0.08)', border: '1px solid rgba(20, 184, 166, 0.25)', borderRadius: '14px', padding: '16px' }}>
+        <strong style={{ fontSize: '0.9rem', color: 'var(--teal, #14b8a6)', display: 'block', marginBottom: '10px' }}>
+          ⚡ Pilih Preset Jenis Produk (Klik Sekali):
+        </strong>
+        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+          <button type="button" className={`ghost-button ${type === 'tool' && fulfillmentType === 'license' ? 'primary' : ''}`} onClick={() => applyPreset('tool')}>🛠️ Software / Tools Lisensi</button>
+          <button type="button" className={`ghost-button ${type === 'preset' && fulfillmentType === 'download' ? 'primary' : ''}`} onClick={() => applyPreset('download')}>📦 Asset / File Download</button>
+          <button type="button" className={`ghost-button ${type === 'course' ? 'primary' : ''}`} onClick={() => applyPreset('course')}>🎓 Kelas / E-Learning</button>
+          <button type="button" className={`ghost-button ${type === 'free' ? 'primary' : ''}`} onClick={() => applyPreset('free')}>🎁 Free Tools (Gratis)</button>
+        </div>
+      </div>
+
       <div className="product-form-section">
-        <div className="product-form-section-title"><span>01</span><div><strong>Informasi utama</strong><small>Identitas utama yang tampil di katalog dan member area.</small></div></div>
+        <div className="product-form-section-title"><span>01</span><div><strong>Informasi utama & Cover 16:9</strong><small>Identitas utama yang tampil di katalog marketplace & member area.</small></div></div>
         <div className="product-form-grid">
-          <label className="col-3">Nama produk<input required value={name} onChange={(event) => setName(event.target.value)} placeholder="Contoh: MIXIN9" /></label>
-          <label className="col-2">Slug / alamat<input required value={slug} onChange={(event) => setSlug(event.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '-'))} placeholder="mixin9" /><small>Huruf kecil, angka, dan tanda minus.</small></label>
+          <label className="col-3">Nama produk<input required value={name} onChange={(event) => handleNameChange(event.target.value)} placeholder="Contoh: VJ Studio PRO" /></label>
+          <label className="col-2">Slug / URL<input required value={slug} onChange={(event) => setSlug(event.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '-'))} placeholder="vj-studio-pro" /><small>Otomatis dari nama produk.</small></label>
           <label className="col-1">Jenis produk<select value={type} onChange={(event) => setType(event.target.value as ProductType)}>{productTypes.map((item) => <option key={item}>{item}</option>)}</select></label>
           <label className="col-2">Kategori marketplace<input value={category} onChange={(event) => setCategory(event.target.value)} placeholder="Tools Creator" /></label>
+          <label className="col-4">
+            <span>URL Cover Thumbnail Marketplace (Rasio 16:9)</span>
+            <input value={marketplaceCoverUrl} onChange={(event) => setMarketplaceCoverUrl(event.target.value)} placeholder="https://.../cover-16x9.jpg" />
+            <small style={{ color: 'var(--muted-color)', fontSize: '11px', marginTop: '4px' }}>Gunakan gambar rasio 16:9 (contoh: 1280x720 / 1920x1080) agar proporsional di seluruh katalog & halaman member.</small>
+            {marketplaceCoverUrl && (
+              <div style={{ width: '220px', aspectRatio: '16 / 9', borderRadius: '8px', overflow: 'hidden', border: '1px solid var(--line)', marginTop: '8px' }}>
+                <img src={marketplaceCoverUrl} alt="Preview 16:9" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              </div>
+            )}
+          </label>
         </div>
       </div>
       <div className="product-form-section access-section">

@@ -42,7 +42,24 @@ export function MarketplaceHome({ catalog, onOpen, onAdd }: { catalog: PublicCat
             {product.marketplaceCoverUrl && <img src={product.marketplaceCoverUrl} alt={product.name} />}
             <small>{productCategory(product)}</small><i>{product.badge || (product.price === 0 ? 'FREE' : 'PRO')}</i><strong>{!product.marketplaceCoverUrl && product.name}</strong>
           </button>
-          <div className="market-card-body"><button className="market-card-title" onClick={() => onOpen(product.slug)}>{product.name}</button><p>{product.cardDescription || product.description || product.headline}</p><div className="market-tags">{(product.tags?.length ? product.tags : [product.compatibility || 'Digital', product.billingPeriod]).slice(0, 3).map((tag) => <span key={tag}>{tag}</span>)}</div><footer><b>{money(product.plans?.[0]?.price ?? product.price)}</b><button aria-label={`Tambahkan ${product.name} ke keranjang`} onClick={() => onAdd(product)}><ShoppingCart size={18} /></button></footer></div>
+          <div className="market-card-body">
+            <button className="market-card-title" onClick={() => onOpen(product.slug)}>{product.name}</button>
+            <p>{product.cardDescription || product.description || product.headline}</p>
+            <div className="market-tags">{(product.tags?.length ? product.tags : [product.compatibility || 'Digital', product.billingPeriod]).slice(0, 3).map((tag) => <span key={tag}>{tag}</span>)}</div>
+            <footer>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '1px' }}>
+                {Boolean(product.compareAtPrice && product.compareAtPrice > (product.plans?.[0]?.price ?? product.price)) && (
+                  <del style={{ color: '#94a3b8', fontSize: '11px', fontWeight: 600, textDecoration: 'line-through' }}>
+                    {money(product.compareAtPrice!)}
+                  </del>
+                )}
+                <b style={{ fontSize: '16px', color: '#102623' }}>
+                  {money(product.plans?.[0]?.price ?? product.price)}
+                </b>
+              </div>
+              <button aria-label={`Tambahkan ${product.name} ke keranjang`} onClick={() => onAdd(product)}><ShoppingCart size={18} /></button>
+            </footer>
+          </div>
         </article>)}
         {products.length === 0 && <div className="market-empty"><Search size={32} /><h3>Produk belum ditemukan</h3><p>Coba kata kunci atau kategori lain.</p></div>}
       </section>
@@ -68,7 +85,7 @@ export function MarketplaceProductDetail({ product, onBack, onAdd, onBuy }: { pr
     <section className="detail-top">
       <div className="detail-gallery"><div className="detail-main-media" style={!activeMedia?.url ? coverStyle(product) : undefined}>{activeMedia?.url ? activeMedia.type === 'video' ? <video src={activeMedia.url} controls /> : <img src={activeMedia.url} alt={product.name} /> : <><span>{productCategory(product)}</span><strong>{product.name}</strong><p>{product.cardDescription || product.description}</p></>}</div><div className="detail-thumbs">{gallery.map((item, index) => <button className={media === index ? 'active' : ''} onClick={() => setMedia(index)} key={item.id}>{item.url ? item.type === 'video' ? <video src={item.url} /> : <img src={item.url} alt="" /> : <span>{index + 1}</span>}</button>)}</div></div>
       <div className="detail-summary"><h1>{product.name}</h1><div className="market-tags">{[product.compatibility, product.billingPeriod, product.version, product.badge].filter(Boolean).map((tag) => <span key={tag}>{tag}</span>)}</div><p>{product.description || product.headline}</p><hr />{(product.benefits?.length ? product.benefits : product.features ?? []).slice(0, 5).map((feature) => <div className="detail-feature" key={feature.title}><span><Check /></span><div><b>{feature.title}</b><small>{feature.description}</small></div></div>)}</div>
-      <aside className="detail-buy"><h3>Pilih Lisensi</h3>{plans.map((row) => <button className={`plan-choice ${plan?.id === row.id ? 'active' : ''}`} onClick={() => setPlanId(row.id)} key={row.id}><span><i /> <b>{row.name}</b>{row.highlighted && <em>Rekomendasi</em>}</span><strong>{money(row.price)}</strong><small>{row.badge || (row.durationDays ? `Akses ${row.durationDays} hari` : 'Akses sesuai paket')}</small></button>)}<button className="buy-primary" onClick={() => plan && onBuy(product, plan)}><ShoppingCart /> Beli Sekarang — {money(plan?.price ?? product.price)}</button><button className="buy-secondary" onClick={() => plan && onAdd(product, plan)}>+ Tambah ke Keranjang</button><small className="secure-note"><ShieldCheck /> Pembayaran QRIS aman dengan kode unik</small></aside>
+      <aside className="detail-buy"><h3>Pilih Lisensi</h3>{plans.map((row) => <button className={`plan-choice ${plan?.id === row.id ? 'active' : ''}`} onClick={() => setPlanId(row.id)} key={row.id}><span><i /> <b>{row.name}</b>{row.highlighted && <em>Rekomendasi</em>}</span><strong>{Boolean(product.compareAtPrice && product.compareAtPrice > row.price) && <del style={{ color: '#94a3b8', fontSize: '13px', fontWeight: 500, marginRight: '6px', textDecoration: 'line-through' }}>{money(product.compareAtPrice!)}</del>}{money(row.price)}</strong><small>{row.badge || (row.durationDays ? `Akses ${row.durationDays} hari` : 'Akses sesuai paket')}</small></button>)}<button className="buy-primary" onClick={() => plan && onBuy(product, plan)}><ShoppingCart /> Beli Sekarang — {money(plan?.price ?? product.price)}</button><button className="buy-secondary" onClick={() => plan && onAdd(product, plan)}>+ Tambah ke Keranjang</button><small className="secure-note"><ShieldCheck /> Pembayaran QRIS aman dengan kode unik</small></aside>
     </section>
     <section className="detail-content"><div><h2>Deskripsi Produk</h2><p>{product.description}</p>{product.targetUsers?.length ? <><h2>Cocok Untuk</h2><div className="market-tags">{product.targetUsers.map((item) => <span key={item}>{item}</span>)}</div></> : null}{product.features?.length ? <><h2>Fitur Utama</h2><div className="detail-feature-grid">{product.features.map((item) => <div key={item.title}><Check /><b>{item.title}</b><p>{item.description}</p></div>)}</div></> : null}{product.changelog && <><h2>Changelog</h2><p>{product.changelog}</p></>}</div><aside><h3>Informasi Produk</h3>{Object.entries({ Developer: product.developer, Versi: product.version, 'Ukuran File': product.fileSize, Kompatibilitas: product.compatibility, Bahasa: product.language, SKU: product.sku, Kategori: productCategory(product) }).filter(([, value]) => value).map(([key, value]) => <span key={key}><small>{key}</small><b>{value}</b></span>)}{product.demoUrl && <a href={product.demoUrl} target="_blank" rel="noreferrer">Coba Demo</a>}{product.documentationUrl && <a href={product.documentationUrl} target="_blank" rel="noreferrer"><BookOpen /> Lihat Dokumentasi</a>}</aside></section>
   </main><MarketplaceFooter /></>;
