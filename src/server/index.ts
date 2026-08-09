@@ -519,6 +519,7 @@ async function emailLicense(license: ReturnType<typeof generateToolLicense>, inv
   } catch (error) {
     console.warn('License email skipped:', error instanceof Error ? error.message : error);
   }
+}
 async function dispatchFulfillmentEmails(store: any, order: any, previousItems: any[]) {
   if (!order.orderItems) return;
   const newlyFulfilled = order.orderItems.filter((item: any) =>
