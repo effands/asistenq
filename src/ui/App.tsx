@@ -1080,6 +1080,7 @@ function AdminPanel({
     accessRequirement?: string;
     headline: string;
     description: string;
+    marketplaceCoverUrl?: string;
   }) => Promise<void>;
   onUpdateProduct: (productId: string, input: Partial<PublicProduct>) => Promise<void>;
   onDeleteProduct: (productId: string) => Promise<void>;
@@ -1259,7 +1260,11 @@ function AdminDashboardPanel({ products, summary, onResetOperationalData, onNavi
 
 function formatDate(value?: string | null) {
   if (!value) return 'Lifetime';
-  return new Date(value).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' });
+  const d = new Date(value);
+  if (isNaN(d.getTime())) return value;
+  const dateStr = d.toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' });
+  const timeStr = d.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', hour12: false }).replace('.', ':');
+  return `${dateStr}, ${timeStr} WIB`;
 }
 
 function formatRemaining(value?: string | null) {
@@ -2701,6 +2706,7 @@ function ProductForm({ onCreateProduct }: {
     accessRequirement?: string;
     headline: string;
     description: string;
+    marketplaceCoverUrl?: string;
   }) => Promise<void>;
 }) {
   const [name, setName] = useState('');
@@ -2749,7 +2755,7 @@ function ProductForm({ onCreateProduct }: {
       setHeadline('Bantu produksi video & konten lebih cepat.');
       setDescription('Software tools AsistenQ untuk workflow editing.');
     } else if (presetType === 'download') {
-      setType('preset');
+      setType('bundle');
       setCategory('Template & Asset');
       setFulfillmentType('download');
       setAccessMode('free_member');
@@ -2862,7 +2868,7 @@ function ProductForm({ onCreateProduct }: {
         </strong>
         <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
           <button type="button" className={`ghost-button ${type === 'tool' && fulfillmentType === 'license' ? 'primary' : ''}`} onClick={() => applyPreset('tool')}>🛠️ Software / Tools Lisensi</button>
-          <button type="button" className={`ghost-button ${type === 'preset' && fulfillmentType === 'download' ? 'primary' : ''}`} onClick={() => applyPreset('download')}>📦 Asset / File Download</button>
+          <button type="button" className={`ghost-button ${type === 'bundle' && fulfillmentType === 'download' ? 'primary' : ''}`} onClick={() => applyPreset('download')}>📦 Asset / File Download</button>
           <button type="button" className={`ghost-button ${type === 'course' ? 'primary' : ''}`} onClick={() => applyPreset('course')}>🎓 Kelas / E-Learning</button>
           <button type="button" className={`ghost-button ${type === 'free' ? 'primary' : ''}`} onClick={() => applyPreset('free')}>🎁 Free Tools (Gratis)</button>
         </div>
