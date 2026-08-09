@@ -519,18 +519,16 @@ async function emailLicense(license: ReturnType<typeof generateToolLicense>, inv
   } catch (error) {
     console.warn('License email skipped:', error instanceof Error ? error.message : error);
   }
-}
-
-async function dispatchFulfillmentEmails(store: Store, order: Order, previousItems: OrderItem[]) {
+async function dispatchFulfillmentEmails(store: any, order: any, previousItems: any[]) {
   if (!order.orderItems) return;
-  const newlyFulfilled = order.orderItems.filter((item) =>
+  const newlyFulfilled = order.orderItems.filter((item: any) =>
     item.fulfillmentStatus === 'fulfilled' &&
-    (!previousItems || !previousItems.find((p) => p.id === item.id && p.fulfillmentStatus === 'fulfilled'))
+    (!previousItems || !previousItems.find((p: any) => p.id === item.id && p.fulfillmentStatus === 'fulfilled'))
   );
 
   for (const item of newlyFulfilled) {
     if (item.fulfillmentType === 'license' && item.fulfillmentReference) {
-      const license = store.data.licenses.find((l) => l.id === item.fulfillmentReference);
+      const license = store.data.licenses.find((l: any) => l.id === item.fulfillmentReference);
       if (license) {
         await emailLicense(license, order.invoiceNumber ?? order.id).catch((err) => console.error('Gagal mengirim auto lisensi:', err));
       }
