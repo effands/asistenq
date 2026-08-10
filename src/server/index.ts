@@ -1043,13 +1043,27 @@ app.get('/api/license/verify-voucher', (req, res) => {
 });
 
 app.post('/api/license/activate', (req, res) => {
-  const body = licenseTokenSchema.parse(req.body);
-  res.json(activateLicense(store, body));
+  try {
+    const body = licenseTokenSchema.parse(req.body);
+    res.json(activateLicense(store, body));
+  } catch (error) {
+    const message = error instanceof z.ZodError
+      ? error.issues.map((issue) => issue.message).join(', ')
+      : error instanceof Error ? error.message : 'Gagal mengaktifkan lisensi.';
+    res.status(400).json({ message });
+  }
 });
 
 app.post('/api/license/verify', (req, res) => {
-  const body = licenseTokenSchema.parse(req.body);
-  res.json(verifyLicense(store, body));
+  try {
+    const body = licenseTokenSchema.parse(req.body);
+    res.json(verifyLicense(store, body));
+  } catch (error) {
+    const message = error instanceof z.ZodError
+      ? error.issues.map((issue) => issue.message).join(', ')
+      : error instanceof Error ? error.message : 'Gagal verifikasi lisensi.';
+    res.status(400).json({ message });
+  }
 });
 
 app.post('/api/tool-events', (req, res) => {
