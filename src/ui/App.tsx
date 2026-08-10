@@ -134,6 +134,21 @@ function productSlugFromPath(pathname: string): string {
   return '';
 }
 
+function getNebulaTheme(productNameOrSlug?: string): 'cyan' | 'purple' | 'amber' | 'rose' | 'emerald' | 'indigo' | 'blue' {
+  const s = (productNameOrSlug || '').toLowerCase();
+  if (s.includes('mixin9') || s.includes('mixin')) return 'cyan';
+  if (s.includes('vj') || s.includes('studio')) return 'purple';
+  if (s.includes('jadwal') || s.includes('auto')) return 'amber';
+  if (s.includes('course') || s.includes('kelas') || s.includes('e-learning')) return 'rose';
+  if (s.includes('free') || s.includes('gratis')) return 'emerald';
+  if (s.includes('audio') || s.includes('master')) return 'indigo';
+  
+  const themes: ('cyan' | 'purple' | 'amber' | 'rose' | 'emerald' | 'indigo' | 'blue')[] = ['cyan', 'purple', 'amber', 'rose', 'emerald', 'indigo', 'blue'];
+  let hash = 0;
+  for (let i = 0; i < s.length; i++) hash = (hash * 31 + s.charCodeAt(i)) & 0xffff;
+  return themes[hash % themes.length];
+}
+
 export function App() {
   const [route, setRoute] = useState<Route>(() => routeFromPath(window.location.pathname));
   const [products, setProducts] = useState<PublicProduct[]>([]);
@@ -4027,7 +4042,8 @@ function MemberPanel({ session, products, dashboard, orders, onRegister, onLogin
             <div className="member-license-compact-list">
               {visibleLicenses.map((license) => {
                 const open = expandedLicense === license.id;
-                return <article className={`member-license-compact ${open ? 'open' : ''}`} key={license.id}>
+                const nebulaTheme = getNebulaTheme(license.product?.slug || license.product?.name || license.productId);
+                return <article className={`member-license-compact ${open ? 'open' : ''}`} data-nebula-theme={nebulaTheme} key={license.id}>
                   <button className="license-compact-summary" onClick={() => setExpandedLicense(open ? '' : license.id)}>
                     <span className="license-product-cell"><span className="license-product-icon"><KeyRound /></span><span><strong>{license.product?.name ?? license.productId}</strong><small>{license.plan?.name ?? license.planId}</small></span></span>
                     <span className="license-hwid-cell"><small>HWID perangkat</small><code>{license.hwid}</code></span>
@@ -4061,7 +4077,8 @@ function MemberPanel({ session, products, dashboard, orders, onRegister, onLogin
             <div className="member-product-library">
               {ownedProducts.map((product) => {
                 const license = ownedLicenses.find((item) => item.productId === product.id);
-                return <article className="member-product-card" key={product.id}>
+                const nebulaTheme = getNebulaTheme(product.slug || product.name || product.id);
+                return <article className="member-product-card" data-nebula-theme={nebulaTheme} key={product.id}>
                   <div className="member-product-cover">{product.coverUrl ? <img src={product.coverUrl} alt="" /> : productIcon(product)}<span>{product.category}</span></div>
                   <div className="member-product-content"><strong>{product.name}</strong><small>{product.headline}</small>
                     <div className="member-product-meta"><span><BadgeCheck /> Akses aktif</span><span>{license ? `Berakhir ${formatDate(license.expiresAt)}` : product.type}</span></div>
