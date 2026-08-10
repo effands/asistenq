@@ -134,19 +134,59 @@ function productSlugFromPath(pathname: string): string {
   return '';
 }
 
-function getNebulaTheme(productNameOrSlug?: string): 'cyan' | 'purple' | 'amber' | 'rose' | 'emerald' | 'indigo' | 'blue' {
+function getNebulaStyle(productNameOrSlug?: string): { style: React.CSSProperties; iconStyle: React.CSSProperties } {
   const s = (productNameOrSlug || '').toLowerCase();
-  if (s.includes('mixin9') || s.includes('mixin')) return 'cyan';
-  if (s.includes('vj') || s.includes('studio')) return 'purple';
-  if (s.includes('jadwal') || s.includes('auto')) return 'amber';
-  if (s.includes('course') || s.includes('kelas') || s.includes('e-learning')) return 'rose';
-  if (s.includes('free') || s.includes('gratis')) return 'emerald';
-  if (s.includes('audio') || s.includes('master')) return 'indigo';
   
-  const themes: ('cyan' | 'purple' | 'amber' | 'rose' | 'emerald' | 'indigo' | 'blue')[] = ['cyan', 'purple', 'amber', 'rose', 'emerald', 'indigo', 'blue'];
+  if (s.includes('mixin9') || s.includes('mixin')) {
+    return {
+      style: {
+        background: 'radial-gradient(circle at 10% 20%, rgba(6, 182, 212, 0.14) 0%, transparent 55%), radial-gradient(circle at 90% 80%, rgba(16, 185, 129, 0.12) 0%, transparent 60%), linear-gradient(135deg, rgba(236, 254, 255, 0.95) 0%, rgba(240, 253, 250, 0.92) 50%, rgba(255, 255, 255, 0.98) 100%)',
+        borderColor: 'rgba(6, 182, 212, 0.35)',
+        boxShadow: '0 8px 24px rgba(6, 182, 212, 0.08)'
+      },
+      iconStyle: {
+        background: 'linear-gradient(135deg, rgba(6, 182, 212, 0.2), rgba(16, 185, 129, 0.2))',
+        color: '#0891b2',
+        border: '1px solid rgba(6, 182, 212, 0.3)'
+      }
+    };
+  }
+
+  if (s.includes('vj') || s.includes('studio')) {
+    return {
+      style: {
+        background: 'radial-gradient(circle at 15% 15%, rgba(139, 92, 246, 0.14) 0%, transparent 55%), radial-gradient(circle at 85% 85%, rgba(168, 85, 247, 0.12) 0%, transparent 60%), linear-gradient(135deg, rgba(245, 243, 255, 0.95) 0%, rgba(250, 245, 255, 0.92) 50%, rgba(255, 255, 255, 0.98) 100%)',
+        borderColor: 'rgba(139, 92, 246, 0.35)',
+        boxShadow: '0 8px 24px rgba(139, 92, 246, 0.08)'
+      },
+      iconStyle: {
+        background: 'linear-gradient(135deg, rgba(139, 92, 246, 0.2), rgba(168, 85, 247, 0.2))',
+        color: '#7c3aed',
+        border: '1px solid rgba(139, 92, 246, 0.3)'
+      }
+    };
+  }
+
+  // Dynamic HSL hash algorithm for any newly added product:
   let hash = 0;
-  for (let i = 0; i < s.length; i++) hash = (hash * 31 + s.charCodeAt(i)) & 0xffff;
-  return themes[hash % themes.length];
+  for (let i = 0; i < s.length; i++) {
+    hash = (hash * 37 + s.charCodeAt(i)) & 0xffffffff;
+  }
+  const hue1 = Math.abs(hash) % 360;
+  const hue2 = (hue1 + 55) % 360;
+
+  return {
+    style: {
+      background: `radial-gradient(circle at 15% 20%, hsla(${hue1}, 80%, 55%, 0.14) 0%, transparent 55%), radial-gradient(circle at 85% 80%, hsla(${hue2}, 80%, 55%, 0.12) 0%, transparent 60%), linear-gradient(135deg, hsla(${hue1}, 85%, 97%, 0.96) 0%, hsla(${hue2}, 85%, 97%, 0.93) 50%, rgba(255, 255, 255, 0.98) 100%)`,
+      borderColor: `hsla(${hue1}, 70%, 45%, 0.32)`,
+      boxShadow: `0 8px 24px hsla(${hue1}, 70%, 45%, 0.08)`
+    },
+    iconStyle: {
+      background: `linear-gradient(135deg, hsla(${hue1}, 75%, 55%, 0.2), hsla(${hue2}, 75%, 55%, 0.2))`,
+      color: `hsl(${hue1}, 75%, 35%)`,
+      border: `1px solid hsla(${hue1}, 70%, 45%, 0.3)`
+    }
+  };
 }
 
 export function App() {
@@ -4042,10 +4082,10 @@ function MemberPanel({ session, products, dashboard, orders, onRegister, onLogin
             <div className="member-license-compact-list">
               {visibleLicenses.map((license) => {
                 const open = expandedLicense === license.id;
-                const nebulaTheme = getNebulaTheme(license.product?.slug || license.product?.name || license.productId);
-                return <article className={`member-license-compact ${open ? 'open' : ''}`} data-nebula-theme={nebulaTheme} key={license.id}>
+                const nebula = getNebulaStyle(license.product?.slug || license.product?.name || license.productId);
+                return <article className={`member-license-compact ${open ? 'open' : ''}`} style={nebula.style} key={license.id}>
                   <button className="license-compact-summary" onClick={() => setExpandedLicense(open ? '' : license.id)}>
-                    <span className="license-product-cell"><span className="license-product-icon"><KeyRound /></span><span><strong>{license.product?.name ?? license.productId}</strong><small>{license.plan?.name ?? license.planId}</small></span></span>
+                    <span className="license-product-cell"><span className="license-product-icon" style={nebula.iconStyle}><KeyRound /></span><span><strong>{license.product?.name ?? license.productId}</strong><small>{license.plan?.name ?? license.planId}</small></span></span>
                     <span className="license-hwid-cell"><small>HWID perangkat</small><code>{license.hwid}</code></span>
                     <span className="license-expiry-cell"><small>Berakhir</small><b>{formatDate(license.expiresAt)}</b></span>
                     <span className="license-status-cell"><span className={`status-dot status-${license.status}`}>{licenseStatusLabel(license)}</span></span>
@@ -4077,8 +4117,8 @@ function MemberPanel({ session, products, dashboard, orders, onRegister, onLogin
             <div className="member-product-library">
               {ownedProducts.map((product) => {
                 const license = ownedLicenses.find((item) => item.productId === product.id);
-                const nebulaTheme = getNebulaTheme(product.slug || product.name || product.id);
-                return <article className="member-product-card" data-nebula-theme={nebulaTheme} key={product.id}>
+                const nebula = getNebulaStyle(product.slug || product.name || product.id);
+                return <article className="member-product-card" style={nebula.style} key={product.id}>
                   <div className="member-product-cover">{product.coverUrl ? <img src={product.coverUrl} alt="" /> : productIcon(product)}<span>{product.category}</span></div>
                   <div className="member-product-content"><strong>{product.name}</strong><small>{product.headline}</small>
                     <div className="member-product-meta"><span><BadgeCheck /> Akses aktif</span><span>{license ? `Berakhir ${formatDate(license.expiresAt)}` : product.type}</span></div>
