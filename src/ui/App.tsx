@@ -2964,7 +2964,7 @@ function ProductForm({ onCreateProduct }: {
       
       <div className="product-form-section" style={{ display: 'block' }}>
         <div className="product-form-grid">
-          <label className="col-3">Nama produk <span className="required">*</span>
+          <label className="col-3"><span style={{ display: 'flex', gap: '4px' }}>Nama produk <span className="required" style={{ color: "red" }}>*</span></span>
             <input required value={name} onChange={(event) => handleNameChange(event.target.value)} placeholder="Contoh: VJ Studio PRO" />
           </label>
           <label className="col-3">Headline / Singkat
@@ -2975,8 +2975,8 @@ function ProductForm({ onCreateProduct }: {
           </label>
           
           <label className="col-6">Thumbnail produk (Rasio 16:9)
-            <div className="cover-input-group">
-              <label className="file-browse-btn">
+            <div className="cover-input-group" style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+              <label className="file-browse-btn" style={{ margin: 0, whiteSpace: "nowrap" }}>
                 📁 Browse / Import Gambar
                 <input type="file" accept="image/*" style={{ display: 'none' }} onChange={(e) => {
                   const file = e.target.files?.[0];
@@ -2989,7 +2989,7 @@ function ProductForm({ onCreateProduct }: {
                   }
                 }} />
               </label>
-              <input value={marketplaceCoverUrl} onChange={(event) => setMarketplaceCoverUrl(event.target.value)} placeholder="Atau tempel URL gambar (https://...)" />
+              <input value={marketplaceCoverUrl} onChange={(event) => setMarketplaceCoverUrl(event.target.value)} placeholder="Atau tempel URL gambar (https://...)" style={{ flex: 1 }} />
             </div>
             {marketplaceCoverUrl && (
               <div className="cover-preview-box">
@@ -3234,7 +3234,7 @@ function ProductTable({ products, onUpdateProduct, onDeleteProduct, onImportLand
                 
                 <div className="product-form-section" style={{ display: 'block' }}>
                   <div className="product-form-grid">
-                    <label className="col-3">Nama produk <span className="required">*</span>
+                    <label className="col-3"><span style={{ display: 'flex', gap: '4px' }}>Nama produk <span className="required" style={{ color: "red" }}>*</span></span>
                       <input required value={draft.name ?? ''} onChange={(event) => setDraft({ ...draft, name: event.target.value })} placeholder="Contoh: VJ STUDIO" />
                     </label>
                     <label className="col-3">Headline / Singkat
@@ -3245,8 +3245,8 @@ function ProductTable({ products, onUpdateProduct, onDeleteProduct, onImportLand
                     </label>
 
                     <label className="col-6">Thumbnail produk (Rasio 16:9)
-                      <div className="cover-input-group">
-                        <label className="file-browse-btn">
+                      <div className="cover-input-group" style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                        <label className="file-browse-btn" style={{ margin: 0, whiteSpace: "nowrap" }}>
                           📁 Browse / Import Gambar
                           <input type="file" accept="image/*" style={{ display: 'none' }} onChange={(e) => {
                             const file = e.target.files?.[0];
@@ -3257,7 +3257,7 @@ function ProductTable({ products, onUpdateProduct, onDeleteProduct, onImportLand
                             }
                           }} />
                         </label>
-                        <input value={draft.marketplaceCoverUrl ?? draft.coverUrl ?? ''} onChange={(event) => setDraft({ ...draft, marketplaceCoverUrl: event.target.value, coverUrl: event.target.value })} placeholder="Atau tempel URL gambar (https://...)" />
+                        <input value={draft.marketplaceCoverUrl ?? draft.coverUrl ?? ''} onChange={(event) => setDraft({ ...draft, marketplaceCoverUrl: event.target.value, coverUrl: event.target.value })} placeholder="Atau tempel URL gambar (https://...)" style={{ flex: 1 }} />
                       </div>
                       {(draft.marketplaceCoverUrl || draft.coverUrl) && (
                         <div className="cover-preview-box" style={{ marginTop: '8px' }}>
