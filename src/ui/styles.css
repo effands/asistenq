@@ -6429,7 +6429,7 @@ button.ghost-button.primary:hover {
 /* Admin cover thumbnail styles */
 .cover-input-group {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   gap: 8px;
   margin-top: 6px;
 }
