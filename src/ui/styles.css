@@ -6426,3 +6426,57 @@ button.ghost-button.primary:hover {
   box-shadow: 0 12px 30px rgba(0, 0, 0, 0.09) !important;
 }
 
+/* Admin cover thumbnail styles */
+.cover-input-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 6px;
+}
+.cover-input-group .file-browse-btn {
+  display: inline-block;
+  padding: 8px 12px;
+  background: #f0f4f2;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  text-align: center;
+}
+.cover-input-group input[type="text"],
+.cover-input-group input:not([type="file"]) {
+  width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cover-preview-box {
+  margin-top: 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  overflow: hidden;
+  background: rgba(0,0,0,0.04);
+  width: 100%;
+  max-width: 340px;
+  aspect-ratio: 16/9;
+  position: relative;
+}
+.cover-preview-box img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.cover-preview-box span {
+  position: absolute;
+  bottom: 8px;
+  right: 8px;
+  background: rgba(0, 0, 0, 0.65);
+  color: white;
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  pointer-events: none;
+}
