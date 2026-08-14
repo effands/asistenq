@@ -1271,7 +1271,7 @@ function AdminDashboardPanel({ products, summary, onResetOperationalData, onNavi
           {(summary?.toolAnalytics ?? []).map((item) => (
             <div className="tool-analytics-row" key={item.productId}>
               <span><strong>{item.name}</strong><small>{item.destinationType}</small></span>
-              <b><i className="live-dot" /> {item.onlineUsers} online</b>
+              <b><i className={`live-dot ${item.onlineUsers > 0 ? 'active' : ''}`} /> {item.onlineUsers} online</b>
               <span><small>Detail</small><strong>{item.detailViews}</strong></span>
               <span><small>Dibuka</small><strong>{item.toolOpens}</strong></span>
               <span><small>Checkout</small><strong>{item.checkoutClicks}</strong></span>
@@ -1279,7 +1279,7 @@ function AdminDashboardPanel({ products, summary, onResetOperationalData, onNavi
           ))}
         </div>
       </div>
-      <div className="panel stack wide">
+      <div className="panel stack wide danger-zone-panel">
         <div className="panel-heading">
           <div>
             <p className="section-kicker">Maintenance</p>
