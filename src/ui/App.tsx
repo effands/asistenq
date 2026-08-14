@@ -2962,7 +2962,7 @@ function ProductForm({ onCreateProduct }: {
       </div>
 
       
-      <div className="product-form-section">
+      <div className="product-form-section" style={{ display: 'block' }}>
         <div className="product-form-grid">
           <label className="col-3">Nama produk <span className="required">*</span>
             <input required value={name} onChange={(event) => handleNameChange(event.target.value)} placeholder="Contoh: VJ Studio PRO" />
@@ -3224,7 +3224,7 @@ function ProductTable({ products, onUpdateProduct, onDeleteProduct, onImportLand
 
                 {/* Section 01: Informasi Utama & Cover */}
                 
-                <div className="product-form-section">
+                <div className="product-form-section" style={{ display: 'block' }}>
                   <div className="product-form-grid">
                     <label className="col-3">Nama produk <span className="required">*</span>
                       <input required value={draft.name ?? ''} onChange={(event) => setDraft({ ...draft, name: event.target.value })} placeholder="Contoh: VJ STUDIO" />
