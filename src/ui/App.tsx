@@ -2965,17 +2965,17 @@ function ProductForm({ onCreateProduct }: {
       
       <div className="product-form-section">
         <div className="product-form-grid">
-          <label className="col-4">Nama produk <span className="required">*</span>
+          <label className="col-3">Nama produk <span className="required">*</span>
             <input required value={name} onChange={(event) => handleNameChange(event.target.value)} placeholder="Contoh: VJ Studio PRO" />
           </label>
-          <label className="col-4">Headline / Singkat
+          <label className="col-3">Headline / Singkat
             <input value={headline} onChange={(event) => setHeadline(event.target.value)} placeholder="Contoh: Alat otomatisasi rendering video..." />
           </label>
-          <label className="col-4">Deskripsi Lengkap
+          <label className="col-6">Deskripsi Lengkap
             <textarea value={description} onChange={(event) => setDescription(event.target.value)} placeholder="Jelaskan fitur secara detail..." style={{ minHeight: '100px' }} />
           </label>
           
-          <label className="col-4">Thumbnail produk (Rasio 16:9)
+          <label className="col-6">Thumbnail produk (Rasio 16:9)
             <div className="cover-input-group">
               <label className="file-browse-btn">
                 📁 Browse / Import Gambar
@@ -3000,7 +3000,7 @@ function ProductForm({ onCreateProduct }: {
             )}
           </label>
 
-          <div className="col-4" style={{ marginTop: '8px' }}>
+          <div className="col-6" style={{ marginTop: '8px' }}>
             <strong style={{ display: 'block', marginBottom: '8px' }}>Paket Harga / Lisensi</strong>
             <div className="tiered-price-grid">
               {tieredPlanTemplates.map((plan) => (
@@ -3227,17 +3227,17 @@ function ProductTable({ products, onUpdateProduct, onDeleteProduct, onImportLand
                 
                 <div className="product-form-section">
                   <div className="product-form-grid">
-                    <label className="col-4">Nama produk <span className="required">*</span>
+                    <label className="col-3">Nama produk <span className="required">*</span>
                       <input required value={draft.name ?? ''} onChange={(event) => setDraft({ ...draft, name: event.target.value })} placeholder="Contoh: VJ STUDIO" />
                     </label>
-                    <label className="col-4">Headline / Singkat
+                    <label className="col-3">Headline / Singkat
                       <input value={draft.headline ?? ''} onChange={(event) => setDraft({ ...draft, headline: event.target.value })} placeholder="Manfaat utama produk" />
                     </label>
-                    <label className="col-4">Deskripsi Lengkap
+                    <label className="col-6">Deskripsi Lengkap
                       <textarea value={draft.description ?? ''} onChange={(event) => setDraft({ ...draft, description: event.target.value })} placeholder="Jelaskan secara detail" style={{ minHeight: '100px' }} />
                     </label>
 
-                    <label className="col-4">Thumbnail produk (Rasio 16:9)
+                    <label className="col-6">Thumbnail produk (Rasio 16:9)
                       <div className="cover-input-group">
                         <label className="file-browse-btn">
                           📁 Browse / Import Gambar
