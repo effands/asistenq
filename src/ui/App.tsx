@@ -3211,7 +3211,15 @@ function ProductTable({ products, onUpdateProduct, onDeleteProduct, onImportLand
                 <strong>{product.name}</strong>
                 <span><b>{product.destinationType === 'external' ? 'EXTERNAL' : product.destinationType === 'hosted' ? 'HTML HOSTED' : product.landingTemplate === 'tool-app' ? 'TOOL APP' : 'INTERNAL'}</b> · {product.externalUrl ?? product.landingPath ?? `/produk/${product.slug}`} · {product.price === 0 ? 'Gratis' : product.formattedPrice} · {product.analytics?.onlineUsers ?? 0} online · {product.analytics?.toolOpens ?? 0} buka</span>
               </div>
-              <button className="ghost-button" type="button" onClick={() => startEdit(product)}>Edit</button>
+              <div style={{ display: 'flex', gap: '6px' }}>
+                <a className="ghost-button" href={product.destinationType === 'external' ? (product.externalUrl ?? '#') : (product.landingPath ?? `/produk/${product.slug}`)} target="_blank" rel="noreferrer">Lihat</a>
+                <button className="ghost-button" type="button" onClick={() => startEdit(product)}>Edit</button>
+                <button className="ghost-button" style={{ color: '#d32f2f', borderColor: '#ffcdd2', backgroundColor: '#fff5f5' }} type="button" onClick={async () => {
+                  if (window.confirm('Yakin ingin menghapus produk ini? Semua data terkait (termasuk lisensi) mungkin akan hilang.')) {
+                    await onDeleteProduct(product.id);
+                  }
+                }}>Hapus</button>
+              </div>
             </div>
             {editingId === product.id && (
               <div className="product-edit-box">
