@@ -2962,143 +2962,129 @@ function ProductForm({ onCreateProduct }: {
         </div>
       </div>
 
+      
       <div className="product-form-section">
-        <div className="product-form-section-title"><span>01</span><div><strong>Informasi utama & Cover 16:9</strong><small>Identitas utama yang tampil di katalog marketplace & member area.</small></div></div>
         <div className="product-form-grid">
-          <label className="col-3">Nama produk<input required value={name} onChange={(event) => handleNameChange(event.target.value)} placeholder="Contoh: VJ Studio PRO" /></label>
-          <label className="col-2">Slug / URL<input required value={slug} onChange={(event) => setSlug(event.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '-'))} placeholder="vj-studio-pro" /><small>Otomatis dari nama produk.</small></label>
-          <label className="col-1">Jenis produk<select value={type} onChange={(event) => setType(event.target.value as ProductType)}>{productTypes.map((item) => <option key={item}>{item}</option>)}</select></label>
-          <label className="col-2">Kategori marketplace<input value={category} onChange={(event) => setCategory(event.target.value)} placeholder="Tools Creator" /></label>
-          <label className="col-4">
-            <span>URL / File Cover Thumbnail Marketplace (Rasio 16:9)</span>
-            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-              <label style={{ cursor: 'pointer', background: '#00473d', color: '#fff', padding: '10px 16px', borderRadius: '10px', fontSize: '13px', fontWeight: '800', display: 'inline-flex', gap: '6px', alignItems: 'center', margin: 0, whiteSpace: 'nowrap' }}>
+          <label className="col-4">Nama produk <span className="required">*</span>
+            <input required value={name} onChange={(event) => handleNameChange(event.target.value)} placeholder="Contoh: VJ Studio PRO" />
+          </label>
+          <label className="col-4">Headline / Singkat
+            <input value={headline} onChange={(event) => setHeadline(event.target.value)} placeholder="Contoh: Alat otomatisasi rendering video..." />
+          </label>
+          <label className="col-4">Deskripsi Lengkap
+            <textarea value={description} onChange={(event) => setDescription(event.target.value)} placeholder="Jelaskan fitur secara detail..." style={{ minHeight: '100px' }} />
+          </label>
+          
+          <label className="col-4">Thumbnail produk (Rasio 16:9)
+            <div className="cover-input-group">
+              <label className="file-browse-btn">
                 📁 Browse / Import Gambar
-                <input
-                  type="file"
-                  accept="image/*"
-                  style={{ display: 'none' }}
-                  onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    if (file) {
-                      const reader = new FileReader();
-                      reader.onload = (evt) => {
-                        if (evt.target?.result) setMarketplaceCoverUrl(evt.target.result as string);
-                      };
-                      reader.readAsDataURL(file);
-                    }
-                  }}
-                />
+                <input type="file" accept="image/*" style={{ display: 'none' }} onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) {
+                    const reader = new FileReader();
+                    reader.onload = (evt) => {
+                      if (evt.target?.result) setMarketplaceCoverUrl(evt.target.result as string);
+                    };
+                    reader.readAsDataURL(file);
+                  }
+                }} />
               </label>
-              <input value={marketplaceCoverUrl} onChange={(event) => setMarketplaceCoverUrl(event.target.value)} placeholder="Atau tempel URL gambar: https://.../cover-16x9.jpg" style={{ flex: 1 }} />
+              <input value={marketplaceCoverUrl} onChange={(event) => setMarketplaceCoverUrl(event.target.value)} placeholder="Atau tempel URL gambar (https://...)" />
             </div>
-            <small style={{ color: 'var(--muted-color)', fontSize: '11px', marginTop: '4px' }}>Klik tombol &quot;Browse / Import Gambar&quot; untuk memilih file dari komputer, atau tempel link URL. Gambar rasio 16:9 ideal.</small>
             {marketplaceCoverUrl && (
-              <div style={{ width: '220px', aspectRatio: '16 / 9', borderRadius: '8px', overflow: 'hidden', border: '1px solid var(--line)', marginTop: '8px' }}>
-                <img src={marketplaceCoverUrl} alt="Preview 16:9" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              <div className="cover-preview-box">
+                <img src={marketplaceCoverUrl} alt="Preview 16:9" />
+                <span>Preview Cover 16:9</span>
               </div>
             )}
           </label>
+
+          <div className="col-4" style={{ marginTop: '8px' }}>
+            <strong style={{ display: 'block', marginBottom: '8px' }}>Paket Harga / Lisensi</strong>
+            <div className="tiered-price-grid">
+              {tieredPlanTemplates.map((plan) => (
+                <label key={plan.code} className={`tiered-price-card ${activePlans[plan.code] ? 'is-active' : ''}`}>
+                  <span className="tiered-price-top">
+                    <input
+                      checked={activePlans[plan.code]}
+                      onChange={(event) => setActivePlans((current) => ({ ...current, [plan.code]: event.target.checked }))}
+                      type="checkbox"
+                    />
+                    <b>{plan.label}</b>
+                    <small>{plan.code}</small>
+                  </span>
+                  <input
+                    disabled={!activePlans[plan.code]}
+                    min="0"
+                    value={planPrices[plan.code] ?? 0}
+                    onChange={(event) => setPlanPrices((current) => ({ ...current, [plan.code]: Number(event.target.value) }))}
+                    type="number"
+                  />
+                </label>
+              ))}
+            </div>
+          </div>
         </div>
       </div>
-      <div className="product-form-section access-section">
-        <div className="product-form-section-title"><span>02</span><div><strong>Akses produk</strong><small>Atur siapa yang dapat melihat dan membuka produk.</small></div></div>
-        <div className="product-form-grid two">
-          <label>Tampil di katalog<select value={visibility} onChange={(event) => setVisibility(event.target.value as ProductVisibility)}>{productVisibilities.map((item) => <option key={item} value={item}>{item === 'public' ? 'Publik' : item === 'private' ? 'Link privat' : 'Draft'}</option>)}</select></label>
-          <label>Syarat akses<select value={accessMode} onChange={(event) => setAccessMode(event.target.value as ProductAccessMode)}>{productAccessModes.map((item) => <option key={item} value={item}>{item === 'public' ? 'Tanpa login' : item === 'free_member' ? 'Member gratis' : item === 'trial' ? 'Trial aktif' : item === 'paid' ? 'Sudah bayar' : 'Admin saja'}</option>)}</select></label>
-        </div>
-      </div>
-      <div className="product-form-section price-section">
-        <div className="product-form-section-title"><span>03</span><div><strong>Paket harga</strong><small>Harga katalog mengikuti paket berbayar aktif pertama.</small></div></div>
-        <div className="tiered-price-grid">
-          {tieredPlanTemplates.map((plan) => (
-            <label key={plan.code} className={`tiered-price-card ${activePlans[plan.code] ? 'is-active' : ''}`}>
-              <span className="tiered-price-top">
-                <input
-                  checked={activePlans[plan.code]}
-                  onChange={(event) => setActivePlans((current) => ({ ...current, [plan.code]: event.target.checked }))}
-                  type="checkbox"
-                />
-                <b>{plan.label}</b>
-                <small>{plan.code}</small>
-              </span>
-              <input
-                disabled={!activePlans[plan.code]}
-                min="0"
-                value={planPrices[plan.code] ?? 0}
-                onChange={(event) => setPlanPrices((current) => ({ ...current, [plan.code]: Number(event.target.value) }))}
-                type="number"
-              />
-            </label>
-          ))}
-        </div>
-      </div>
-      <div className="product-form-section">
-        <div className="product-form-section-title"><span>04</span><div><strong>Pemenuhan pesanan</strong><small>Lisensi meminta HWID; download mengirim file setelah pembayaran disetujui.</small></div></div>
-        <div className="product-form-grid two">
-          <label>Jenis pemenuhan<select value={fulfillmentType} onChange={(event) => setFulfillmentType(event.target.value as ProductFulfillmentType)}><option value="license">Lisensi software</option><option value="download">Download digital</option></select></label>
-          {fulfillmentType === 'download' && <label>URL sumber HTTPS<input required value={downloadSourceUrl} onChange={(event) => setDownloadSourceUrl(event.target.value)} type="url" placeholder="https://files.example.com/produk.zip" /></label>}
-          <label>Link installer publik (opsional)<input value={installerUrl} onChange={(event) => setInstallerUrl(event.target.value)} type="url" placeholder="https://drive.google.com/... atau https://.../setup.exe" /><small>Bisa diakses semua pengunjung melalui menu Download, termasuk sebelum membeli.</small></label>
-        </div>
-      </div>
+
       <details className="product-advanced">
-        <summary><span>Pengaturan lanjutan</span><small>Promo, landing, logo, dan teks produk.</small></summary>
+        <summary><span>Pengaturan Lanjutan (Opsional)</span><small>Slug, tipe, visibilitas, akses, dan integrasi link.</small></summary>
         <div className="product-advanced-content">
           <div className="product-advanced-grid">
             <div className="product-advanced-group">
-              <div className="mini-section-title">
-                <strong>Promo</strong>
-                <small>Harga coret dan label penawaran.</small>
-              </div>
+              <div className="mini-section-title"><strong>Sistem</strong><small>Identitas dan pengaturan sistem produk.</small></div>
               <div className="product-form-grid four">
-                <label>Harga asli / real<input min="0" value={compareAtPrice} onChange={(event) => setCompareAtPrice(Number(event.target.value))} type="number" placeholder="299000" /></label>
-                <label>Harga diskon<input min="0" value={primarySalePrice} onChange={(event) => primaryPaidTemplate && setPlanPrices((current) => ({ ...current, [primaryPaidTemplate.code]: Number(event.target.value) }))} type="number" placeholder="149000" /></label>
+                <label className="col-2">Slug / URL<input required value={slug} onChange={(event) => setSlug(event.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '-'))} placeholder="vj-studio-pro" /></label>
+                <label>Jenis produk<select value={type} onChange={(event) => setType(event.target.value as any)}>{productTypes.map((item) => <option key={item}>{item}</option>)}</select></label>
+                <label>Kategori<input value={category} onChange={(event) => setCategory(event.target.value)} placeholder="Tools Creator" /></label>
+              </div>
+            </div>
+
+            <div className="product-advanced-group">
+              <div className="mini-section-title"><strong>Akses & Visibilitas</strong><small>Siapa yang bisa melihat dan membeli.</small></div>
+              <div className="product-form-grid two">
+                <label>Tampil di katalog<select value={visibility} onChange={(event) => setVisibility(event.target.value as any)}>{productVisibilities.map((item) => <option key={item} value={item}>{item === 'public' ? 'Publik' : item === 'private' ? 'Link privat' : 'Draft'}</option>)}</select></label>
+                <label>Syarat akses<select value={accessMode} onChange={(event) => setAccessMode(event.target.value as any)}>{productAccessModes.map((item) => <option key={item} value={item}>{item === 'public' ? 'Tanpa login' : item === 'free_member' ? 'Member gratis' : item === 'trial' ? 'Trial aktif' : item === 'paid' ? 'Sudah bayar' : 'Admin saja'}</option>)}</select></label>
+                <label>Jenis pemenuhan<select value={fulfillmentType} onChange={(event) => setFulfillmentType(event.target.value as any)}><option value="license">Lisensi software</option><option value="download">Download digital</option></select></label>
+                {fulfillmentType === 'download' && <label>URL sumber HTTPS<input required value={downloadSourceUrl} onChange={(event) => setDownloadSourceUrl(event.target.value)} type="url" placeholder="https://files.example.com/produk.zip" /></label>}
+                <label className="col-2">Syarat akses teks<textarea value={accessRequirement} onChange={(event) => setAccessRequirement(event.target.value)} placeholder="Contoh: Daftar sebagai member" /></label>
+              </div>
+            </div>
+
+            <div className="product-advanced-group">
+              <div className="mini-section-title"><strong>Promo</strong><small>Harga coret dan penawaran.</small></div>
+              <div className="product-form-grid four">
+                <label>Harga coret<input min="0" value={compareAtPrice} onChange={(event) => setCompareAtPrice(Number(event.target.value))} type="number" placeholder="299000" /></label>
                 <label>Diskon (%)<input min="0" max="99" value={discountPercent} onChange={(event) => setDiscountPercent(Number(event.target.value))} type="number" placeholder="50" /></label>
-                <label>Badge promo<input value={discountLabel} onChange={(event) => setDiscountLabel(event.target.value)} placeholder={discountPercent ? `Hemat ${discountPercent}%` : 'Contoh: Best Deal'} /></label>
-                <label className="col-4">Teks promo<input value={promoText} onChange={(event) => setPromoText(event.target.value)} placeholder="Promo singkat yang tampil di kartu tools" /></label>
+                <label>Badge promo<input value={discountLabel} onChange={(event) => setDiscountLabel(event.target.value)} placeholder="Best Deal" /></label>
+                <label className="col-4">Teks promo<input value={promoText} onChange={(event) => setPromoText(event.target.value)} placeholder="Promo singkat" /></label>
               </div>
             </div>
 
             <div className="product-advanced-group tool-destination-group">
-              <div className="mini-section-title">
-                <strong>Tujuan tools</strong>
-                <small>Internal, upload HTML, atau aplikasi external.</small>
-              </div>
+              <div className="mini-section-title"><strong>Tujuan tools</strong><small>Internal, upload HTML, atau aplikasi external.</small></div>
               <div className="product-form-grid four">
                 <label>Jenis tujuan<select value={destinationType} onChange={(event) => {
-                  const next = event.target.value as ProductDestinationType;
+                  const next = event.target.value as any;
                   setDestinationType(next);
                   setOpenMode(next === 'external' ? 'new_tab' : 'same_tab');
                   setTrackLiveUsers(next !== 'external');
                 }}><option value="internal">Internal AsistenQ</option><option value="hosted">Upload HTML/ZIP</option><option value="external">Link external</option></select></label>
-                <label>Cara membuka<select value={openMode} onChange={(event) => setOpenMode(event.target.value as ProductOpenMode)}><option value="same_tab">Halaman yang sama</option><option value="new_tab">Tab baru</option><option value="wrapper">Wrapper / iframe</option></select></label>
+                <label>Cara membuka<select value={openMode} onChange={(event) => setOpenMode(event.target.value as any)}><option value="same_tab">Halaman yang sama</option><option value="new_tab">Tab baru</option><option value="wrapper">Wrapper / iframe</option></select></label>
                 <label className="col-2">URL external<input disabled={destinationType !== 'external'} value={externalUrl} onChange={(event) => setExternalUrl(event.target.value)} placeholder="https://aplikasi-lain.example.com" type="url" /></label>
-                <label className="tracking-toggle col-4"><input checked={trackLiveUsers} disabled={destinationType === 'external'} onChange={(event) => setTrackLiveUsers(event.target.checked)} type="checkbox" /> Hitung pengguna online untuk tools milik sendiri</label>
+                <label className="tracking-toggle col-4"><input checked={trackLiveUsers} disabled={destinationType === 'external'} onChange={(event) => setTrackLiveUsers(event.target.checked)} type="checkbox" /> Hitung pengguna online</label>
               </div>
             </div>
 
             <div className="product-advanced-group">
-              <div className="mini-section-title">
-                <strong>Landing</strong>
-                <small>Alamat publik, template, dan aset visual.</small>
-              </div>
+              <div className="mini-section-title"><strong>Landing</strong><small>Alamat publik, template, aset.</small></div>
               <div className="product-form-grid six">
                 <label className="col-3">URL logo<input value={logoUrl} onChange={(event) => setLogoUrl(event.target.value)} placeholder="https://.../logo.png" /></label>
                 <label className="col-1">Path halaman<input value={landingPath} onChange={(event) => setLandingPath(event.target.value)} placeholder="/mixin9" /></label>
-                <label className="col-2">Template<input value={landingTemplate} onChange={(event) => setLandingTemplate(event.target.value)} placeholder="mixin9 atau tool-app" /></label>
-              </div>
-            </div>
-
-            <div className="product-advanced-group">
-              <div className="mini-section-title">
-                <strong>Copywriting</strong>
-                <small>Teks yang menjelaskan manfaat dan akses produk.</small>
-              </div>
-              <div className="product-form-grid six">
+                <label className="col-2">Template<input value={landingTemplate} onChange={(event) => setLandingTemplate(event.target.value)} placeholder="mixin9" /></label>
                 <label className="col-2">Label tombol<input value={ctaLabel} onChange={(event) => setCtaLabel(event.target.value)} placeholder="Ambil sekarang" /></label>
-                <label className="col-4">Headline<input value={headline} onChange={(event) => setHeadline(event.target.value)} placeholder="Manfaat utama produk" /></label>
-                <label className="col-3">Syarat akses<textarea value={accessRequirement} onChange={(event) => setAccessRequirement(event.target.value)} placeholder="Contoh: Daftar sebagai member" /></label>
-                <label className="col-3">Deskripsi<textarea value={description} onChange={(event) => setDescription(event.target.value)} placeholder="Jelaskan fungsi produk secara singkat" /></label>
+                <label className="col-4">Link installer publik<input value={installerUrl} onChange={(event) => setInstallerUrl(event.target.value)} type="url" placeholder="https://..." /></label>
               </div>
             </div>
           </div>
@@ -3238,29 +3224,19 @@ function ProductTable({ products, onUpdateProduct, onDeleteProduct, onImportLand
                 </div>
 
                 {/* Section 01: Informasi Utama & Cover */}
+                
                 <div className="product-form-section">
-                  <div className="product-form-section-header">
-                    <span className="step-badge">01</span>
-                    <div>
-                      <h3>Informasi Utama & Cover 16:9</h3>
-                      <p>Nama produk, slug, jenis, dan thumbnail utama produk.</p>
-                    </div>
-                  </div>
-                  <div className="product-form-grid four">
-                    <label className="col-2">Nama produk <span className="required">*</span>
+                  <div className="product-form-grid">
+                    <label className="col-4">Nama produk <span className="required">*</span>
                       <input required value={draft.name ?? ''} onChange={(event) => setDraft({ ...draft, name: event.target.value })} placeholder="Contoh: VJ STUDIO" />
                     </label>
-                    <label className="col-2">Slug / URL <span className="required">*</span>
-                      <input required value={draft.slug ?? ''} onChange={(event) => setDraft({ ...draft, slug: event.target.value })} placeholder="vjstudio" />
+                    <label className="col-4">Headline / Singkat
+                      <input value={draft.headline ?? ''} onChange={(event) => setDraft({ ...draft, headline: event.target.value })} placeholder="Manfaat utama produk" />
                     </label>
-                    <label className="col-2">Jenis produk
-                      <select value={draft.type ?? 'tool'} onChange={(event) => setDraft({ ...draft, type: event.target.value as ProductType })}>
-                        {productTypes.map((item) => <option key={item} value={item}>{item === 'tool' ? 'Software / Tools Lisensi' : item === 'course' ? 'Kelas / Tutorial Video' : 'Produk Digital Lainnya'}</option>)}
-                      </select>
+                    <label className="col-4">Deskripsi Lengkap
+                      <textarea value={draft.description ?? ''} onChange={(event) => setDraft({ ...draft, description: event.target.value })} placeholder="Jelaskan secara detail" style={{ minHeight: '100px' }} />
                     </label>
-                    <label className="col-2">Kategori marketplace
-                      <input value={draft.category ?? ''} onChange={(event) => setDraft({ ...draft, category: event.target.value })} placeholder="Contoh: Video Tools" />
-                    </label>
+
                     <label className="col-4">Thumbnail produk (Rasio 16:9)
                       <div className="cover-input-group">
                         <label className="file-browse-btn">
@@ -3269,7 +3245,7 @@ function ProductTable({ products, onUpdateProduct, onDeleteProduct, onImportLand
                             const file = e.target.files?.[0];
                             if (file) {
                               const reader = new FileReader();
-                              reader.onload = (ev) => setDraft({ ...draft, marketplaceCoverUrl: ev.target?.result as string });
+                              reader.onload = (ev) => setDraft({ ...draft, marketplaceCoverUrl: ev.target?.result as string, coverUrl: ev.target?.result as string });
                               reader.readAsDataURL(file);
                             }
                           }} />
@@ -3286,112 +3262,88 @@ function ProductTable({ products, onUpdateProduct, onDeleteProduct, onImportLand
                   </div>
                 </div>
 
-                {/* Section 02: Akses & Harga */}
-                <div className="product-form-section">
-                  <div className="product-form-section-header">
-                    <span className="step-badge">02</span>
-                    <div>
-                      <h3>Akses & Harga Produk</h3>
-                      <p>Visibilitas katalog, mode akses pembeli, dan harga dasar.</p>
-                    </div>
-                  </div>
-                  <div className="product-form-grid four">
-                    <label className="col-2">Tampil di katalog
-                      <select value={draft.visibility ?? 'public'} onChange={(event) => setDraft({ ...draft, visibility: event.target.value as ProductVisibility })}>
-                        {productVisibilities.map((item) => <option key={item} value={item}>{item === 'public' ? 'Public marketplace' : item === 'private' ? 'Private link' : 'Draft / admin only'}</option>)}
-                      </select>
-                    </label>
-                    <label className="col-2">Mode akses pembeli
-                      <select value={draft.accessMode ?? 'public'} onChange={(event) => setDraft({ ...draft, accessMode: event.target.value as ProductAccessMode })}>
-                        {productAccessModes.map((item) => <option key={item} value={item}>{item === 'public' ? 'Public page' : item === 'free_member' ? 'Free member' : item === 'trial' ? 'Trial / subscription' : item === 'paid' ? 'Paid only' : 'Admin only'}</option>)}
-                      </select>
-                    </label>
-                    <label className="col-2">Harga produk (Rp)
-                      <input value={draft.price ?? 0} onChange={(event) => setDraft({ ...draft, price: Number(event.target.value) })} type="number" placeholder="99000" />
-                    </label>
-                    <label className="col-2">Harga coret (Rp)
-                      <input value={draft.compareAtPrice ?? 0} onChange={(event) => setDraft({ ...draft, compareAtPrice: Number(event.target.value) || undefined })} type="number" placeholder="199000" />
-                    </label>
-                    <label className="col-2">Badge promo
-                      <input value={draft.discountLabel ?? ''} onChange={(event) => setDraft({ ...draft, discountLabel: event.target.value })} placeholder="Contoh: BEST SELLER" />
-                    </label>
-                    <label className="col-2">Teks promo
-                      <input value={draft.promoText ?? ''} onChange={(event) => setDraft({ ...draft, promoText: event.target.value })} placeholder="Diskon khusus minggu ini" />
-                    </label>
-                  </div>
-                </div>
-
-                {/* Section 03: Pemenuhan Pesanan & Installer */}
-                <div className="product-form-section">
-                  <div className="product-form-section-header">
-                    <span className="step-badge">03</span>
-                    <div>
-                      <h3>Pemenuhan Pesanan & Link Installer</h3>
-                      <p>Tipe pemenuhan order, link installer, dan copywriting.</p>
-                    </div>
-                  </div>
-                  <div className="product-form-grid four">
-                    <label className="col-2">Tipe pemenuhan
-                      <select value={draft.fulfillmentType ?? 'license'} onChange={(event) => setDraft({ ...draft, fulfillmentType: event.target.value as ProductFulfillmentType, downloadSourceUrl: '' })}>
-                        <option value="license">Lisensi software</option>
-                        <option value="download">Download digital</option>
-                        <option value="url">Link URL</option>
-                        <option value="course">Akses kelas</option>
-                      </select>
-                    </label>
-                    <label className="col-2">Teks tombol CTA
-                      <input value={draft.ctaLabel ?? ''} onChange={(event) => setDraft({ ...draft, ctaLabel: event.target.value })} placeholder="Contoh: Beli VJ STUDIO Sekarang" />
-                    </label>
-                    {draft.fulfillmentType === 'download' && (
-                      <label className="col-4">URL sumber HTTPS (Privat)
-                        <input value={draft.downloadSourceUrl ?? ''} onChange={(event) => setDraft({ ...draft, downloadSourceUrl: event.target.value })} placeholder="https://files.example.com/produk.zip" type="url" />
-                      </label>
-                    )}
-                    <label className="col-4">Link installer publik
-                      <input value={draft.installerUrl ?? ''} onChange={(event) => setDraft({ ...draft, installerUrl: event.target.value })} placeholder="https://drive.google.com/... atau https://.../setup.exe" type="url" />
-                      <small style={{ display: 'block', marginTop: '4px', color: '#00473d' }}>Dapat diakses publik dari menu Download tanpa harus beli.</small>
-                    </label>
-                    <label className="col-4">Headline ringkas
-                      <input value={draft.headline ?? ''} onChange={(event) => setDraft({ ...draft, headline: event.target.value })} placeholder="Manfaat utama produk dalam 1 kalimat" />
-                    </label>
-                    <label className="col-2">Deskripsi produk
-                      <textarea value={draft.description ?? ''} onChange={(event) => setDraft({ ...draft, description: event.target.value })} placeholder="Jelaskan fitur dan keunggulan produk secara lengkap" rows={3} />
-                    </label>
-                    <label className="col-2">Syarat akses / Catatan
-                      <textarea value={draft.accessRequirement ?? ''} onChange={(event) => setDraft({ ...draft, accessRequirement: event.target.value })} placeholder="Contoh: Pembayaran QRIS otomatis konfirmasi" rows={3} />
-                    </label>
-                  </div>
-                </div>
-
-                {/* Section 04: Detail Tampilan Marketplace (Opsional) */}
-                <details className="product-advanced" open={false}>
-                  <summary>
-                    <span>Detail Tambahan Marketplace & Galeri Media</span>
-                    <small>Klik untuk mengisi spesifikasi SKU, versi, developer, dan galeri.</small>
-                  </summary>
+                <details className="product-advanced">
+                  <summary><span>Pengaturan Lanjutan (Opsional)</span><small>Slug, tipe, visibilitas, akses, dan integrasi link.</small></summary>
                   <div className="product-advanced-content">
-                    <div className="product-form-grid four">
-                      <label className="col-2">Deskripsi singkat kartu<input value={draft.cardDescription ?? ''} onChange={(event) => setDraft({ ...draft, cardDescription: event.target.value })} placeholder="Muncul di kartu katalog" /></label>
-                      <label className="col-2">Badge khusus<input value={draft.badge ?? ''} onChange={(event) => setDraft({ ...draft, badge: event.target.value })} placeholder="PRO / HOT / NEW" /></label>
-                      <label>Developer<input value={draft.developer ?? ''} onChange={(event) => setDraft({ ...draft, developer: event.target.value })} placeholder="AsistenQ Studio" /></label>
-                      <label>Versi<input value={draft.version ?? ''} onChange={(event) => setDraft({ ...draft, version: event.target.value })} placeholder="v2.1" /></label>
-                      <label>Ukuran file<input value={draft.fileSize ?? ''} onChange={(event) => setDraft({ ...draft, fileSize: event.target.value })} placeholder="150 MB" /></label>
-                      <label>Kompatibilitas<input value={draft.compatibility ?? ''} onChange={(event) => setDraft({ ...draft, compatibility: event.target.value })} placeholder="Windows 10/11" /></label>
-                      <label className="col-2">Tag (pisahkan koma)<input value={draft.tags?.join(', ') ?? ''} onChange={(event) => setDraft({ ...draft, tags: event.target.value.split(',').map((item) => item.trim()).filter(Boolean) })} placeholder="audio, mixing, batch" /></label>
-                      <label className="col-2">SKU<input value={draft.sku ?? ''} onChange={(event) => setDraft({ ...draft, sku: event.target.value })} placeholder="SKU-VJ001" /></label>
-                      <label className="col-2">URL demo<input type="url" value={draft.demoUrl ?? ''} onChange={(event) => setDraft({ ...draft, demoUrl: event.target.value })} placeholder="https://youtube.com/..." /></label>
-                      <label className="col-2">URL dokumentasi<input type="url" value={draft.documentationUrl ?? ''} onChange={(event) => setDraft({ ...draft, documentationUrl: event.target.value })} placeholder="https://docs.asistenq.com" /></label>
-                    </div>
-                    <div className="marketplace-media-admin" style={{ marginTop: '16px' }}>
-                      <label className="file-browse-btn">Galeri Media Tambahan
-                        <input type="file" accept="image/jpeg,image/png,image/webp,video/mp4,video/webm" onChange={async (event) => { const file = event.target.files?.[0]; if (file) await onUploadProductMedia(product.id, 'gallery', file); event.target.value = ''; }} />
-                      </label>
-                      {product.gallery?.map((item) => (
-                        <span key={item.id} className="gallery-preview-item">
-                          {item.type === 'image' ? <img src={item.url} alt="" /> : <video src={item.url} />}
-                          <button type="button" onClick={() => onDeleteProductMedia(product.id, item.id)}>Hapus</button>
-                        </span>
-                      ))}
+                    <div className="product-advanced-grid">
+                      <div className="product-advanced-group">
+                        <div className="mini-section-title"><strong>Sistem & Kategori</strong><small>Identitas dasar.</small></div>
+                        <div className="product-form-grid four">
+                          <label className="col-2">Slug / URL <span className="required">*</span>
+                            <input required value={draft.slug ?? ''} onChange={(event) => setDraft({ ...draft, slug: event.target.value })} placeholder="vjstudio" />
+                          </label>
+                          <label>Jenis produk
+                            <select value={draft.type ?? 'tool'} onChange={(event) => setDraft({ ...draft, type: event.target.value as any })}>
+                              {productTypes.map((item) => <option key={item} value={item}>{item === 'tool' ? 'Software / Tools Lisensi' : item === 'course' ? 'Kelas / Tutorial Video' : 'Produk Digital Lainnya'}</option>)}
+                            </select>
+                          </label>
+                          <label>Kategori
+                            <input value={draft.category ?? ''} onChange={(event) => setDraft({ ...draft, category: event.target.value })} placeholder="Contoh: Video Tools" />
+                          </label>
+                        </div>
+                      </div>
+
+                      <div className="product-advanced-group">
+                        <div className="mini-section-title"><strong>Akses & Visibilitas</strong></div>
+                        <div className="product-form-grid two">
+                          <label>Tampil di katalog
+                            <select value={draft.visibility ?? 'public'} onChange={(event) => setDraft({ ...draft, visibility: event.target.value as any })}>
+                              {productVisibilities.map((item) => <option key={item} value={item}>{item === 'public' ? 'Publik' : item === 'private' ? 'Hanya link privat' : 'Draft'}</option>)}
+                            </select>
+                          </label>
+                          <label>Syarat akses
+                            <select value={draft.accessMode ?? 'paid'} onChange={(event) => setDraft({ ...draft, accessMode: event.target.value as any })}>
+                              {productAccessModes.map((item) => <option key={item} value={item}>{item === 'public' ? 'Bebas akses' : item === 'free_member' ? 'Harus login (gratis)' : item === 'trial' ? 'Member trial aktif' : item === 'paid' ? 'Harus beli lisensi / langganan' : 'Khusus admin'}</option>)}
+                            </select>
+                          </label>
+                          <label>Jenis pemenuhan
+                            <select value={draft.fulfillmentType ?? 'license'} onChange={(event) => setDraft({ ...draft, fulfillmentType: event.target.value as any })}>
+                              <option value="license">Lisensi Software</option><option value="download">Download File ZIP</option><option value="url">Link / URL</option><option value="course">Akses Course</option>
+                            </select>
+                          </label>
+                          <label>Harga dasar <input min="0" value={draft.price ?? 0} onChange={(event) => setDraft({ ...draft, price: Number(event.target.value) })} type="number" /></label>
+                        </div>
+                      </div>
+
+                      <div className="product-advanced-group">
+                        <div className="mini-section-title"><strong>Promo & Info Tambahan</strong></div>
+                        <div className="product-form-grid four">
+                          <label>Harga asil / real<input min="0" value={draft.compareAtPrice ?? 0} onChange={(event) => setDraft({ ...draft, compareAtPrice: Number(event.target.value) })} type="number" placeholder="499000" /></label>
+                          <label>Badge promo<input value={draft.discountLabel ?? ''} onChange={(event) => setDraft({ ...draft, discountLabel: event.target.value })} placeholder="Contoh: Diskon 40%" /></label>
+                          <label className="col-2">Teks promo singkat<input value={draft.promoText ?? ''} onChange={(event) => setDraft({ ...draft, promoText: event.target.value })} placeholder="Promo bulan ini..." /></label>
+                          <label className="col-4">Syarat akses tambahan (teks)<textarea value={draft.accessRequirement ?? ''} onChange={(event) => setDraft({ ...draft, accessRequirement: event.target.value })} placeholder="Jelaskan jika ada syarat khusus" /></label>
+                        </div>
+                      </div>
+
+                      <div className="product-advanced-group tool-destination-group">
+                        <div className="mini-section-title"><strong>Integrasi & Sistem</strong></div>
+                        <div className="product-form-grid four">
+                          <label>Tujuan akses
+                            <select value={draft.destinationType ?? 'internal'} onChange={(event) => {
+                              const next = event.target.value as any;
+                              setDraft({ ...draft, destinationType: next, openMode: next === 'external' ? 'new_tab' : 'same_tab', trackLiveUsers: next !== 'external' });
+                            }}>
+                              <option value="internal">Sistem internal</option><option value="hosted">Upload HTML/ZIP</option><option value="external">External Link</option>
+                            </select>
+                          </label>
+                          <label>Cara membuka
+                            <select value={draft.openMode ?? 'same_tab'} onChange={(event) => setDraft({ ...draft, openMode: event.target.value as any })}>
+                              <option value="same_tab">Tab yang sama</option><option value="new_tab">Tab baru</option><option value="wrapper">Wrapper (iframe)</option>
+                            </select>
+                          </label>
+                          <label className="col-2">URL External<input disabled={draft.destinationType !== 'external'} value={draft.externalUrl ?? ''} onChange={(event) => setDraft({ ...draft, externalUrl: event.target.value })} type="url" placeholder="https://" /></label>
+                          <label className="tracking-toggle col-4"><input checked={draft.trackLiveUsers ?? false} disabled={draft.destinationType === 'external'} onChange={(event) => setDraft({ ...draft, trackLiveUsers: event.target.checked })} type="checkbox" /> Hitung member online yang sedang membuka web-app ini</label>
+                        </div>
+                      </div>
+
+                      <div className="product-advanced-group">
+                        <div className="mini-section-title"><strong>Lainnya</strong></div>
+                        <div className="product-form-grid four">
+                          <label className="col-2">URL Logo Kecil<input value={draft.logoUrl ?? ''} onChange={(event) => setDraft({ ...draft, logoUrl: event.target.value })} placeholder="https://..." /></label>
+                          <label className="col-2">Teks Tombol Aksi (CTA)<input value={draft.ctaLabel ?? ''} onChange={(event) => setDraft({ ...draft, ctaLabel: event.target.value })} placeholder="Default: Buka" /></label>
+                          <label className="col-2">Link Download Installer / Setup<input value={draft.installerUrl ?? ''} onChange={(event) => setDraft({ ...draft, installerUrl: event.target.value })} placeholder="https://..." /></label>
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </details>
