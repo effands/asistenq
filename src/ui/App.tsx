@@ -3211,14 +3211,20 @@ function ProductTable({ products, onUpdateProduct, onDeleteProduct, onImportLand
                 <strong>{product.name}</strong>
                 <span><b>{product.destinationType === 'external' ? 'EXTERNAL' : product.destinationType === 'hosted' ? 'HTML HOSTED' : product.landingTemplate === 'tool-app' ? 'TOOL APP' : 'INTERNAL'}</b> · {product.externalUrl ?? product.landingPath ?? `/produk/${product.slug}`} · {product.price === 0 ? 'Gratis' : product.formattedPrice} · {product.analytics?.onlineUsers ?? 0} online · {product.analytics?.toolOpens ?? 0} buka</span>
               </div>
-              <div style={{ display: 'flex', gap: '6px' }}>
-                <a className="ghost-button" href={product.destinationType === 'external' ? (product.externalUrl ?? '#') : (product.landingPath ?? `/produk/${product.slug}`)} target="_blank" rel="noreferrer">Lihat</a>
-                <button className="ghost-button" type="button" onClick={() => startEdit(product)}>Edit</button>
-                <button className="ghost-button" style={{ color: '#d32f2f', borderColor: '#ffcdd2', backgroundColor: '#fff5f5' }} type="button" onClick={async () => {
+              <div style={{ display: 'flex', gap: '4px' }}>
+                <a className="icon-action-button" href={product.destinationType === 'external' ? (product.externalUrl ?? '#') : (product.landingPath ?? `/produk/${product.slug}`)} target="_blank" rel="noreferrer" title="Lihat">
+                  <ExternalLink size={16} />
+                </a>
+                <button className="icon-action-button" type="button" onClick={() => startEdit(product)} title="Edit">
+                  <Pencil size={16} />
+                </button>
+                <button className="icon-action-button danger" type="button" onClick={async () => {
                   if (window.confirm('Yakin ingin menghapus produk ini? Semua data terkait (termasuk lisensi) mungkin akan hilang.')) {
                     await onDeleteProduct(product.id);
                   }
-                }}>Hapus</button>
+                }} title="Hapus">
+                  <Trash2 size={16} />
+                </button>
               </div>
             </div>
             {editingId === product.id && (

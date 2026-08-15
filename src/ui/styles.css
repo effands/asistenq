@@ -6607,3 +6607,29 @@ button.ghost-button.primary:hover {
   border-color: #ef4444;
   color: #b91c1c;
 }
+
+
+.icon-action-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  padding: 0;
+}
+
+.icon-action-button:hover {
+  background: rgba(0, 140, 134, 0.08);
+  color: var(--teal);
+}
+
+.icon-action-button.danger:hover {
+  background: #fee2e2;
+  color: #ef4444;
+}
