@@ -8775,3 +8775,224 @@ button.ghost-button.primary:hover {
   background: #fee2e2;
   color: #ef4444;
 }
+
+
+/* ============================================================
+   ENTERPRISE COMPACT LICENSE MANAGER (Pixel-Perfect Alignment)
+   ============================================================ */
+.license-admin-layout {
+  display: grid;
+  gap: 16px;
+}
+
+.license-generate-form {
+  display: grid !important;
+  grid-template-columns: 1.1fr 1.2fr 1.4fr 1.4fr auto !important;
+  gap: 10px !important;
+  align-items: flex-end !important;
+}
+
+.license-generate-form label {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 4px !important;
+  font-size: 11px !important;
+  font-weight: 700 !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.03em !important;
+  color: var(--adm-muted-light, #64748b) !important;
+  margin: 0 !important;
+}
+
+.license-generate-form input,
+.license-generate-form select {
+  width: 100% !important;
+  height: 38px !important;
+  padding: 0 10px !important;
+  font-size: 13px !important;
+  border-radius: 8px !important;
+  border: 1px solid var(--adm-border-light, #cbd5e1) !important;
+  background: #fff !important;
+  color: var(--adm-text-light, #1e293b) !important;
+  outline: none !important;
+}
+
+.license-generate-form button.primary {
+  height: 38px !important;
+  padding: 0 18px !important;
+  font-size: 13px !important;
+  font-weight: 700 !important;
+  border-radius: 8px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 6px !important;
+  white-space: nowrap !important;
+}
+
+.plan-editor-table-header {
+  display: grid !important;
+  grid-template-columns: 70px minmax(130px, 1.2fr) 105px 95px 120px 65px 125px 115px !important;
+  gap: 10px !important;
+  align-items: center !important;
+  padding: 8px 14px !important;
+  background: rgba(13, 148, 136, 0.08) !important;
+  border-radius: 8px !important;
+  font-size: 11px !important;
+  font-weight: 800 !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.04em !important;
+  color: var(--adm-text-light, #1e293b) !important;
+  margin-bottom: 4px !important;
+}
+
+.license-plan-card {
+  display: grid !important;
+  grid-template-columns: 70px minmax(130px, 1.2fr) 105px 95px 120px 65px 125px 115px !important;
+  gap: 10px !important;
+  align-items: center !important;
+  padding: 8px 14px !important;
+  background: #ffffff !important;
+  border: 1px solid var(--adm-border-light, #e2e8f0) !important;
+  border-radius: 8px !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02) !important;
+  margin-bottom: 6px !important;
+  transition: all 0.15s ease !important;
+}
+
+.license-plan-card:hover {
+  border-color: #0d9488 !important;
+  box-shadow: 0 2px 8px rgba(13, 148, 136, 0.08) !important;
+}
+
+.license-plan-card.is-disabled {
+  opacity: 0.55 !important;
+  background: #f8fafc !important;
+}
+
+.license-plan-card.is-modified {
+  border-color: #0d9488 !important;
+  background: rgba(13, 148, 136, 0.025) !important;
+}
+
+.plan-card-badge-col {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 2px !important;
+}
+
+.plan-code-tag {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace !important;
+  font-weight: 800 !important;
+  font-size: 12px !important;
+  padding: 2px 6px !important;
+  background: #f1f5f9 !important;
+  border-radius: 5px !important;
+  color: #0f172a !important;
+  display: inline-block !important;
+}
+
+.plan-card-badge-col small {
+  font-size: 10px !important;
+  font-weight: 600 !important;
+  color: #64748b !important;
+}
+
+/* Hide repetitive field labels inside rows for clean compact table view */
+.license-plan-card .plan-field label {
+  display: none !important;
+}
+
+.license-plan-card .plan-field {
+  margin: 0 !important;
+  padding: 0 !important;
+}
+
+.license-plan-card .plan-field input {
+  width: 100% !important;
+  height: 34px !important;
+  padding: 4px 8px !important;
+  font-size: 13px !important;
+  border-radius: 6px !important;
+  border: 1px solid #cbd5e1 !important;
+  background: #fff !important;
+  color: #0f172a !important;
+  outline: none !important;
+  transition: border-color 0.15s !important;
+}
+
+.license-plan-card .plan-field input:focus {
+  border-color: #0d9488 !important;
+  box-shadow: 0 0 0 2px rgba(13, 148, 136, 0.15) !important;
+}
+
+.plan-card-toggles {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 3px !important;
+}
+
+.plan-toggle-label {
+  display: flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+  font-size: 11px !important;
+  font-weight: 600 !important;
+  color: #475569 !important;
+  cursor: pointer !important;
+  margin: 0 !important;
+  line-height: 1 !important;
+}
+
+.plan-toggle-label input[type="checkbox"] {
+  width: 14px !important;
+  height: 14px !important;
+  accent-color: #0d9488 !important;
+  margin: 0 !important;
+  cursor: pointer !important;
+}
+
+.plan-card-actions button {
+  width: 100% !important;
+  height: 34px !important;
+  font-size: 12px !important;
+  font-weight: 700 !important;
+  padding: 0 8px !important;
+  border-radius: 6px !important;
+  white-space: nowrap !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+
+/* Dark mode adjustments */
+.admin-dark .plan-editor-table-header {
+  background: rgba(255, 255, 255, 0.05) !important;
+  color: #94a3b8 !important;
+}
+
+.admin-dark .license-plan-card {
+  background: #161b22 !important;
+  border-color: rgba(255, 255, 255, 0.08) !important;
+}
+
+.admin-dark .license-plan-card.is-disabled {
+  background: rgba(255, 255, 255, 0.02) !important;
+}
+
+.admin-dark .plan-code-tag {
+  background: rgba(255, 255, 255, 0.08) !important;
+  color: #e2e8f0 !important;
+}
+
+.admin-dark .license-plan-card .plan-field input,
+.admin-dark .license-generate-form input,
+.admin-dark .license-generate-form select {
+  background: #0d1117 !important;
+  border-color: rgba(255, 255, 255, 0.12) !important;
+  color: #f1f5f9 !important;
+}
+
+.admin-dark .plan-toggle-label {
+  color: #94a3b8 !important;
+}
