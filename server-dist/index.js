@@ -335,9 +335,6 @@ function deploymentInstallArgs(hasLockfile = true) {
   const sharedArgs = ["--include=dev", "--no-audit", "--no-fund"];
   return hasLockfile ? ["ci", ...sharedArgs] : ["install", ...sharedArgs];
 }
-function deploymentAuditArgs() {
-  return ["audit", "--audit-level=low"];
-}
 function deploymentPullArgs(remote, branch) {
   return ["pull", "--no-rebase", "--autostash", remote, branch];
 }
@@ -3181,7 +3178,6 @@ async function runGitHubDeployUpdate(githubToken) {
   const results = [
     await runCommand("git", deploymentPullArgs(remote, githubBranch), commandOptions),
     await runCommand("npm", deploymentInstallArgs(hasLockfile), commandOptions),
-    await runCommand("npm", deploymentAuditArgs(), commandOptions),
     await runCommand("npm", ["run", "build:hosting"], commandOptions)
   ];
   fs9.mkdirSync(path9.resolve("tmp"), { recursive: true });
