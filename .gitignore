@@ -14,3 +14,9 @@ __pycache__/
 telegram-bot.env
 data/telegram-bot-state.json
 .worktrees/
+
+data/product-media/
+data/payment-proofs/
+data/backups/
+data/session-secret
+data/*.pid

@@ -38,9 +38,19 @@ export function MarketplaceHome({ catalog, onOpen, onAdd }: { catalog: PublicCat
       <section className="market-filter"><div>{categories.map((item) => <button className={category === item ? 'active' : ''} onClick={() => setCategory(item)} key={item}>{item}</button>)}</div><span>{products.length} produk</span></section>
       <section className="market-grid" id="produk">
         {products.map((product) => <article className="market-card" key={product.id}>
-          <button className="market-card-cover" style={product.marketplaceCoverUrl ? undefined : coverStyle(product)} onClick={() => onOpen(product.slug)}>
-            {product.marketplaceCoverUrl && <img src={product.marketplaceCoverUrl} alt={product.name} />}
-            <small>{productCategory(product)}</small><i>{product.badge || (product.price === 0 ? 'FREE' : 'PRO')}</i><strong>{!product.marketplaceCoverUrl && product.name}</strong>
+          <button className="market-card-cover" style={coverStyle(product)} onClick={() => onOpen(product.slug)}>
+            {(product.marketplaceCoverUrl || product.coverUrl) && (
+              <img
+                src={product.marketplaceCoverUrl || product.coverUrl}
+                alt={product.name}
+                onError={(e) => {
+                  e.currentTarget.style.display = 'none';
+                  const titleEl = e.currentTarget.parentElement?.querySelector('strong');
+                  if (titleEl) titleEl.style.display = 'block';
+                }}
+              />
+            )}
+            <small>{productCategory(product)}</small><i>{product.badge || (product.price === 0 ? 'FREE' : 'PRO')}</i><strong style={product.marketplaceCoverUrl || product.coverUrl ? { display: 'none' } : undefined}>{product.name}</strong>
           </button>
           <div className="market-card-body">
             <button className="market-card-title" onClick={() => onOpen(product.slug)}>{product.name}</button>
