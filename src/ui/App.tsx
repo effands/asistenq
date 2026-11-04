@@ -3109,22 +3109,207 @@ function ProductForm({ onCreateProduct }: {
 
 function ContentAdminPanel({ token }: { token: string }) {
   const [pages, setPages] = useState<ContentPage[]>([]);
+  const [selectedId, setSelectedId] = useState<string>('');
   const [subscribers, setSubscribers] = useState<Array<{ id: string; email: string; status: string; source: string; consentedAt: string }>>([]);
   const [notice, setNotice] = useState('');
+  const [saving, setSaving] = useState(false);
+
   const load = async () => {
     const [loadedPages, loadedSubscribers] = await Promise.all([
       apiRequest<ContentPage[]>('/admin/content', { token }),
       apiRequest<Array<{ id: string; email: string; status: string; source: string; consentedAt: string }>>('/admin/subscribers', { token })
     ]);
-    setPages(loadedPages); setSubscribers(loadedSubscribers);
+    setPages(loadedPages);
+    setSubscribers(loadedSubscribers);
+    if (loadedPages.length > 0) {
+      setSelectedId((curr) => curr || loadedPages[0].id);
+    }
   };
-  useEffect(() => { void load(); }, [token]);
-  return <section className="admin-content-grid content-admin-grid">
-    <div className="panel wide"><div className="panel-heading"><div><p className="section-kicker">Website content</p><h2>Halaman Footer & Kebijakan</h2></div></div><div className="content-page-list">{pages.map((page) => <form key={page.id} onSubmit={async (event) => { event.preventDefault(); await apiRequest(`/admin/content/${page.id}`, { token, method: 'PUT', body: { title: page.title, summary: page.summary ?? '', body: page.body, published: page.published } }); setNotice(`${page.title} tersimpan.`); }}><div><input value={page.title} onChange={(event) => setPages((rows) => rows.map((row) => row.id === page.id ? { ...row, title: event.target.value } : row))} /><label><input checked={page.published} type="checkbox" onChange={(event) => setPages((rows) => rows.map((row) => row.id === page.id ? { ...row, published: event.target.checked } : row))} /> Tayang</label></div><input value={page.summary ?? ''} onChange={(event) => setPages((rows) => rows.map((row) => row.id === page.id ? { ...row, summary: event.target.value } : row))} placeholder="Ringkasan" /><textarea value={page.body} onChange={(event) => setPages((rows) => rows.map((row) => row.id === page.id ? { ...row, body: event.target.value } : row))} /><footer><a href={`/info/${page.slug}`} target="_blank">Lihat halaman</a><button className="primary">Simpan</button></footer></form>)}</div>{notice && <p className="form-notice">{notice}</p>}</div>
-    <div className="panel wide"><div className="panel-heading"><div><p className="section-kicker">Newsletter</p><h2>Subscriber Update Produk</h2></div><a className="ghost-button" href="/api/admin/subscribers/export.csv" onClick={async (event) => { event.preventDefault(); const response = await fetch('/api/admin/subscribers/export.csv', { headers: { Authorization: `Bearer ${token}` } }); const blob = await response.blob(); const url = URL.createObjectURL(blob); const anchor = document.createElement('a'); anchor.href = url; anchor.download = 'asistenq-subscribers.csv'; anchor.click(); URL.revokeObjectURL(url); }}>Export CSV</a></div><div className="subscriber-table">{subscribers.map((row) => <span key={row.id}><b>{row.email}</b><small>{row.source} · {new Date(row.consentedAt).toLocaleDateString('id-ID')}</small></span>)}{!subscribers.length && <p>Belum ada subscriber.</p>}</div></div>
-  </section>;
-}
 
+  useEffect(() => { void load(); }, [token]);
+
+  const activePage = pages.find((p) => p.id === selectedId) ?? pages[0];
+
+  const updateActivePage = (patch: Partial<ContentPage>) => {
+    if (!activePage) return;
+    setPages((rows) => rows.map((row) => (row.id === activePage.id ? { ...row, ...patch } : row)));
+  };
+
+  const handleSave = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!activePage) return;
+    setSaving(true);
+    try {
+      await apiRequest(`/admin/content/${activePage.id}`, {
+        token,
+        method: 'PUT',
+        body: {
+          title: activePage.title,
+          summary: activePage.summary ?? '',
+          body: activePage.body,
+          published: activePage.published
+        }
+      });
+      setNotice(`"${activePage.title}" berhasil disimpan.`);
+      setTimeout(() => setNotice(''), 3000);
+    } catch {
+      setNotice('Gagal menyimpan halaman.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <section className="admin-content-grid content-admin-grid">
+      <div className="panel wide content-manager-panel">
+        <div className="panel-heading">
+          <div>
+            <p className="section-kicker">Website Content &amp; Policies</p>
+            <h2>Halaman Footer &amp; Kebijakan</h2>
+          </div>
+          {notice && <span className="status-pill">{notice}</span>}
+        </div>
+
+        <div className="content-manager-workspace">
+          <aside className="content-pages-nav">
+            <div className="content-pages-nav-header">
+              <span>Daftar Halaman ({pages.length})</span>
+            </div>
+            <div className="content-pages-list">
+              {pages.map((page) => (
+                <button
+                  key={page.id}
+                  type="button"
+                  className={`content-page-nav-item ${page.id === activePage?.id ? 'active' : ''}`}
+                  onClick={() => setSelectedId(page.id)}
+                >
+                  <div className="content-nav-meta">
+                    <strong>{page.title || 'Halaman Tanpa Judul'}</strong>
+                    <small>/info/{page.slug}</small>
+                  </div>
+                  <span className={`content-status-dot ${page.published ? 'published' : 'draft'}`}>
+                    {page.published ? 'Tayang' : 'Draft'}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </aside>
+
+          {activePage ? (
+            <form className="content-page-editor" onSubmit={handleSave}>
+              <div className="editor-top-bar">
+                <div className="editor-slug-badge">
+                  <span>URL: /info/{activePage.slug}</span>
+                  <a href={`/info/${activePage.slug}`} target="_blank" rel="noreferrer" className="preview-link">
+                    Buka Halaman <ExternalLink size={13} />
+                  </a>
+                </div>
+                <div className="editor-top-actions">
+                  <label className="publish-toggle-label">
+                    <input
+                      type="checkbox"
+                      checked={activePage.published}
+                      onChange={(e) => updateActivePage({ published: e.target.checked })}
+                    />
+                    <span>{activePage.published ? 'Tayang' : 'Draft'}</span>
+                  </label>
+                  <button type="submit" className="primary save-btn" disabled={saving}>
+                    {saving ? 'Menyimpan...' : 'Simpan Halaman'}
+                  </button>
+                </div>
+              </div>
+
+              <div className="editor-field-group">
+                <label>Judul Halaman</label>
+                <input
+                  type="text"
+                  value={activePage.title}
+                  onChange={(e) => updateActivePage({ title: e.target.value })}
+                  placeholder="Judul halaman..."
+                  className="editor-title-input"
+                  required
+                />
+              </div>
+
+              <div className="editor-field-group">
+                <label>Ringkasan Singkat (Meta / Deskripsi Singkat)</label>
+                <input
+                  type="text"
+                  value={activePage.summary ?? ''}
+                  onChange={(e) => updateActivePage({ summary: e.target.value })}
+                  placeholder="Ringkasan penjelasan untuk footer atau preview..."
+                  className="editor-summary-input"
+                />
+              </div>
+
+              <div className="editor-field-group body-group">
+                <div className="editor-field-header">
+                  <label>Konten Lengkap Halaman</label>
+                  <small>{activePage.body?.length ?? 0} karakter</small>
+                </div>
+                <textarea
+                  value={activePage.body}
+                  onChange={(e) => updateActivePage({ body: e.target.value })}
+                  placeholder="Tuliskan isi panduan, syarat &amp; ketentuan, atau kebijakan di sini..."
+                  className="editor-body-textarea"
+                  rows={12}
+                  required
+                />
+              </div>
+            </form>
+          ) : (
+            <div className="content-empty-state">
+              <p>Pilih halaman di sebelah kiri untuk mulai mengedit.</p>
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="panel wide subscriber-panel">
+        <div className="panel-heading">
+          <div>
+            <p className="section-kicker">Audience &amp; Email Updates</p>
+            <h2>Subscriber Newsletter ({subscribers.length})</h2>
+          </div>
+          <a
+            className="ghost-button export-btn"
+            href="/api/admin/subscribers/export.csv"
+            onClick={async (event) => {
+              event.preventDefault();
+              const response = await fetch('/api/admin/subscribers/export.csv', { headers: { Authorization: `Bearer ${token}` } });
+              const blob = await response.blob();
+              const url = URL.createObjectURL(blob);
+              const anchor = document.createElement('a');
+              anchor.href = url;
+              anchor.download = 'asistenq-subscribers.csv';
+              anchor.click();
+              URL.revokeObjectURL(url);
+            }}
+          >
+            <Download size={14} /> Export CSV
+          </a>
+        </div>
+        <div className="subscriber-compact-table">
+          <div className="subscriber-table-header">
+            <span>Email</span>
+            <span>Sumber</span>
+            <span>Tanggal Berlangganan</span>
+          </div>
+          <div className="subscriber-table-body">
+            {subscribers.map((row) => (
+              <div className="subscriber-row" key={row.id}>
+                <b>{row.email}</b>
+                <span className="source-tag">{row.source}</span>
+                <small>{new Date(row.consentedAt).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}</small>
+              </div>
+            ))}
+            {!subscribers.length && <p style={{ padding: '20px', textAlign: 'center', color: '#64748b' }}>Belum ada subscriber terdaftar.</p>}
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
 function Metric({ icon, label, value, onClick }: { icon: ReactNode; label: string; value: number; onClick: () => void }) {
   return (
     <button className="metric" type="button" onClick={onClick}>
