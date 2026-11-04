@@ -2236,16 +2236,24 @@ function AdminMemberPanel({ members, onRefresh, onUpdateMember }: {
   onUpdateMember: (id: string, input: { name?: string; active?: boolean; password?: string }) => Promise<void>;
 }) {
   const [search, setSearch] = useState('');
+  const [filter, setFilter] = useState<'all' | 'active' | 'banned' | 'licensed'>('all');
   const [busy, setBusy] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState('');
   const [editPassword, setEditPassword] = useState('');
   const [notice, setNotice] = useState('');
 
-  const filteredMembers = members.filter((member) => {
-    const haystack = `${member.name} ${member.email} ${member.whatsapp ?? ''} ${member.telegramId ?? ''}`.toLowerCase();
-    return haystack.includes(search.toLowerCase());
-  });
+  const filteredMembers = useMemo(() => {
+    return members.filter((member) => {
+      const haystack = `${member.name} ${member.email} ${member.whatsapp ?? ''} ${member.telegramId ?? ''}`.toLowerCase();
+      const matchesSearch = haystack.includes(search.toLowerCase());
+      if (!matchesSearch) return false;
+      if (filter === 'active') return member.active;
+      if (filter === 'banned') return !member.active;
+      if (filter === 'licensed') return member.licenseCount > 0;
+      return true;
+    });
+  }, [members, search, filter]);
 
   const handleAction = async (action: () => Promise<void>) => {
     setBusy(true);
@@ -2253,6 +2261,7 @@ function AdminMemberPanel({ members, onRefresh, onUpdateMember }: {
     try {
       await action();
       setNotice('Aksi member berhasil diproses.');
+      setTimeout(() => setNotice(''), 3000);
     } catch (e: any) {
       setNotice(e instanceof Error ? e.message : 'Aksi member gagal diproses.');
     } finally {
@@ -2266,75 +2275,195 @@ function AdminMemberPanel({ members, onRefresh, onUpdateMember }: {
     setEditPassword('');
   };
 
+  const activeCount = members.filter((m) => m.active).length;
+  const bannedCount = members.filter((m) => !m.active).length;
+  const licensedCount = members.filter((m) => m.licenseCount > 0).length;
+
   return (
     <section className="admin-content-grid compact-admin-grid">
       <div className="panel stack wide member-admin-panel">
         <div className="panel-heading">
           <div>
             <p className="section-kicker">Member Database</p>
-            <h2>Daftar Member</h2>
+            <h2>Daftar Member ({filteredMembers.length})</h2>
           </div>
-          <button className="ghost-button" disabled={busy} onClick={() => handleAction(onRefresh)}>
-            <RefreshCw size={16} /> Refresh
+          <button className="ghost-button" disabled={busy} onClick={() => handleAction(onRefresh)} type="button">
+            <RefreshCw size={15} /> Refresh Data
           </button>
         </div>
-        <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Cari nama, email, WhatsApp, atau Telegram..." />
+
         {notice && <p className="form-notice">{notice}</p>}
-        <div className="member-table-wrap">
-          <div className="member-table member-table-head" aria-hidden="true">
-            <span>Member</span><span>Kontak</span><span>Status</span><span>Aktivitas</span><span>Daftar</span><span>Aksi</span>
+
+        <div className="member-toolbar">
+          <div className="member-search-box">
+            <Search size={15} style={{ color: '#94a3b8' }} />
+            <input
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder="Cari nama, email, WhatsApp, atau Telegram..."
+            />
           </div>
+
+          <div className="member-filter-pills">
+            <button
+              type="button"
+              className={`member-filter-pill ${filter === 'all' ? 'active' : ''}`}
+              onClick={() => setFilter('all')}
+            >
+              Semua ({members.length})
+            </button>
+            <button
+              type="button"
+              className={`member-filter-pill ${filter === 'active' ? 'active' : ''}`}
+              onClick={() => setFilter('active')}
+            >
+              Aktif ({activeCount})
+            </button>
+            <button
+              type="button"
+              className={`member-filter-pill ${filter === 'licensed' ? 'active' : ''}`}
+              onClick={() => setFilter('licensed')}
+            >
+              Punya Lisensi ({licensedCount})
+            </button>
+            {bannedCount > 0 && (
+              <button
+                type="button"
+                className={`member-filter-pill ${filter === 'banned' ? 'active' : ''}`}
+                onClick={() => setFilter('banned')}
+              >
+                Banned ({bannedCount})
+              </button>
+            )}
+          </div>
+        </div>
+
+        <div className="member-table-wrap">
+          <div className="member-table-head" aria-hidden="true">
+            <span>Member</span>
+            <span>Kontak</span>
+            <span>Status</span>
+            <span>Aktivitas</span>
+            <span>Daftar</span>
+            <span style={{ textAlign: 'right' }}>Aksi</span>
+          </div>
+
           <div className="member-admin-list">
-          {filteredMembers.length === 0 && <div className="empty-state">Belum ada member yang cocok.</div>}
-          {filteredMembers.map((member) => (
-            <article className="member-admin-card" key={member.id}>
-              {editingId === member.id ? (
-                <div className="member-edit-form">
-                  <h4>Edit Member</h4>
-                  <input value={editName} onChange={e => setEditName(e.target.value)} placeholder="Nama member" />
-                  <input value={editPassword} onChange={e => setEditPassword(e.target.value)} placeholder="Password baru (opsional, min 6 char)" type="password" />
-                  <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
-                    <button className="primary" type="button" onClick={() => handleAction(async () => {
-                      const payload: any = { name: editName };
-                      if (editPassword.length >= 6) payload.password = editPassword;
-                      await onUpdateMember(member.id, payload);
-                      setEditingId(null);
-                    })}>Simpan</button>
-                    <button className="ghost-button" type="button" onClick={() => setEditingId(null)}>Batal</button>
+            {filteredMembers.length === 0 && (
+              <div className="empty-state" style={{ padding: '32px', textAlign: 'center', color: '#64748b' }}>
+                Belum ada member yang cocok dengan pencarian atau filter.
+              </div>
+            )}
+            {filteredMembers.map((member) => (
+              <article className="member-admin-card" key={member.id}>
+                {editingId === member.id ? (
+                  <div className="member-edit-form">
+                    <h4>Edit Member: {member.email}</h4>
+                    <input
+                      value={editName}
+                      onChange={(e) => setEditName(e.target.value)}
+                      placeholder="Nama member"
+                    />
+                    <input
+                      value={editPassword}
+                      onChange={(e) => setEditPassword(e.target.value)}
+                      placeholder="Password baru (opsional, min 6 char)"
+                      type="password"
+                    />
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                      <button
+                        className="primary"
+                        type="button"
+                        style={{ height: '32px', padding: '0 14px', fontSize: '12px' }}
+                        onClick={() => handleAction(async () => {
+                          const payload: any = { name: editName };
+                          if (editPassword.length >= 6) payload.password = editPassword;
+                          await onUpdateMember(member.id, payload);
+                          setEditingId(null);
+                        })}
+                      >
+                        Simpan
+                      </button>
+                      <button
+                        className="ghost-button"
+                        type="button"
+                        style={{ height: '32px', padding: '0 12px', fontSize: '12px' }}
+                        onClick={() => setEditingId(null)}
+                      >
+                        Batal
+                      </button>
+                    </div>
                   </div>
-                </div>
-              ) : (
-                <>
-                  <div className="member-admin-main">
-                    <h3>{member.name}</h3>
-                    <p>{member.email}</p>
-                  </div>
-                  <div className="member-admin-contact"><span>WA: {member.whatsapp || '-'}</span><span>TG: {member.telegramId || '-'}</span></div>
-                  <span className={`status-dot ${member.active ? 'status-active' : 'status-expired'}`}>{member.active ? 'Aktif' : 'Banned'}</span>
-                  <div className="member-admin-stats">
-                    <span>{member.licenseCount} lisensi</span>
-                    <span>{member.orderCount} order</span>
-                    <span>{member.subscriptionCount} akses</span>
-                  </div>
-                  <div className="member-admin-meta">
-                    <span>{formatDate(member.createdAt)}</span>
-                    <small>Order: {member.latestOrder ? formatDate(member.latestOrder.createdAt) : '-'}</small>
-                  </div>
-                  <div className="member-admin-actions">
-                    <button className="ghost-button tiny-button" type="button" disabled={busy} onClick={() => startEdit(member)}>Edit</button>
-                    <button 
-                      className={`ghost-button tiny-button ${member.active ? 'danger-lite' : ''}`} 
-                      type="button"
-                      disabled={busy} 
-                      onClick={() => handleAction(() => onUpdateMember(member.id, { active: !member.active }))}
-                    >
-                      {member.active ? 'Ban' : 'Unban'}
-                    </button>
-                  </div>
-                </>
-              )}
-            </article>
-          ))}
+                ) : (
+                  <>
+                    <div className="member-identity-cell">
+                      <div className="member-avatar-chip">
+                        {member.name ? member.name.charAt(0).toUpperCase() : 'M'}
+                      </div>
+                      <div className="member-admin-main">
+                        <h3>{member.name || 'Member'}</h3>
+                        <p>{member.email}</p>
+                      </div>
+                    </div>
+
+                    <div className="member-contact-chips">
+                      <span className="contact-pill">
+                        <b>WA:</b> {member.whatsapp || '-'}
+                      </span>
+                      <span className="contact-pill">
+                        <b>TG:</b> {member.telegramId ? `@${member.telegramId.replace(/^@/, '')}` : '-'}
+                      </span>
+                    </div>
+
+                    <div>
+                      <span className={`member-status-chip ${member.active ? 'active' : 'banned'}`}>
+                        {member.active ? 'Aktif' : 'Banned'}
+                      </span>
+                    </div>
+
+                    <div className="member-activity-badges">
+                      <span className={`activity-tag ${member.licenseCount > 0 ? 'has-license' : ''}`}>
+                        {member.licenseCount} Lisensi
+                      </span>
+                      <span className="activity-tag">
+                        {member.orderCount} Order
+                      </span>
+                      {member.subscriptionCount > 0 && (
+                        <span className="activity-tag">
+                          {member.subscriptionCount} Akses
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="member-admin-meta">
+                      <span>{formatDate(member.createdAt)}</span>
+                      {member.latestOrder && (
+                        <small>Order: {formatDate(member.latestOrder.createdAt)}</small>
+                      )}
+                    </div>
+
+                    <div className="member-admin-actions">
+                      <button
+                        className="member-btn-edit"
+                        type="button"
+                        disabled={busy}
+                        onClick={() => startEdit(member)}
+                      >
+                        Edit
+                      </button>
+                      <button
+                        className={member.active ? 'member-btn-ban' : 'member-btn-unban'}
+                        type="button"
+                        disabled={busy}
+                        onClick={() => handleAction(() => onUpdateMember(member.id, { active: !member.active }))}
+                      >
+                        {member.active ? 'Ban' : 'Unban'}
+                      </button>
+                    </div>
+                  </>
+                )}
+              </article>
+            ))}
           </div>
         </div>
       </div>
