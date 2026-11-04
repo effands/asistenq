@@ -10,7 +10,7 @@ import cors from "cors";
 import express from "express";
 import multer from "multer";
 import AdmZip from "adm-zip";
-import crypto10 from "crypto";
+import crypto11 from "crypto";
 import fs9 from "fs";
 import path9 from "path";
 import { z } from "zod";
@@ -454,7 +454,96 @@ async function notifyOwnerOfPaymentProof(store2, order, filePath, source, fetche
 
 // src/server/services.ts
 import bcrypt from "bcryptjs";
-import crypto3 from "crypto";
+import crypto4 from "crypto";
+
+// src/server/store.ts
+import fs4 from "fs";
+import path4 from "path";
+var defaultQrisStaticPayload = "00020101021126570011ID.DANA.WWW011893600915303265462802090326546280303UMI51440014ID.CO.QRIS.WWW0215ID10265329452210303UMI5204504553033605802ID5905ZIQVA6011Kab. Malang6105651676304F3F6";
+var emptyData = () => ({
+  admins: [],
+  members: [],
+  passwordResets: [],
+  products: [],
+  plans: [],
+  licenses: [],
+  vouchers: [],
+  announcements: [],
+  bannedHwids: [],
+  licenseDeviceResetEvents: [],
+  orders: [],
+  downloadGrants: [],
+  subscriptions: [],
+  auditLogs: [],
+  toolAnalyticsEvents: [],
+  accessGrants: [],
+  contentPages: [],
+  subscribers: [],
+  deploymentSettings: {
+    githubRepo: "effands/asistenq",
+    githubBranch: "master",
+    qrisStaticPayload: defaultQrisStaticPayload
+  }
+});
+function normalizeData(data) {
+  return {
+    ...emptyData(),
+    ...data,
+    admins: data.admins ?? [],
+    members: data.members ?? [],
+    passwordResets: data.passwordResets ?? [],
+    products: data.products ?? [],
+    plans: data.plans ?? [],
+    licenses: data.licenses ?? [],
+    vouchers: data.vouchers ?? [],
+    announcements: data.announcements ?? [],
+    bannedHwids: data.bannedHwids ?? [],
+    licenseDeviceResetEvents: data.licenseDeviceResetEvents ?? [],
+    orders: data.orders ?? [],
+    downloadGrants: data.downloadGrants ?? [],
+    subscriptions: data.subscriptions ?? [],
+    auditLogs: data.auditLogs ?? [],
+    toolAnalyticsEvents: data.toolAnalyticsEvents ?? [],
+    accessGrants: data.accessGrants ?? [],
+    contentPages: data.contentPages ?? [],
+    subscribers: data.subscribers ?? [],
+    deploymentSettings: {
+      githubRepo: "effands/asistenq",
+      githubBranch: "master",
+      qrisStaticPayload: defaultQrisStaticPayload,
+      ...data.deploymentSettings ?? {}
+    }
+  };
+}
+function createMemoryStore(initialData = emptyData()) {
+  return {
+    data: structuredClone(normalizeData(initialData)),
+    save() {
+    },
+    reset() {
+      this.data = emptyData();
+    }
+  };
+}
+function createFileStore(filePath = path4.resolve("data/asistenq.json")) {
+  const dir = path4.dirname(filePath);
+  if (!fs4.existsSync(dir)) {
+    fs4.mkdirSync(dir, { recursive: true });
+  }
+  if (!fs4.existsSync(filePath)) {
+    fs4.writeFileSync(filePath, JSON.stringify(emptyData(), null, 2));
+  }
+  return {
+    data: normalizeData(JSON.parse(fs4.readFileSync(filePath, "utf-8"))),
+    save() {
+      fs4.writeFileSync(filePath, JSON.stringify(this.data, null, 2));
+    },
+    reset() {
+      this.data = emptyData();
+      this.save();
+    }
+  };
+}
 
 // src/server/qris.ts
 import QRCode from "qrcode";
@@ -536,6 +625,185 @@ async function generateDynamicQris(staticPayload, amount) {
   return { payload, dataUrl };
 }
 
+// src/server/sakurupiah.ts
+import crypto3 from "crypto";
+import QRCode2 from "qrcode";
+function buildSakuRupiahSignature(input) {
+  const payload = `${input.apiId}${input.method}${input.merchantRef}${input.amount}`;
+  return crypto3.createHmac("sha256", input.apiKey).update(payload).digest("hex");
+}
+function verifySakuRupiahCallbackSignature(rawJsonBody, headerSignature, apiKey) {
+  if (!headerSignature || !apiKey || !rawJsonBody) return false;
+  const expectedSignature = crypto3.createHmac("sha256", apiKey).update(rawJsonBody).digest("hex");
+  const left = Buffer.from(headerSignature.toLowerCase(), "hex");
+  const right = Buffer.from(expectedSignature.toLowerCase(), "hex");
+  if (left.length !== right.length) return false;
+  return crypto3.timingSafeEqual(left, right);
+}
+async function createSakuRupiahInvoice(settings2, order, items = [], callbackUrl, returnUrl) {
+  const apiId = settings2.sakuRupiahApiId?.trim();
+  const apiKey = settings2.sakuRupiahApiKey?.trim();
+  const isSandbox = settings2.sakuRupiahMode === "sandbox";
+  const method = settings2.sakuRupiahMethod?.trim() || "QRIS";
+  const merchantFee = settings2.sakuRupiahMerchantFee ?? 1;
+  if (!apiId || !apiKey) {
+    throw new Error("SakuRupiah API ID dan API Key belum dikonfigurasi");
+  }
+  const baseUrl = isSandbox ? "https://sakurupiah.id/api-sanbox/" : "https://sakurupiah.id/api/";
+  const createUrl = `${baseUrl}create.php`;
+  const amount = order.totalAmount ?? order.amount;
+  const merchantRef = order.invoiceNumber ?? order.id;
+  const customerName = order.customerEmail?.split("@")[0] || "Pelanggan AsistenQ";
+  const customerEmail = order.customerEmail || "buyer@asistenq.com";
+  const customerPhone = "081234567890";
+  const signature = buildSakuRupiahSignature({
+    apiId,
+    method,
+    merchantRef,
+    amount,
+    apiKey
+  });
+  const formParams = new URLSearchParams();
+  formParams.append("api_id", apiId);
+  formParams.append("method", method);
+  formParams.append("name", customerName);
+  formParams.append("email", customerEmail);
+  formParams.append("phone", customerPhone);
+  formParams.append("amount", String(amount));
+  formParams.append("merchant_fee", String(merchantFee));
+  formParams.append("merchant_ref", merchantRef);
+  formParams.append("expired", "24");
+  formParams.append("callback_url", callbackUrl);
+  formParams.append("return_url", returnUrl);
+  formParams.append("signature", signature);
+  if (items.length > 0) {
+    items.forEach((item) => {
+      formParams.append("produk[]", item.productName);
+      formParams.append("qty[]", "1");
+      formParams.append("harga[]", String(item.unitAmount));
+    });
+  }
+  const response = await fetch(createUrl, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/x-www-form-urlencoded",
+      Authorization: `Bearer ${apiKey}`
+    },
+    body: formParams.toString()
+  });
+  const rawText = await response.text();
+  let json;
+  try {
+    json = JSON.parse(rawText);
+  } catch {
+    throw new Error(`Respon SakuRupiah tidak valid: ${rawText.slice(0, 100)}`);
+  }
+  if (String(json.status) !== "200" || !Array.isArray(json.data) || json.data.length === 0) {
+    const errorMsg = json.message || json.detail || "Gagal membuat invoice SakuRupiah";
+    throw new Error(errorMsg);
+  }
+  const data = json.data[0];
+  const qrPayload = data.qr || data.qr_content || data.qr_payload || "";
+  let qrDataUrl;
+  if (data.qr_image || data.qr_url) {
+    qrDataUrl = data.qr_image || data.qr_url;
+  } else if (qrPayload) {
+    if (qrPayload.startsWith("http://") || qrPayload.startsWith("https://") || qrPayload.startsWith("data:image")) {
+      qrDataUrl = qrPayload;
+    } else {
+      try {
+        qrDataUrl = await QRCode2.toDataURL(qrPayload, {
+          errorCorrectionLevel: "M",
+          margin: 2,
+          width: 320
+        });
+      } catch {
+        qrDataUrl = `https://api.qrserver.com/v1/create-qr-code/?size=320x320&data=${encodeURIComponent(qrPayload)}`;
+      }
+    }
+  }
+  return {
+    success: true,
+    trxId: data.trx_id,
+    merchantRef: data.merchant_ref,
+    qrPayload,
+    qrDataUrl,
+    checkoutUrl: data.checkout_url,
+    paymentNo: data.payment_no ? String(data.payment_no) : void 0,
+    via: data.via,
+    expiredAt: data.expired
+  };
+}
+async function checkSakuRupiahBalance(settings2) {
+  const apiId = settings2.sakuRupiahApiId?.trim();
+  const apiKey = settings2.sakuRupiahApiKey?.trim();
+  const isSandbox = settings2.sakuRupiahMode === "sandbox";
+  if (!apiId || !apiKey) {
+    throw new Error("SakuRupiah API ID dan API Key belum dikonfigurasi");
+  }
+  const baseUrl = isSandbox ? "https://sakurupiah.id/api-sanbox/" : "https://sakurupiah.id/api/";
+  const url = `${baseUrl}check_balance.php`;
+  const formParams = new URLSearchParams();
+  formParams.append("api_id", apiId);
+  formParams.append("method", "balance");
+  const response = await fetch(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/x-www-form-urlencoded",
+      Authorization: `Bearer ${apiKey}`
+    },
+    body: formParams.toString()
+  });
+  const json = await response.json();
+  if (String(json.status) !== "200" || !json.data) {
+    throw new Error(json.message || "Gagal mengecek saldo SakuRupiah");
+  }
+  return {
+    merchantName: json.data.nama_merchant || "Merchant",
+    balance: json.data.balance || "0",
+    availableBalance: json.data.saldo_tersedia || "0"
+  };
+}
+async function checkSakuRupiahTransactionStatus(settings2, merchantRef, trxId) {
+  const apiId = settings2.sakuRupiahApiId?.trim();
+  const apiKey = settings2.sakuRupiahApiKey?.trim();
+  const isSandbox = settings2.sakuRupiahMode === "sandbox";
+  if (!apiId || !apiKey) return { status: "pending", isPaid: false };
+  const baseUrl = isSandbox ? "https://sakurupiah.id/api-sanbox/" : "https://sakurupiah.id/api/";
+  const detailUrl = `${baseUrl}detail.php`;
+  const refParam = trxId ? trxId : merchantRef;
+  const signature = crypto3.createHmac("sha256", apiKey).update(`${apiId}${refParam}`).digest("hex");
+  const formParams = new URLSearchParams();
+  formParams.append("api_id", apiId);
+  if (trxId) {
+    formParams.append("trx_id", trxId);
+  } else {
+    formParams.append("merchant_ref", merchantRef);
+  }
+  formParams.append("signature", signature);
+  try {
+    const res = await fetch(detailUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+        Authorization: `Bearer ${apiKey}`
+      },
+      body: formParams.toString()
+    });
+    const json = await res.json();
+    const data = Array.isArray(json.data) ? json.data[0] : json.data;
+    if (String(json.status) === "200" && data) {
+      const st = String(data.status ?? "").toLowerCase();
+      const code = Number(data.status_kode ?? data.status_code);
+      const isPaid = st === "berhasil" || code === 1 || st === "paid" || st === "success";
+      return { status: isPaid ? "berhasil" : st === "expired" ? "expired" : "pending", isPaid };
+    }
+  } catch (err) {
+    console.error("SakuRupiah detail status check failed:", err);
+  }
+  return { status: "pending", isPaid: false };
+}
+
 // src/server/cart-checkout.ts
 function validateCart(store2, input, now = /* @__PURE__ */ new Date()) {
   if (input.items.length < 1 || input.items.length > 25) throw new Error("keranjang harus berisi 1 sampai 25 produk");
@@ -581,10 +849,10 @@ function escapeHtml(value) {
   return String(value ?? "").replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#39;");
 }
 function hashResetToken(token) {
-  return crypto3.createHash("sha256").update(token).digest("hex");
+  return crypto4.createHash("sha256").update(token).digest("hex");
 }
 function createResetToken() {
-  return crypto3.randomBytes(24).toString("hex");
+  return crypto4.randomBytes(24).toString("hex");
 }
 function assertSuperAdmin(actor) {
   if (actor.role !== "super_admin") {
@@ -805,6 +1073,16 @@ function updateProductRecord(store2, productId, input) {
     ...input,
     updatedAt: (/* @__PURE__ */ new Date()).toISOString()
   });
+  if (input.price !== void 0) {
+    const plans = store2.data.plans.filter((plan) => plan.productId === productId);
+    if (plans.length > 0) {
+      const primaryPlan = plans.find((plan) => plan.code === "1M" || plan.code === "DEFAULT") || plans[0];
+      if (primaryPlan) {
+        primaryPlan.price = input.price;
+        primaryPlan.isFree = input.price === 0;
+      }
+    }
+  }
   store2.save();
   return product;
 }
@@ -862,6 +1140,13 @@ function updatePlanRecord(store2, planId, input) {
   }
   Object.assign(plan, input);
   if (plan.badge !== void 0) plan.badge = plan.badge.trim() || void 0;
+  if (input.price !== void 0 && (plan.code === "1M" || plan.code === "DEFAULT")) {
+    const product = store2.data.products.find((item) => item.id === plan.productId);
+    if (product) {
+      product.price = input.price;
+      product.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
+    }
+  }
   store2.save();
   return plan;
 }
@@ -885,67 +1170,199 @@ function allocateUniquePaymentCode(store2, now) {
     const expiresAt = order.expiresAt ? new Date(order.expiresAt) : new Date(new Date(order.createdAt).getTime() + invoiceLifetimeHours * 60 * 60 * 1e3);
     return expiresAt > now;
   }).map((order) => order.uniqueCode));
-  const firstCode = Math.floor(Math.random() * 99) + 1;
-  for (let offset = 0; offset < 99; offset += 1) {
-    const candidate = 1 + (firstCode - 1 + offset) % 99;
+  const limit = 250;
+  const firstCode = Math.floor(Math.random() * limit) + 1;
+  for (let offset = 0; offset < limit; offset += 1) {
+    const candidate = 1 + (firstCode - 1 + offset) % limit;
     if (!usedCodes.has(candidate)) return candidate;
   }
   throw new Error("kode unik pembayaran tidak tersedia");
 }
-async function createCheckout(store2, memberId, productId, now = /* @__PURE__ */ new Date(), options = {}) {
-  return serializeCheckout(store2, () => createCheckoutLocked(store2, memberId, productId, now, options));
+function canAccessLicenseOrder(order, accessToken) {
+  if (!order || !order.accessTokenHash) return false;
+  const candidate = crypto4.createHash("sha256").update(accessToken).digest("hex");
+  const left = Buffer.from(candidate, "hex");
+  const right = Buffer.from(order.accessTokenHash, "hex");
+  return left.length === right.length && crypto4.timingSafeEqual(left, right);
+}
+function orderAccessToken(orderId, idempotencyKey) {
+  return crypto4.createHmac("sha256", process.env.JWT_SECRET ?? "vjstudio_jwt_secret_2026").update(`${orderId}:${idempotencyKey}`).digest("hex");
 }
 async function createCartCheckout(store2, memberId, input, now = /* @__PURE__ */ new Date()) {
   return serializeCheckout(store2, async () => {
-    const member = store2.data.members.find((row) => row.id === memberId && row.active);
-    if (!member) throw new Error("member not found");
-    const validated = validateCart(store2, input, now);
-    const uniqueCode = validated.amount > 0 ? allocateUniquePaymentCode(store2, now) : 0;
-    const totalAmount = validated.amount + uniqueCode;
-    const generatedQris = validated.amount > 0 ? await generateDynamicQris(store2.data.deploymentSettings?.qrisStaticPayload ?? "", totalAmount) : void 0;
+    const member = store2.data.members.find((item) => item.id === memberId);
+    const { items, amount } = validateCart(store2, {
+      items: input.items.map((item) => ({ productId: item.productId, planId: item.planId ?? "" })),
+      voucherCode: input.voucherCode,
+      customerHwid: input.customerHwid
+    }, now);
+    const settings2 = store2.data.deploymentSettings;
+    const hasSakuRupiah = Boolean(settings2?.sakuRupiahApiId?.trim() && settings2?.sakuRupiahApiKey?.trim());
+    const qrisFee = amount > 0 ? Math.ceil(amount * 7e-3) : 0;
+    const uniqueCode = amount > 0 && !hasSakuRupiah ? allocateUniquePaymentCode(store2, now) : 0;
+    const totalAmount = amount + qrisFee + uniqueCode;
     const invoiceNumber = `INV-${now.toISOString().slice(0, 10).replace(/-/g, "")}-${String(store2.data.orders.length + 1).padStart(4, "0")}`;
-    const first = validated.items[0];
+    const expiresAt = new Date(now.getTime() + invoiceLifetimeHours * 60 * 60 * 1e3).toISOString();
+    const generatedQris = amount > 0 && !hasSakuRupiah ? await generateDynamicQris(store2.data.deploymentSettings?.qrisStaticPayload ?? "", totalAmount) : void 0;
+    const orderItems = items.map((item) => ({
+      id: createId("orderitem"),
+      productId: item.productId,
+      planId: item.planId,
+      productName: item.productName,
+      planName: item.planName,
+      unitAmount: item.unitAmount,
+      fulfillmentType: item.fulfillmentType,
+      fulfillmentStatus: "pending"
+    }));
     const order = {
       id: createId("order"),
       memberId,
-      productId: first.productId,
-      planId: first.planId,
-      productName: first.productName,
-      customerEmail: member.email,
-      customerHwid: input.customerHwid ? normalizeHwid(input.customerHwid) : void 0,
-      orderItems: validated.items.map((item) => ({ ...item, id: createId("order_item") })),
+      productId: orderItems[0].productId,
+      planId: orderItems[0].planId,
+      productName: orderItems.length === 1 ? orderItems[0].productName : `${orderItems[0].productName} + ${orderItems.length - 1} produk lainnya`,
       invoiceNumber,
+      orderItems,
+      customerEmail: member?.email,
+      customerHwid: input.customerHwid ? normalizeHwid(input.customerHwid) : void 0,
       uniqueCode,
-      amount: validated.subtotal,
-      discountAmount: validated.discountAmount,
-      voucherId: validated.voucherId,
+      amount,
       totalAmount,
       status: "pending",
       qrisPayload: generatedQris?.payload ?? "",
       paymentQrUrl: generatedQris?.dataUrl,
       paymentProofStatus: "none",
       createdAt: now.toISOString(),
-      expiresAt: new Date(now.getTime() + invoiceLifetimeHours * 60 * 60 * 1e3).toISOString()
+      expiresAt
     };
     store2.data.orders.push(order);
-    if (validated.voucherId) {
-      const voucher = store2.data.vouchers.find((row) => row.id === validated.voucherId);
-      if (voucher) voucher.usedCount += 1;
-    }
+    await tryAttachSakuRupiahInvoice(store2, order, orderItems);
     store2.save();
     return order;
   });
 }
-function orderAccessToken(orderId, idempotencyKey) {
-  const secret = process.env.ORDER_ACCESS_SECRET ?? process.env.SESSION_SECRET ?? "asistenq-local-order-access";
-  return crypto3.createHmac("sha256", secret).update(`${orderId}:${idempotencyKey}`).digest("hex");
+async function createCheckoutLocked(store2, memberId, productId, now, options) {
+  const member = store2.data.members.find((item) => item.id === memberId);
+  const product = store2.data.products.find((item) => item.id === productId && item.active);
+  if (!member) {
+    throw new Error("member not found");
+  }
+  if (!product) {
+    throw new Error("product not found");
+  }
+  if (options.reusePending) {
+    expirePendingOrders(store2, now);
+    const reusable = store2.data.orders.find((order2) => order2.memberId === memberId && order2.productId === productId && order2.planId === options.planId && order2.status === "pending" && Boolean(order2.expiresAt && new Date(order2.expiresAt) > now));
+    if (reusable) return reusable;
+  }
+  const settings2 = store2.data.deploymentSettings;
+  const hasSakuRupiah = Boolean(settings2?.sakuRupiahApiId?.trim() && settings2?.sakuRupiahApiKey?.trim());
+  const amount = options.price ?? product.price;
+  const qrisFee = amount > 0 ? Math.ceil(amount * 7e-3) : 0;
+  const uniqueCode = amount > 0 && !hasSakuRupiah ? allocateUniquePaymentCode(store2, now) : 0;
+  const totalAmount = amount + qrisFee + uniqueCode;
+  const invoiceNumber = `INV-${now.toISOString().slice(0, 10).replace(/-/g, "")}-${String(store2.data.orders.length + 1).padStart(4, "0")}`;
+  const lifetimeMs = options.lifetimeMinutes === void 0 ? invoiceLifetimeHours * 60 * 60 * 1e3 : options.lifetimeMinutes * 60 * 1e3;
+  const expiresAt = new Date(now.getTime() + lifetimeMs).toISOString();
+  const generatedQris = amount > 0 && !hasSakuRupiah ? await generateDynamicQris(store2.data.deploymentSettings?.qrisStaticPayload ?? "", totalAmount) : void 0;
+  const order = {
+    id: createId("order"),
+    memberId,
+    productId,
+    invoiceNumber,
+    productName: product.name,
+    planId: options.planId,
+    telegramId: options.telegramId,
+    customerEmail: options.customerEmail ?? member.email,
+    customerHwid: options.customerHwid,
+    uniqueCode,
+    amount,
+    totalAmount,
+    status: "pending",
+    qrisPayload: generatedQris?.payload ?? "",
+    paymentQrUrl: generatedQris?.dataUrl,
+    paymentProofStatus: "none",
+    createdAt: now.toISOString(),
+    expiresAt
+  };
+  store2.data.orders.push(order);
+  await tryAttachSakuRupiahInvoice(store2, order);
+  store2.save();
+  return order;
 }
-function canAccessLicenseOrder(order, token) {
-  if (!order.accessTokenHash || !token) return false;
-  const candidate = crypto3.createHash("sha256").update(token).digest("hex");
-  const left = Buffer.from(candidate, "hex");
-  const right = Buffer.from(order.accessTokenHash, "hex");
-  return left.length === right.length && crypto3.timingSafeEqual(left, right);
+function expirePendingOrders(store2, now = /* @__PURE__ */ new Date()) {
+  let count = 0;
+  for (const order of store2.data.orders) {
+    const expiresAt = order.expiresAt ? new Date(order.expiresAt) : new Date(new Date(order.createdAt).getTime() + invoiceLifetimeHours * 60 * 60 * 1e3);
+    if (order.status === "pending" && expiresAt < now) {
+      order.status = "expired";
+      order.expiresAt = expiresAt.toISOString();
+      count += 1;
+    }
+  }
+  if (count > 0) store2.save();
+  return count;
+}
+async function createCheckout(store2, memberId, productId, now = /* @__PURE__ */ new Date(), options = {}) {
+  return serializeCheckout(store2, () => createCheckoutLocked(store2, memberId, productId, now, options));
+}
+async function tryAttachSakuRupiahInvoice(store2, order, items = []) {
+  const settings2 = store2.data.deploymentSettings;
+  let attached = false;
+  if (settings2?.sakuRupiahApiId?.trim() && settings2?.sakuRupiahApiKey?.trim()) {
+    try {
+      const baseUrl = process.env.APP_URL ?? "https://asistenq.com";
+      const callbackUrl = `${baseUrl}/api/payments/sakurupiah/callback`;
+      const returnUrl = `${baseUrl}/member`;
+      const orderItems = items.length > 0 ? items : [{
+        id: createId("orderitem"),
+        productId: order.productId,
+        planId: order.planId ?? "",
+        productName: order.productName ?? "Produk Digital",
+        planName: order.planId ?? "",
+        unitAmount: order.amount,
+        fulfillmentType: "license",
+        fulfillmentStatus: "pending"
+      }];
+      const res = await createSakuRupiahInvoice(settings2, order, orderItems, callbackUrl, returnUrl);
+      if (res.success && res.checkoutUrl) {
+        order.sakuRupiahTrxId = res.trxId;
+        order.sakuRupiahCheckoutUrl = res.checkoutUrl;
+        order.paymentQrUrl = void 0;
+        if (res.qrPayload) order.qrisPayload = res.qrPayload;
+        attached = true;
+      } else {
+        console.warn("[SakuRupiah] Invoice creation response missing checkoutUrl:", res);
+      }
+    } catch (error) {
+      console.error("[SakuRupiah] Invoice creation error:", error instanceof Error ? error.message : error);
+    }
+  }
+  if (!attached) {
+    await ensureQrisFallback(store2, order);
+  }
+}
+async function ensureQrisFallback(store2, order) {
+  if (!order.sakuRupiahCheckoutUrl && (!order.qrisPayload || !order.paymentQrUrl)) {
+    if (order.amount > 0 && (!order.uniqueCode || order.uniqueCode === 0)) {
+      try {
+        order.uniqueCode = allocateUniquePaymentCode(store2, /* @__PURE__ */ new Date());
+        const qrisFee = Math.ceil(order.amount * 7e-3);
+        order.totalAmount = order.amount + qrisFee + order.uniqueCode;
+      } catch (err) {
+        console.warn("[QRIS Fallback] Unique code allocation error:", err);
+      }
+    }
+    try {
+      const payload = store2.data.deploymentSettings?.qrisStaticPayload || defaultQrisStaticPayload;
+      const generatedQris = await generateDynamicQris(payload, order.totalAmount ?? order.amount);
+      if (generatedQris) {
+        order.qrisPayload = generatedQris.payload;
+        order.paymentQrUrl = generatedQris.dataUrl;
+      }
+    } catch (err) {
+      console.error("[QRIS Fallback] QRIS generation error:", err);
+    }
+  }
 }
 async function createLicenseCheckout(store2, input, now = /* @__PURE__ */ new Date()) {
   expirePendingOrders(store2, now);
@@ -967,7 +1384,7 @@ async function createLicenseCheckout(store2, input, now = /* @__PURE__ */ new Da
     member = await createMember(store2, {
       name: email.split("@")[0] || "VJ Studio Buyer",
       email,
-      password: crypto3.randomBytes(24).toString("base64url")
+      password: crypto4.randomBytes(24).toString("base64url")
     });
   }
   let price = plan.price;
@@ -983,75 +1400,21 @@ async function createLicenseCheckout(store2, input, now = /* @__PURE__ */ new Da
   const order = await createCheckout(store2, member.id, product.id, now, {
     planId: plan.id,
     price,
-    lifetimeMinutes: 30
+    lifetimeMinutes: 30,
+    customerEmail: email,
+    customerHwid: hwid
   });
   const accessToken = orderAccessToken(order.id, idempotencyKey);
   Object.assign(order, {
     customerEmail: email,
     customerHwid: hwid,
     idempotencyKey,
-    accessTokenHash: crypto3.createHash("sha256").update(accessToken).digest("hex"),
+    accessTokenHash: crypto4.createHash("sha256").update(accessToken).digest("hex"),
     voucherId,
     discountAmount
   });
   store2.save();
   return { order, accessToken };
-}
-async function createCheckoutLocked(store2, memberId, productId, now, options) {
-  const member = store2.data.members.find((item) => item.id === memberId);
-  const product = store2.data.products.find((item) => item.id === productId && item.active);
-  if (!member) {
-    throw new Error("member not found");
-  }
-  if (!product) {
-    throw new Error("product not found");
-  }
-  if (options.reusePending) {
-    expirePendingOrders(store2, now);
-    const reusable = store2.data.orders.find((order2) => order2.memberId === memberId && order2.productId === productId && order2.planId === options.planId && order2.status === "pending" && Boolean(order2.expiresAt && new Date(order2.expiresAt) > now));
-    if (reusable) return reusable;
-  }
-  const amount = options.price ?? product.price;
-  const uniqueCode = amount > 0 ? allocateUniquePaymentCode(store2, now) : 0;
-  const totalAmount = amount + uniqueCode;
-  const invoiceNumber = `INV-${now.toISOString().slice(0, 10).replace(/-/g, "")}-${String(store2.data.orders.length + 1).padStart(4, "0")}`;
-  const lifetimeMs = options.lifetimeMinutes === void 0 ? invoiceLifetimeHours * 60 * 60 * 1e3 : options.lifetimeMinutes * 60 * 1e3;
-  const expiresAt = new Date(now.getTime() + lifetimeMs).toISOString();
-  const generatedQris = amount > 0 ? await generateDynamicQris(store2.data.deploymentSettings?.qrisStaticPayload ?? "", totalAmount) : void 0;
-  const order = {
-    id: createId("order"),
-    memberId,
-    productId,
-    invoiceNumber,
-    productName: product.name,
-    planId: options.planId,
-    telegramId: options.telegramId,
-    uniqueCode,
-    amount,
-    totalAmount,
-    status: "pending",
-    qrisPayload: generatedQris?.payload ?? "",
-    paymentQrUrl: generatedQris?.dataUrl,
-    paymentProofStatus: "none",
-    createdAt: now.toISOString(),
-    expiresAt
-  };
-  store2.data.orders.push(order);
-  store2.save();
-  return order;
-}
-function expirePendingOrders(store2, now = /* @__PURE__ */ new Date()) {
-  let count = 0;
-  for (const order of store2.data.orders) {
-    const expiresAt = order.expiresAt ? new Date(order.expiresAt) : new Date(new Date(order.createdAt).getTime() + invoiceLifetimeHours * 60 * 60 * 1e3);
-    if (order.status === "pending" && expiresAt < now) {
-      order.status = "expired";
-      order.expiresAt = expiresAt.toISOString();
-      count += 1;
-    }
-  }
-  if (count > 0) store2.save();
-  return count;
 }
 function generateToolLicense(store2, input) {
   const product = findProductBySlug(store2, input.productSlug);
@@ -1275,7 +1638,7 @@ function publicCatalog(store2) {
     free: publicProducts.filter((product) => product.price === 0 || product.type === "free")
   };
 }
-function markOrderPaid(store2, orderId, paidAt = /* @__PURE__ */ new Date()) {
+function markOrderPaid(store2, orderId, paidAt = /* @__PURE__ */ new Date(), options) {
   const order = store2.data.orders.find((item) => item.id === orderId);
   if (!order) {
     throw new Error("order not found");
@@ -1289,7 +1652,7 @@ function markOrderPaid(store2, orderId, paidAt = /* @__PURE__ */ new Date()) {
     if (!subscription2) throw new Error("paid order subscription not found");
     return { order, subscription: subscription2 };
   }
-  if (order.status !== "pending") {
+  if (order.status !== "pending" && (!options?.allowExpired || order.status !== "expired")) {
     throw new Error(`order ${order.status} cannot be marked paid`);
   }
   order.status = "paid";
@@ -1301,8 +1664,39 @@ function markOrderPaid(store2, orderId, paidAt = /* @__PURE__ */ new Date()) {
     paidAt
   });
   store2.data.subscriptions.push(subscription);
+  const member = store2.data.members.find((item) => item.id === order.memberId);
+  const plans = store2.data.plans.filter((p) => p.productId === product.id);
+  if (order.customerHwid && member && (product.type === "tool" || product.fulfillmentType === "license" || plans.length > 0)) {
+    const plan = plans.find((p) => p.id === order.planId || p.code === order.planId) ?? plans[0];
+    const planCode = plan?.code ?? "1M";
+    try {
+      const existing = store2.data.licenses.find((l) => l.orderId === order.id);
+      if (!existing) {
+        const createdLicense = generateToolLicense(store2, {
+          productSlug: product.slug,
+          planCode,
+          email: member.email,
+          hwid: order.customerHwid,
+          now: paidAt
+        });
+        createdLicense.orderId = order.id;
+      }
+    } catch (err) {
+      console.error("Auto license generation error:", err);
+    }
+  }
   store2.save();
   return { order, subscription };
+}
+function deleteOrderRecord(store2, orderId) {
+  const index = store2.data.orders.findIndex((item) => item.id === orderId);
+  if (index === -1) {
+    throw new Error("order not found");
+  }
+  const [deleted] = store2.data.orders.splice(index, 1);
+  store2.data.licenses = store2.data.licenses.filter((license) => license.orderId !== orderId);
+  store2.save();
+  return deleted;
 }
 function listPendingOrders(store2, limit = 10) {
   expirePendingOrders(store2);
@@ -1331,7 +1725,7 @@ function markOrderPaidByInvoice(store2, invoiceNumber, paidAt = /* @__PURE__ */ 
     const subscription = store2.data.subscriptions.find((item) => item.memberId === order.memberId && item.productId === order.productId);
     if (subscription) return { order, subscription };
   }
-  return markOrderPaid(store2, order.id, paidAt);
+  return markOrderPaid(store2, order.id, paidAt, { allowExpired: true });
 }
 function generateLicenseForPaidOrder(store2, input) {
   const order = store2.data.orders.find((item) => item.invoiceNumber === input.invoiceNumber || item.id === input.invoiceNumber);
@@ -1342,7 +1736,13 @@ function generateLicenseForPaidOrder(store2, input) {
     throw new Error("order belum paid");
   }
   const existing = store2.data.licenses.find((item) => item.orderId === order.id);
-  if (existing) return existing;
+  if (existing) {
+    if (input.hwid && existing.hwid !== input.hwid) {
+      existing.hwid = input.hwid;
+      store2.save();
+    }
+    return existing;
+  }
   const product = store2.data.products.find((item) => item.id === order.productId);
   const member = store2.data.members.find((item) => item.id === order.memberId);
   if (!product) {
@@ -1367,7 +1767,7 @@ function generateLicenseForPaidOrder(store2, input) {
   });
   license.orderId = order.id;
   store2.data.auditLogs.push({
-    id: crypto3.randomUUID(),
+    id: crypto4.randomUUID(),
     actorId: order.telegramId ?? order.memberId,
     action: "telegram.license.fulfilled",
     targetType: "license",
@@ -1506,7 +1906,7 @@ async function updateOwnMemberProfile(store2, memberId, input) {
 import bcrypt2 from "bcryptjs";
 
 // src/server/site-content.ts
-import crypto4 from "crypto";
+import crypto5 from "crypto";
 var initialPages = [
   { slug: "cara-pembelian", title: "Cara Pembelian", summary: "Panduan membeli produk digital di AsistenQ.", body: "Pilih produk dan paket, masukkan ke keranjang, login sebagai member, lalu bayar tepat sesuai nominal QRIS pada invoice. Setelah pembayaran diverifikasi, akses produk tersedia di akun member.", published: true },
   { slug: "cara-aktivasi", title: "Cara Aktivasi & Pengiriman", summary: "Cara menerima dan mengaktifkan produk.", body: "Lisensi, file, tautan akses, atau kelas dikirim ke akun member sesuai jenis produk. Untuk aplikasi berlisensi, ikuti petunjuk HWID dan masukkan token aktivasi yang diterima.", published: true },
@@ -1520,7 +1920,7 @@ var initialPages = [
 function seedSiteContent(store2, now = /* @__PURE__ */ new Date()) {
   let changed = false;
   for (const page of initialPages) if (!store2.data.contentPages.some((row) => row.slug === page.slug)) {
-    store2.data.contentPages.push({ ...page, id: crypto4.randomUUID(), updatedAt: now.toISOString() });
+    store2.data.contentPages.push({ ...page, id: crypto5.randomUUID(), updatedAt: now.toISOString() });
     changed = true;
   }
   if (changed) store2.save();
@@ -1550,7 +1950,14 @@ function syncLegacyMixin9Plans(store2, product) {
   const productPlans = store2.data.plans.filter((plan) => plan.productId === product.id);
   const hasLegacyFreePlan = productPlans.some((plan) => plan.code === "DEFAULT" && plan.price === 0);
   const hasExpectedPlans = ["1M", "6M", "1Y"].every((code) => productPlans.some((plan) => plan.code === code));
-  if (product.price !== 0 && !hasLegacyFreePlan && hasExpectedPlans) return;
+  if (!hasLegacyFreePlan && hasExpectedPlans) {
+    const plan1M = productPlans.find((p) => p.code === "1M");
+    if (plan1M && product.price > 0 && plan1M.price !== product.price) {
+      plan1M.price = product.price;
+      store2.save();
+    }
+    return;
+  }
   Object.assign(product, {
     accessMode: "paid",
     billingPeriod: "monthly",
@@ -1558,7 +1965,8 @@ function syncLegacyMixin9Plans(store2, product) {
     compareAtPrice: 199e3,
     discountLabel: "Paket Fleksibel",
     promoText: "Batch mixing audio cepat untuk creator. Pilih paket 1 bulan, 6 bulan, atau 1 tahun.",
-    landingTemplate: "mixin9",
+    landingPath: void 0,
+    landingTemplate: void 0,
     ctaLabel: "Beli MIXIN9 Sekarang",
     accessRequirement: "Selesaikan pembayaran QRIS untuk membuka lisensi MIXIN9.",
     fulfillmentType: "license",
@@ -1571,7 +1979,9 @@ function syncLegacyMixin9Plans(store2, product) {
     { code: "1Y", name: "Lisensi 1 Tahun", price: 155e3, billingPeriod: "annual", durationDays: 365, isFree: false, isActive: true, sortOrder: 30 }
   ].forEach((plan) => {
     const record = createPlanRecord(store2, { productId: product.id, ...plan });
-    if (record.price === 0 || record.code === plan.code) Object.assign(record, plan);
+    if (record.price === 0 && plan.price !== 0) {
+      record.price = plan.price;
+    }
   });
   store2.save();
 }
@@ -1634,6 +2044,14 @@ async function seedInitialData(store2) {
     { title: "Update Berkala", description: "Pembaruan fitur dan perbaikan tersedia selama lisensi aktif." }
   ];
   vjStudio.features ??= vjStudio.benefits;
+  vjStudio.badge ??= "PRO";
+  vjStudio.fulfillmentType ??= "license";
+  vjStudio.benefits ??= [
+    { title: "Workflow Otomatis", description: "Membantu proses produksi video lebih cepat dan konsisten." },
+    { title: "Ringan & Cepat", description: "Dirancang untuk workflow creator pada perangkat Windows." },
+    { title: "Update Berkala", description: "Pembaruan fitur dan perbaikan tersedia selama lisensi aktif." }
+  ];
+  vjStudio.features ??= vjStudio.benefits;
   vjStudio.targetUsers ??= ["YouTuber", "Content Creator", "Digital Agency", "Freelancer"];
   vjStudio.developer ??= "AsistenQ Team";
   vjStudio.compatibility ??= "Windows 10/11 (64-bit)";
@@ -1641,12 +2059,12 @@ async function seedInitialData(store2) {
   vjStudio.sku ??= "AQ-VJSP-PRO";
   [
     { code: "TRIAL", name: "Trial 1 Hari", price: 0, billingPeriod: "trial", durationDays: 1, isFree: true, isActive: false },
-    { code: "1M", name: "Lisensi 1 Bulan", price: 49900, billingPeriod: "monthly", durationDays: 30, isFree: false, isActive: true, sortOrder: 10 },
-    { code: "2M", name: "Lisensi 2 Bulan", price: 85900, billingPeriod: "monthly", durationDays: 60, isFree: false, isActive: false },
-    { code: "3M", name: "Lisensi 3 Bulan", price: 129900, billingPeriod: "monthly", durationDays: 90, isFree: false, isActive: true, sortOrder: 20 },
-    { code: "6M", name: "Lisensi 6 Bulan", price: 225900, billingPeriod: "monthly", durationDays: 180, isFree: false, isActive: true, sortOrder: 30, badge: "Best Seller", highlighted: true },
-    { code: "1Y", name: "Lisensi 1 Tahun", price: 399e3, billingPeriod: "annual", durationDays: 365, isFree: false, isActive: true, sortOrder: 40 },
-    { code: "LIFETIME", name: "Lisensi Lifetime", price: 799e3, billingPeriod: "lifetime", durationDays: null, isFree: false, isActive: false }
+    { code: "1M", name: "Lisensi 1 Bulan", price: 5e4, billingPeriod: "monthly", durationDays: 30, isFree: false, isActive: true, sortOrder: 10 },
+    { code: "2M", name: "Lisensi 2 Bulan", price: 85e3, billingPeriod: "monthly", durationDays: 60, isFree: false, isActive: false },
+    { code: "3M", name: "Lisensi 3 Bulan", price: 13e4, billingPeriod: "monthly", durationDays: 90, isFree: false, isActive: true, sortOrder: 20 },
+    { code: "6M", name: "Lisensi 6 Bulan", price: 225e3, billingPeriod: "monthly", durationDays: 180, isFree: false, isActive: true, sortOrder: 30, badge: "Best Seller", highlighted: true },
+    { code: "1Y", name: "Lisensi 1 Tahun", price: 4e5, billingPeriod: "annual", durationDays: 365, isFree: false, isActive: true, sortOrder: 40 },
+    { code: "LIFETIME", name: "Lisensi Lifetime", price: 8e5, billingPeriod: "lifetime", durationDays: null, isFree: false, isActive: false }
   ].forEach((plan) => {
     const record = createPlanRecord(store2, {
       productId: vjStudio.id,
@@ -1666,7 +2084,7 @@ async function seedInitialData(store2) {
     category: "E-Learning",
     visibility: "public",
     billingPeriod: "annual",
-    price: 799e3,
+    price: 8e5,
     featured: true,
     headline: "Kelas tahunan untuk membangun channel YouTube dengan workflow yang rapi.",
     description: "Akses video tutorial, materi pendukung, dan update kelas untuk produksi konten YouTube.",
@@ -1686,8 +2104,8 @@ async function seedInitialData(store2) {
     discountLabel: "Paket Fleksibel",
     promoText: "Batch mixing audio cepat untuk creator. Pilih paket 1 bulan, 6 bulan, atau 1 tahun.",
     logoUrl: "",
-    landingPath: "/mixin9",
-    landingTemplate: "mixin9",
+    landingPath: void 0,
+    landingTemplate: void 0,
     ctaLabel: "Beli MIXIN9 Sekarang",
     accessRequirement: "Selesaikan pembayaran QRIS untuk membuka lisensi MIXIN9.",
     fulfillmentType: "license",
@@ -1753,7 +2171,7 @@ async function seedInitialData(store2) {
       category: "Video Editing",
       visibility: "private",
       billingPeriod: "monthly",
-      price: 99e3,
+      price: 1e5,
       featured: false,
       headline: "Rapikan workflow editing YouTube lebih cepat.",
       description: "Tools awal untuk membantu creator memangkas proses kerja video harian.",
@@ -1769,7 +2187,7 @@ async function seedInitialData(store2) {
       category: "E-Learning",
       visibility: "private",
       billingPeriod: "annual",
-      price: 799e3,
+      price: 8e5,
       featured: false,
       headline: "Akses tahunan ke kelas video dan materi creator.",
       description: "Materi premium untuk editing, produksi konten, dan workflow YouTube.",
@@ -1782,96 +2200,17 @@ async function seedInitialData(store2) {
       createPlanRecord(store2, { productId: product.id, code: "DEFAULT", name: product.price === 0 ? "Akses Gratis" : "Paket Produk", price: product.price, billingPeriod: product.billingPeriod, durationDays: product.billingPeriod === "annual" ? 365 : product.billingPeriod === "monthly" ? 30 : null, isFree: product.price === 0, isActive: true, sortOrder: 10 });
     }
   }
+  for (const plan of store2.data.plans) {
+    if (plan.price % 1e3 === 900 || plan.price % 1e3 === 990) {
+      plan.price = Math.round(plan.price / 1e3) * 1e3;
+    }
+  }
+  for (const product of store2.data.products) {
+    if (product.price % 1e3 === 900 || product.price % 1e3 === 990) {
+      product.price = Math.round(product.price / 1e3) * 1e3;
+    }
+  }
   store2.save();
-}
-
-// src/server/store.ts
-import fs4 from "fs";
-import path4 from "path";
-var defaultQrisStaticPayload = "00020101021126570011ID.DANA.WWW011893600915303265462802090326546280303UMI51440014ID.CO.QRIS.WWW0215ID10265329452210303UMI5204504553033605802ID5905ZIQVA6011Kab. Malang6105651676304F3F6";
-var emptyData = () => ({
-  admins: [],
-  members: [],
-  passwordResets: [],
-  products: [],
-  plans: [],
-  licenses: [],
-  vouchers: [],
-  announcements: [],
-  bannedHwids: [],
-  licenseDeviceResetEvents: [],
-  orders: [],
-  downloadGrants: [],
-  subscriptions: [],
-  auditLogs: [],
-  toolAnalyticsEvents: [],
-  accessGrants: [],
-  contentPages: [],
-  subscribers: [],
-  deploymentSettings: {
-    githubRepo: "effands/asistenq",
-    githubBranch: "master",
-    qrisStaticPayload: defaultQrisStaticPayload
-  }
-});
-function normalizeData(data) {
-  return {
-    ...emptyData(),
-    ...data,
-    admins: data.admins ?? [],
-    members: data.members ?? [],
-    passwordResets: data.passwordResets ?? [],
-    products: data.products ?? [],
-    plans: data.plans ?? [],
-    licenses: data.licenses ?? [],
-    vouchers: data.vouchers ?? [],
-    announcements: data.announcements ?? [],
-    bannedHwids: data.bannedHwids ?? [],
-    licenseDeviceResetEvents: data.licenseDeviceResetEvents ?? [],
-    orders: data.orders ?? [],
-    downloadGrants: data.downloadGrants ?? [],
-    subscriptions: data.subscriptions ?? [],
-    auditLogs: data.auditLogs ?? [],
-    toolAnalyticsEvents: data.toolAnalyticsEvents ?? [],
-    accessGrants: data.accessGrants ?? [],
-    contentPages: data.contentPages ?? [],
-    subscribers: data.subscribers ?? [],
-    deploymentSettings: {
-      githubRepo: "effands/asistenq",
-      githubBranch: "master",
-      qrisStaticPayload: defaultQrisStaticPayload,
-      ...data.deploymentSettings ?? {}
-    }
-  };
-}
-function createMemoryStore(initialData = emptyData()) {
-  return {
-    data: structuredClone(normalizeData(initialData)),
-    save() {
-    },
-    reset() {
-      this.data = emptyData();
-    }
-  };
-}
-function createFileStore(filePath = path4.resolve("data/asistenq.json")) {
-  const dir = path4.dirname(filePath);
-  if (!fs4.existsSync(dir)) {
-    fs4.mkdirSync(dir, { recursive: true });
-  }
-  if (!fs4.existsSync(filePath)) {
-    fs4.writeFileSync(filePath, JSON.stringify(emptyData(), null, 2));
-  }
-  return {
-    data: normalizeData(JSON.parse(fs4.readFileSync(filePath, "utf-8"))),
-    save() {
-      fs4.writeFileSync(filePath, JSON.stringify(this.data, null, 2));
-    },
-    reset() {
-      this.data = emptyData();
-      this.save();
-    }
-  };
 }
 
 // src/server/mailer.ts
@@ -2060,7 +2399,7 @@ function analyticsOverview(store2, now = /* @__PURE__ */ new Date()) {
 }
 
 // src/server/telegram-commerce.ts
-import crypto5 from "crypto";
+import crypto6 from "crypto";
 import fs6 from "fs";
 import path6 from "path";
 function validatedDownloadSource(type, source) {
@@ -2145,7 +2484,7 @@ function attachTelegramDigitalFile(store2, productId, filePath, actorTelegramId 
   return updated;
 }
 function audit(store2, actorId, action, targetType, targetId, now) {
-  store2.data.auditLogs.push({ id: crypto5.randomUUID(), actorId, action, targetType, targetId, createdAt: now.toISOString() });
+  store2.data.auditLogs.push({ id: crypto6.randomUUID(), actorId, action, targetType, targetId, createdAt: now.toISOString() });
 }
 function assertConfiguredOwner(store2, telegramId) {
   const configured2 = store2.data.deploymentSettings?.telegramOwnerId;
@@ -2165,7 +2504,7 @@ async function registerTelegramBuyer(store2, input) {
   return createMember(store2, {
     ...input,
     telegramId,
-    password: crypto5.randomBytes(24).toString("base64url")
+    password: crypto6.randomBytes(24).toString("base64url")
   });
 }
 function listTelegramCatalog(store2) {
@@ -2307,10 +2646,10 @@ function listTelegramBuyerLicenses(store2, telegramId) {
 }
 
 // src/server/digital-downloads.ts
-import crypto6 from "crypto";
+import crypto7 from "crypto";
 import fs7 from "fs";
 import path7 from "path";
-var hashToken = (token) => crypto6.createHash("sha256").update(token).digest("hex");
+var hashToken = (token) => crypto7.createHash("sha256").update(token).digest("hex");
 function isPrivateHost(hostname) {
   const host = hostname.toLowerCase().replace(/^\[|\]$/g, "");
   if (host === "localhost" || host === "::1" || host.endsWith(".localhost")) return true;
@@ -2348,10 +2687,10 @@ function createDownloadGrant(store2, orderId, now, fixedToken, action) {
   validateDownloadSource(product.downloadSourceUrl);
   const existing = store2.data.downloadGrants.find((item) => item.orderId === order.id && new Date(item.expiresAt) > now && item.downloadCount < item.maxDownloads);
   if (existing) throw new Error("gunakan penerbitan ulang untuk mengganti token aktif");
-  const token = fixedToken ?? crypto6.randomBytes(32).toString("base64url");
-  const grant = { id: crypto6.randomUUID(), orderId: order.id, memberId: order.memberId, productId: product.id, tokenHash: hashToken(token), expiresAt: new Date(now.getTime() + 864e5).toISOString(), maxDownloads: 3, downloadCount: 0, createdAt: now.toISOString() };
+  const token = fixedToken ?? crypto7.randomBytes(32).toString("base64url");
+  const grant = { id: crypto7.randomUUID(), orderId: order.id, memberId: order.memberId, productId: product.id, tokenHash: hashToken(token), expiresAt: new Date(now.getTime() + 864e5).toISOString(), maxDownloads: 3, downloadCount: 0, createdAt: now.toISOString() };
   store2.data.downloadGrants.push(grant);
-  store2.data.auditLogs.push({ id: crypto6.randomUUID(), actorId: order.telegramId ?? order.memberId, action: `telegram.download.${action}`, targetType: "download_grant", targetId: grant.id, createdAt: now.toISOString() });
+  store2.data.auditLogs.push({ id: crypto7.randomUUID(), actorId: order.telegramId ?? order.memberId, action: `telegram.download.${action}`, targetType: "download_grant", targetId: grant.id, createdAt: now.toISOString() });
   store2.save();
   return { grant, token };
 }
@@ -2389,7 +2728,7 @@ function listBuyerDownloadGrants(store2, telegramId, _baseUrl, now = /* @__PURE_
 }
 
 // src/server/order-fulfillment.ts
-import crypto7 from "crypto";
+import crypto8 from "crypto";
 function legacyItem(store2, orderId) {
   const order = store2.data.orders.find((row) => row.id === orderId);
   const product = store2.data.products.find((row) => row.id === order.productId);
@@ -2420,29 +2759,33 @@ function fulfillPaidOrder(store2, orderId, now = /* @__PURE__ */ new Date()) {
         const license = existing ?? generateToolLicense(store2, { productSlug: product.slug, planCode: plan.code, email: order.customerEmail ?? member.email, hwid: order.customerHwid, now });
         license.orderId = order.id;
         item.fulfillmentReference = license.id;
+        item.fulfillmentStatus = "fulfilled";
+        delete item.fulfillmentError;
       } else if (item.fulfillmentType === "download") {
         if (!product.downloadSourceUrl) throw new Error("file produk digital belum diatur");
         validateDownloadSource(product.downloadSourceUrl);
         let grant = store2.data.downloadGrants.find((row) => row.orderId === order.id && row.orderItemId === item.id);
         if (!grant) {
-          const token = crypto7.randomBytes(32).toString("base64url");
-          grant = { id: crypto7.randomUUID(), orderId: order.id, orderItemId: item.id, memberId: member.id, productId: product.id, tokenHash: crypto7.createHash("sha256").update(token).digest("hex"), expiresAt: new Date(now.getTime() + 864e5).toISOString(), maxDownloads: 3, downloadCount: 0, createdAt: now.toISOString() };
+          const token = crypto8.randomBytes(32).toString("base64url");
+          grant = { id: crypto8.randomUUID(), orderId: order.id, orderItemId: item.id, memberId: member.id, productId: product.id, tokenHash: crypto8.createHash("sha256").update(token).digest("hex"), expiresAt: new Date(now.getTime() + 864e5).toISOString(), maxDownloads: 3, downloadCount: 0, createdAt: now.toISOString() };
           store2.data.downloadGrants.push(grant);
           item.fulfillmentReference = token;
         }
+        item.fulfillmentStatus = "fulfilled";
+        delete item.fulfillmentError;
       } else {
         const type = item.fulfillmentType;
         let grant = store2.data.accessGrants.find((row) => row.orderId === order.id && row.orderItemId === item.id);
         if (!grant) {
           const resource = type === "url" ? product.externalUrl : product.accessUrl;
           if (!resource) throw new Error("resource akses produk belum diatur");
-          grant = { id: crypto7.randomUUID(), orderId: order.id, orderItemId: item.id, memberId: member.id, productId: product.id, type, resource, createdAt: now.toISOString() };
+          grant = { id: crypto8.randomUUID(), orderId: order.id, orderItemId: item.id, memberId: member.id, productId: product.id, type, resource, createdAt: now.toISOString() };
           store2.data.accessGrants.push(grant);
         }
         item.fulfillmentReference = grant.id;
+        item.fulfillmentStatus = "fulfilled";
+        delete item.fulfillmentError;
       }
-      item.fulfillmentStatus = "fulfilled";
-      delete item.fulfillmentError;
     } catch (error) {
       item.fulfillmentStatus = "failed";
       item.fulfillmentError = error instanceof Error ? error.message : "fulfillment gagal";
@@ -2453,7 +2796,7 @@ function fulfillPaidOrder(store2, orderId, now = /* @__PURE__ */ new Date()) {
 }
 
 // src/server/subscribers.ts
-import crypto8 from "crypto";
+import crypto9 from "crypto";
 function subscribeProductUpdates(store2, rawEmail, source = "footer", now = /* @__PURE__ */ new Date()) {
   const email = rawEmail.trim().toLowerCase();
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new Error("email tidak valid");
@@ -2463,7 +2806,7 @@ function subscribeProductUpdates(store2, rawEmail, source = "footer", now = /* @
     store2.save();
     return existing;
   }
-  const subscriber = { id: crypto8.randomUUID(), email, consentedAt: now.toISOString(), status: "active", source };
+  const subscriber = { id: crypto9.randomUUID(), email, consentedAt: now.toISOString(), status: "active", source };
   store2.data.subscribers.push(subscriber);
   store2.save();
   return subscriber;
@@ -2474,7 +2817,7 @@ function subscribersCsv(store2) {
 }
 
 // src/server/product-media-storage.ts
-import crypto9 from "crypto";
+import crypto10 from "crypto";
 import fs8 from "fs";
 import path8 from "path";
 var allowed = /* @__PURE__ */ new Map([
@@ -2494,7 +2837,7 @@ function saveProductMedia(input) {
   const root = path8.resolve(input.root ?? productMediaRoot);
   const directory = path8.join(root, input.productId);
   fs8.mkdirSync(directory, { recursive: true });
-  const fileName = `${crypto9.randomUUID()}${rule.output}`;
+  const fileName = `${crypto10.randomUUID()}${rule.output}`;
   const absolutePath = path8.join(directory, fileName);
   fs8.writeFileSync(absolutePath, input.buffer, { flag: "wx" });
   return { absolutePath, relativePath: `${input.productId}/${fileName}`, bytes: input.buffer.length, mimeType: input.mimeType };
@@ -2519,7 +2862,17 @@ var cpanelNodeBin = path9.join(process.env.HOME ?? "", "nodevenv/repositories/as
 if (!isProduction) {
   app.use(cors({ origin: ["http://127.0.0.1:3000", "http://localhost:3000"] }));
 }
-app.use(express.json());
+app.use(express.json({
+  verify: (req, _res, buf) => {
+    req.rawBody = buf.toString("utf-8");
+  }
+}));
+app.use(express.urlencoded({
+  extended: true,
+  verify: (req, _res, buf) => {
+    req.rawBody = buf.toString("utf-8");
+  }
+}));
 var landingImportDir = path9.resolve("data/landing-imports");
 var productAssetDir = path9.resolve("data/product-assets");
 var digitalProductDir = path9.resolve("data/digital-products");
@@ -2738,7 +3091,12 @@ var deploymentSettingsSchema = z.object({
   smtpUser: z.string().optional(),
   smtpPass: z.string().optional(),
   mailFrom: z.string().optional(),
-  qrisStaticPayload: z.string().optional()
+  qrisStaticPayload: z.string().optional(),
+  sakuRupiahApiId: z.string().optional(),
+  sakuRupiahApiKey: z.string().optional(),
+  sakuRupiahMode: z.enum(["sandbox", "production"]).optional(),
+  sakuRupiahMethod: z.string().optional(),
+  sakuRupiahMerchantFee: z.number().optional()
 });
 function publicProduct(product) {
   const metrics = analyticsOverview(store).products.find((item) => item.productId === product.id);
@@ -2896,6 +3254,20 @@ async function emailLicense(license, invoiceNumber) {
     });
   } catch (error) {
     console.warn("License email skipped:", error instanceof Error ? error.message : error);
+  }
+}
+async function dispatchFulfillmentEmails(store2, order, previousItems) {
+  if (!order.orderItems) return;
+  const newlyFulfilled = order.orderItems.filter(
+    (item) => item.fulfillmentStatus === "fulfilled" && (!previousItems || !previousItems.find((p) => p.id === item.id && p.fulfillmentStatus === "fulfilled"))
+  );
+  for (const item of newlyFulfilled) {
+    if (item.fulfillmentType === "license" && item.fulfillmentReference) {
+      const license = store2.data.licenses.find((l) => l.id === item.fulfillmentReference);
+      if (license) {
+        await emailLicense(license, order.invoiceNumber ?? order.id).catch((err) => console.error("Gagal mengirim auto lisensi:", err));
+      }
+    }
   }
 }
 function hasActiveProductAccess(memberId, productId) {
@@ -3321,12 +3693,22 @@ app.get("/api/license/verify-voucher", (req, res) => {
   }));
 });
 app.post("/api/license/activate", (req, res) => {
-  const body = licenseTokenSchema.parse(req.body);
-  res.json(activateLicense(store, body));
+  try {
+    const body = licenseTokenSchema.parse(req.body);
+    res.json(activateLicense(store, body));
+  } catch (error) {
+    const message2 = error instanceof z.ZodError ? error.issues.map((issue) => issue.message).join(", ") : error instanceof Error ? error.message : "Gagal mengaktifkan lisensi.";
+    res.status(400).json({ message: message2 });
+  }
 });
 app.post("/api/license/verify", (req, res) => {
-  const body = licenseTokenSchema.parse(req.body);
-  res.json(verifyLicense(store, body));
+  try {
+    const body = licenseTokenSchema.parse(req.body);
+    res.json(verifyLicense(store, body));
+  } catch (error) {
+    const message2 = error instanceof z.ZodError ? error.issues.map((issue) => issue.message).join(", ") : error instanceof Error ? error.message : "Gagal verifikasi lisensi.";
+    res.status(400).json({ message: message2 });
+  }
 });
 app.post("/api/tool-events", (req, res) => {
   const eventSecret = process.env.TOOL_EVENT_SECRET;
@@ -3818,6 +4200,12 @@ app.get("/api/admin/deploy/settings", requireSession, requireAdminScope("product
     maskedSmtpPass: maskedSecret(smtpPass),
     mailFrom: settings2.mailFrom ?? process.env.MAIL_FROM ?? "AsistenQ <cs@asistenq.com>",
     qrisStaticPayload: settings2.qrisStaticPayload ?? "",
+    sakuRupiahApiId: settings2.sakuRupiahApiId ?? "",
+    hasSakuRupiahApiKey: Boolean(settings2.sakuRupiahApiKey),
+    maskedSakuRupiahApiKey: maskedSecret(settings2.sakuRupiahApiKey ?? ""),
+    sakuRupiahMode: settings2.sakuRupiahMode ?? "production",
+    sakuRupiahMethod: settings2.sakuRupiahMethod ?? "QRIS",
+    sakuRupiahMerchantFee: settings2.sakuRupiahMerchantFee ?? 1,
     botStatus,
     updatedAt: settings2.updatedAt
   });
@@ -3839,6 +4227,11 @@ app.post("/api/admin/deploy/settings", requireSession, requireAdminScope("produc
   const nextSmtpUser = body.smtpUser?.trim() || current.smtpUser || process.env.SMTP_USER || "cs@asistenq.com";
   const nextMailFrom = body.mailFrom?.trim() || current.mailFrom || process.env.MAIL_FROM || "AsistenQ <cs@asistenq.com>";
   const isSmtpSave = Boolean(body.smtpHost || body.smtpPort || body.smtpUser || body.mailFrom || body.smtpPass !== void 0);
+  const nextSakuRupiahApiKey = body.sakuRupiahApiKey?.trim() || current.sakuRupiahApiKey || "";
+  const nextSakuRupiahApiId = body.sakuRupiahApiId !== void 0 ? body.sakuRupiahApiId.trim() : current.sakuRupiahApiId ?? "";
+  const nextSakuRupiahMode = body.sakuRupiahMode || current.sakuRupiahMode || "production";
+  const nextSakuRupiahMethod = body.sakuRupiahMethod || current.sakuRupiahMethod || "QRIS";
+  const nextSakuRupiahMerchantFee = body.sakuRupiahMerchantFee !== void 0 ? body.sakuRupiahMerchantFee : current.sakuRupiahMerchantFee ?? 1;
   if (isSmtpSave && !nextSmtpPass) {
     res.status(400).json({ message: "Password SMTP belum tersimpan. Isi kolom SMTP Password lalu klik Simpan SMTP lagi." });
     return;
@@ -3859,13 +4252,18 @@ app.post("/api/admin/deploy/settings", requireSession, requireAdminScope("produc
       smtpPass: nextSmtpPass,
       mailFrom: nextMailFrom,
       qrisStaticPayload: nextQrisStaticPayload,
+      sakuRupiahApiId: nextSakuRupiahApiId,
+      sakuRupiahApiKey: nextSakuRupiahApiKey,
+      sakuRupiahMode: nextSakuRupiahMode,
+      sakuRupiahMethod: nextSakuRupiahMethod,
+      sakuRupiahMerchantFee: nextSakuRupiahMerchantFee,
       updatedAt: (/* @__PURE__ */ new Date()).toISOString()
     };
     store.save();
     const botStatus = getTelegramBotStatus(store);
     res.json({
       ok: true,
-      message: "Token GitHub tersimpan.",
+      message: "Pengaturan tersimpan.",
       githubRepo: store.data.deploymentSettings.githubRepo,
       githubBranch: store.data.deploymentSettings.githubBranch,
       hasGithubToken: Boolean(nextToken),
@@ -3880,6 +4278,12 @@ app.post("/api/admin/deploy/settings", requireSession, requireAdminScope("produc
       maskedSmtpPass: maskedSecret(nextSmtpPass),
       mailFrom: nextMailFrom,
       qrisStaticPayload: nextQrisStaticPayload,
+      sakuRupiahApiId: nextSakuRupiahApiId,
+      hasSakuRupiahApiKey: Boolean(nextSakuRupiahApiKey),
+      maskedSakuRupiahApiKey: maskedSecret(nextSakuRupiahApiKey),
+      sakuRupiahMode: nextSakuRupiahMode,
+      sakuRupiahMethod: nextSakuRupiahMethod,
+      sakuRupiahMerchantFee: nextSakuRupiahMerchantFee,
       botStatus,
       updatedAt: store.data.deploymentSettings.updatedAt
     });
@@ -4020,7 +4424,7 @@ var digitalProductUpload = multer({
       fs9.mkdirSync(digitalProductDir, { recursive: true });
       callback(null, digitalProductDir);
     },
-    filename: (_req, _file, callback) => callback(null, `${crypto10.randomUUID()}.zip`)
+    filename: (_req, _file, callback) => callback(null, `${crypto11.randomUUID()}.zip`)
   }),
   limits: { fileSize: 50 * 1024 * 1024, files: 1 },
   fileFilter: (_req, file, callback) => {
@@ -4273,8 +4677,25 @@ app.post("/api/admin/deploy/update", requireSession, requireAdminScope("products
     });
   }
 });
-app.get("/api/admin/orders", requireSession, requireAdminScope("orders"), (_req, res) => {
+app.get("/api/admin/orders", requireSession, requireAdminScope("orders"), async (_req, res) => {
   expirePendingOrders(store);
+  const settings2 = store.data.deploymentSettings;
+  if (settings2?.sakuRupiahApiId?.trim() && settings2?.sakuRupiahApiKey?.trim()) {
+    const pendingOrders = store.data.orders.filter((o) => o.status === "pending");
+    for (const order of pendingOrders.slice(0, 10)) {
+      try {
+        const check = await checkSakuRupiahTransactionStatus(settings2, order.invoiceNumber ?? order.id, order.sakuRupiahTrxId);
+        if (check.isPaid && order.status !== "paid") {
+          const { order: paidOrder } = markOrderPaidByInvoice(store, order.invoiceNumber ?? order.id);
+          const previousItems = paidOrder.orderItems ? JSON.parse(JSON.stringify(paidOrder.orderItems)) : [];
+          fulfillPaidOrder(store, paidOrder.id);
+          void dispatchFulfillmentEmails(store, paidOrder, previousItems);
+        }
+      } catch (e) {
+        console.warn("Auto-check SakuRupiah status failed:", e);
+      }
+    }
+  }
   void sendPendingOrderReminders();
   res.json(store.data.orders.map(publicOrder));
 });
@@ -4314,6 +4735,7 @@ app.delete("/api/admin/payment-proofs", requireSession, requireAdminScope("order
 app.post("/api/admin/orders/:id/paid", requireSession, requireAdminScope("orders"), (req, res) => {
   try {
     const result = markOrderPaid(store, String(req.params.id));
+    const previousItems = result.order.orderItems ? JSON.parse(JSON.stringify(result.order.orderItems)) : [];
     const fulfillment = result.order.orderItems ? fulfillPaidOrder(store, result.order.id) : void 0;
     const license = !result.order.orderItems && result.order.customerHwid ? generateLicenseForPaidOrder(store, { invoiceNumber: result.order.invoiceNumber ?? result.order.id, hwid: result.order.customerHwid }) : void 0;
     if (license) {
@@ -4321,9 +4743,20 @@ app.post("/api/admin/orders/:id/paid", requireSession, requireAdminScope("orders
       store.save();
       void emailLicense(license, result.order.invoiceNumber ?? result.order.id);
     }
+    if (result.order.orderItems) {
+      void dispatchFulfillmentEmails(store, result.order, previousItems);
+    }
     res.json({ ok: true, order: publicOrder(result.order), subscription: result.subscription, license, fulfillment });
   } catch (error) {
     res.status(400).json({ message: error instanceof Error ? error.message : "Order gagal diverifikasi." });
+  }
+});
+app.delete("/api/admin/orders/:id", requireSession, requireAdminScope("orders"), (req, res) => {
+  try {
+    const deleted = deleteOrderRecord(store, String(req.params.id));
+    res.json({ ok: true, message: `Transaksi ${deleted.invoiceNumber ?? deleted.id} berhasil dihapus.`, deleted });
+  } catch (error) {
+    res.status(400).json({ message: error instanceof Error ? error.message : "Gagal menghapus transaksi." });
   }
 });
 app.delete("/api/admin/orders/expired", requireSession, requireAdminScope("orders"), (_req, res) => {
@@ -4375,6 +4808,78 @@ app.get("/api/admin/orders/export.xls", requireSession, requireAdminScope("order
   res.setHeader("Content-Disposition", 'attachment; filename="asistenq-orders.xls"');
   res.send(`<!doctype html><html><head><meta charset="utf-8" /></head><body><table>${tableRows}</table></body></html>`);
 });
+app.post("/api/payments/sakurupiah/callback", async (req, res) => {
+  try {
+    const settings2 = store.data.deploymentSettings ?? {};
+    const apiKey = settings2.sakuRupiahApiKey?.trim();
+    if (!apiKey) {
+      res.status(400).json({ success: false, message: "SakuRupiah API Key belum dikonfigurasi" });
+      return;
+    }
+    const rawBody = req.rawBody || JSON.stringify(req.body);
+    const signatureHeader = req.headers["x-callback-signature"] || req.headers["http_x_callback_signature"] || "";
+    const eventHeader = req.headers["x-callback-event"] || req.headers["http_x_callback_event"] || "";
+    if (signatureHeader && !verifySakuRupiahCallbackSignature(rawBody, signatureHeader, apiKey)) {
+      res.status(400).json({ success: false, message: "Invalid signature" });
+      return;
+    }
+    if (eventHeader && eventHeader !== "payment_status") {
+      res.status(400).json({ success: false, message: `Unrecognized callback event: ${eventHeader}` });
+      return;
+    }
+    const { trx_id, merchant_ref, status, status_kode } = req.body || {};
+    if (!merchant_ref && !trx_id) {
+      res.status(400).json({ success: false, message: "merchant_ref / trx_id tidak ditemukan" });
+      return;
+    }
+    const order = store.data.orders.find(
+      (item) => item.invoiceNumber === merchant_ref || item.id === merchant_ref || trx_id && item.sakuRupiahTrxId === trx_id
+    );
+    if (!order) {
+      res.status(404).json({ success: false, message: "Order tidak ditemukan" });
+      return;
+    }
+    const normStatus = String(status ?? "").toLowerCase();
+    const isPaid = normStatus === "berhasil" || normStatus === "paid" || normStatus === "success" || Number(status_kode) === 1;
+    if (isPaid) {
+      if (order.status !== "paid") {
+        const { order: paidOrder } = markOrderPaidByInvoice(store, order.invoiceNumber ?? order.id);
+        const previousItems = paidOrder.orderItems ? JSON.parse(JSON.stringify(paidOrder.orderItems)) : [];
+        fulfillPaidOrder(store, paidOrder.id);
+        void dispatchFulfillmentEmails(store, paidOrder, previousItems);
+        if (paidOrder.customerEmail) {
+          sendMail({
+            to: paidOrder.customerEmail,
+            subject: `[AsistenQ] Pembayaran Berhasil - Invoice ${paidOrder.invoiceNumber ?? paidOrder.id}`,
+            text: `Pembayaran Anda untuk invoice ${paidOrder.invoiceNumber ?? paidOrder.id} telah kami terima. Lisensi software / akses produk Anda sudah aktif dan dapat diakses melalui Dashboard Member AsistenQ. Terima kasih!`,
+            html: `<div style="font-family:sans-serif;padding:20px;"><h2>Pembayaran Berhasil!</h2><p>Invoice <b>${paidOrder.invoiceNumber ?? paidOrder.id}</b> senilai <b>${formatCurrency(paidOrder.totalAmount ?? paidOrder.amount)}</b> telah kami terima.</p><p>Lisensi / akses produk digital Anda sudah aktif. Silakan login ke Dashboard Member AsistenQ untuk menggunakannya.</p></div>`
+          }).catch((err) => console.error("Gagal mengirim email konfirmasi:", err));
+        }
+      }
+      res.json({ success: true, message: "Payment status berhasil" });
+      return;
+    } else if (status === "expired" || Number(status_kode) === 2) {
+      order.status = "expired";
+      store.save();
+      res.json({ success: true, message: "Payment status expired" });
+      return;
+    }
+    res.json({ success: true, message: `Payment status ${status || "pending"}` });
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : "Callback processing error";
+    res.status(500).json({ success: false, message: msg });
+  }
+});
+app.get("/api/admin/sakurupiah/balance", requireSession, requireAdminScope("products"), async (_req, res) => {
+  try {
+    const settings2 = store.data.deploymentSettings ?? {};
+    const balanceInfo = await checkSakuRupiahBalance(settings2);
+    res.json({ ok: true, data: balanceInfo });
+  } catch (error) {
+    const message2 = error instanceof Error ? error.message : "Gagal mengecek saldo SakuRupiah";
+    res.status(400).json({ ok: false, message: message2 });
+  }
+});
 app.post("/api/checkout", requireSession, async (req, res) => {
   if (req.user?.type !== "member") {
     res.status(403).json({ message: "member access required" });
@@ -4396,14 +4901,34 @@ app.post("/api/checkout", requireSession, async (req, res) => {
     res.status(400).json({ message: error instanceof Error ? error.message : "Checkout gagal dibuat." });
   }
 });
-app.get("/api/member/orders", requireSession, (req, res) => {
+async function syncPendingSakuRupiahOrders(store2, memberId) {
+  const settings2 = store2.data.deploymentSettings;
+  if (!settings2?.sakuRupiahApiId?.trim() || !settings2?.sakuRupiahApiKey?.trim()) return;
+  const pendingOrders = store2.data.orders.filter((order) => order.status === "pending" && (!memberId || order.memberId === memberId) && Boolean(order.sakuRupiahCheckoutUrl || order.sakuRupiahTrxId));
+  for (const order of pendingOrders) {
+    try {
+      const merchantRef = order.invoiceNumber ?? order.id;
+      const { isPaid } = await checkSakuRupiahTransactionStatus(settings2, merchantRef, order.sakuRupiahTrxId);
+      if (isPaid && order.status !== "paid") {
+        const { order: paidOrder } = markOrderPaidByInvoice(store2, merchantRef);
+        const previousItems = paidOrder.orderItems ? JSON.parse(JSON.stringify(paidOrder.orderItems)) : [];
+        fulfillPaidOrder(store2, paidOrder.id);
+        void dispatchFulfillmentEmails(store2, paidOrder, previousItems);
+      }
+    } catch (err) {
+      console.error("Auto SakuRupiah sync error for order:", order.id, err);
+    }
+  }
+}
+app.get("/api/member/orders", requireSession, async (req, res) => {
   if (req.user?.type !== "member") {
     res.status(403).json({ message: "member access required" });
     return;
   }
   expirePendingOrders(store);
+  await syncPendingSakuRupiahOrders(store, req.user.id);
   void sendPendingOrderReminders();
-  res.json(store.data.orders.filter((order) => order.memberId === req.user?.id).sort((left, right) => right.createdAt.localeCompare(left.createdAt)).map(publicOrder));
+  res.json(store.data.orders.filter((order) => order.memberId === req.user?.id && order.status !== "expired").sort((left, right) => right.createdAt.localeCompare(left.createdAt)).map(publicOrder));
 });
 app.post("/api/member/orders/:id/hwid", requireSession, (req, res) => {
   if (req.user?.type !== "member") {
@@ -4418,8 +4943,14 @@ app.post("/api/member/orders/:id/hwid", requireSession, (req, res) => {
     if (!order.orderItems?.some((item) => item.fulfillmentType === "license" && item.fulfillmentStatus !== "fulfilled")) {
       throw new Error("Pesanan ini tidak menunggu HWID lisensi.");
     }
+    const previousItems = order.orderItems ? JSON.parse(JSON.stringify(order.orderItems)) : [];
     order.customerHwid = hwid.toUpperCase();
+    try {
+      generateLicenseForPaidOrder(store, { invoiceNumber: order.invoiceNumber ?? order.id, hwid: order.customerHwid });
+    } catch {
+    }
     fulfillPaidOrder(store, order.id);
+    void dispatchFulfillmentEmails(store, order, previousItems);
     res.status(201).json(publicOrder(order));
   } catch (error) {
     const message2 = error instanceof z.ZodError ? error.issues.map((issue) => issue.message).join(", ") : error instanceof Error ? error.message : "HWID gagal disimpan.";
@@ -4454,11 +4985,12 @@ app.get("/api/member/orders/:id/invoice.html", requireSession, (req, res) => {
     res.status(404).send("invoice not found");
   }
 });
-app.get("/api/member/licenses", requireSession, (req, res) => {
+app.get("/api/member/licenses", requireSession, async (req, res) => {
   if (req.user?.type !== "member") {
     res.status(403).json({ message: "member access required" });
     return;
   }
+  await syncPendingSakuRupiahOrders(store, req.user.id);
   res.json(memberLicenseDashboard(store, req.user.id));
 });
 app.post("/api/member/licenses/:id/reset-device", requireSession, (req, res) => {
@@ -4549,7 +5081,7 @@ if (shouldServeFrontend) {
     express.static(path9.join(bundledToolDir, req.params.slug))(req, res, next);
   });
   app.get(/^\/[a-z0-9-]+$/, (req, res, next) => {
-    const product = store.data.products.find((item) => item.landingPath === req.path || `/${item.slug}` === req.path);
+    const product = store.data.products.find((item) => Boolean(item.landingPath && item.landingPath === req.path));
     if (!product) {
       next();
       return;

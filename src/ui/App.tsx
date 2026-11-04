@@ -929,34 +929,47 @@ function AdminShell({ activeSection, children, message, navigate, onSectionChang
   onThemeChange: (theme: AdminTheme) => void;
   theme: AdminTheme;
 }) {
+  const sectionMeta: Record<AdminSection, { label: string; kicker: string }> = {
+    dashboard: { label: 'Dashboard',          kicker: 'Ringkasan operasional' },
+    landing:   { label: 'Landing Manager',    kicker: 'Kelola halaman produk' },
+    products:  { label: 'Manajemen Produk',   kicker: 'Tambah & edit katalog' },
+    orders:    { label: 'Order & Transaksi',  kicker: 'Monitor pembayaran' },
+    licenses:  { label: 'Manajemen Lisensi', kicker: 'Generate & kontrol HWID' },
+    members:   { label: 'Data Member',        kicker: 'Kelola akun pengguna' },
+    course:    { label: 'Course Admin',       kicker: 'Materi & akses belajar' },
+    content:   { label: 'Konten & Footer',   kicker: 'Halaman statis & footer' },
+    deploy:    { label: 'Settings & Deploy', kicker: 'Konfigurasi & deployment' },
+  };
+  const meta = sectionMeta[activeSection] ?? { label: 'Admin Panel', kicker: 'AsistenQ Operations' };
+
   return (
     <div className={`admin-shell admin-${theme}`}>
       <aside className="admin-sidebar">
         <Brand compact />
         <nav className="admin-nav">
-          <button className={activeSection === 'dashboard' ? 'active' : ''} onClick={() => onSectionChange('dashboard')}><LayoutDashboard size={18} /> Dashboard</button>
-          <button className={activeSection === 'products' ? 'active' : ''} onClick={() => onSectionChange('products')}><Boxes size={18} /> Produk</button>
-          <button className={activeSection === 'orders' ? 'active' : ''} onClick={() => onSectionChange('orders')}><CreditCard size={18} /> Order</button>
-          <button className={activeSection === 'licenses' ? 'active' : ''} onClick={() => onSectionChange('licenses')}><KeyRound size={18} /> Lisensi</button>
-          <button className={activeSection === 'members' ? 'active' : ''} onClick={() => onSectionChange('members')}><Users size={18} /> Member</button>
-          <button className={activeSection === 'course' ? 'active' : ''} onClick={() => onSectionChange('course')}><BookOpen size={18} /> Course</button>
-          <button className={activeSection === 'content' ? 'active' : ''} onClick={() => onSectionChange('content')}><FileText size={18} /> Konten & Footer</button>
-          <button className={activeSection === 'deploy' ? 'active' : ''} onClick={() => onSectionChange('deploy')}><ShieldCheck size={18} /> Settings</button>
+          <button type="button" className={activeSection === 'dashboard' ? 'active' : ''} onClick={() => onSectionChange('dashboard')}><LayoutDashboard size={16} /> Dashboard</button>
+          <button type="button" className={activeSection === 'products'  ? 'active' : ''} onClick={() => onSectionChange('products')}><Boxes size={16} /> Produk</button>
+          <button type="button" className={activeSection === 'orders'    ? 'active' : ''} onClick={() => onSectionChange('orders')}><CreditCard size={16} /> Order</button>
+          <button type="button" className={activeSection === 'licenses'  ? 'active' : ''} onClick={() => onSectionChange('licenses')}><KeyRound size={16} /> Lisensi</button>
+          <button type="button" className={activeSection === 'members'   ? 'active' : ''} onClick={() => onSectionChange('members')}><Users size={16} /> Member</button>
+          <button type="button" className={activeSection === 'course'    ? 'active' : ''} onClick={() => onSectionChange('course')}><BookOpen size={16} /> Course</button>
+          <button type="button" className={activeSection === 'content'   ? 'active' : ''} onClick={() => onSectionChange('content')}><FileText size={16} /> Konten &amp; Footer</button>
+          <button type="button" className={activeSection === 'deploy'    ? 'active' : ''} onClick={() => onSectionChange('deploy')}><ShieldCheck size={16} /> Settings</button>
         </nav>
-        <button className="admin-public-link" onClick={() => navigate('home')}><ArrowRight size={16} /> Lihat website</button>
+        <button type="button" className="admin-public-link" onClick={() => navigate('home')}><ArrowRight size={15} /> Lihat website</button>
       </aside>
       <main className="admin-workspace">
         <header className="admin-topbar">
           <div>
-            <p className="section-kicker">AsistenQ Operations</p>
-            <h1>Admin Panel</h1>
+            <p className="section-kicker">{meta.kicker}</p>
+            <h1>{meta.label}</h1>
           </div>
           <div className="admin-top-actions">
             <div className="theme-toggle" aria-label="Pilih tema admin">
-              <button className={theme === 'light' ? 'active' : ''} onClick={() => onThemeChange('light')}>Light</button>
-              <button className={theme === 'dark' ? 'active' : ''} onClick={() => onThemeChange('dark')}>Dark</button>
+              <button type="button" className={theme === 'light' ? 'active' : ''} onClick={() => onThemeChange('light')}>Light</button>
+              <button type="button" className={theme === 'dark'  ? 'active' : ''} onClick={() => onThemeChange('dark')}>Dark</button>
             </div>
-            <div className="status-pill">{message}</div>
+            {message && <div className="status-pill" title={message}>{message}</div>}
           </div>
         </header>
         {children}
@@ -964,7 +977,6 @@ function AdminShell({ activeSection, children, message, navigate, onSectionChang
     </div>
   );
 }
-
 function LoginBox({ title, accountType = 'member', footer, onSubmit, showName = false, submitLabel }: {
   title: string;
   accountType?: 'admin' | 'member';
