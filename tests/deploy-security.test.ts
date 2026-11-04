@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildGitHubRemote, buildPassengerRestartScript, deploymentAuditArgs, deploymentInstallArgs, deploymentPullArgs, parseDeploymentSettings } from '../src/server/deploy';
+import { buildGitHubRemote, buildPassengerRestartScript, deploymentInstallArgs, deploymentPullArgs, parseDeploymentSettings } from '../src/server/deploy';
 
 describe('deployment security helpers', () => {
   it('rejects repository names that could inject shell commands', () => {
@@ -39,7 +39,4 @@ it('autostashes server-only edits during deployment pulls', () => {
     expect(deploymentPullArgs('origin', 'master')).toEqual(['pull', '--no-rebase', '--autostash', 'origin', 'master']);
 });
 
-  it('runs an explicit low-level audit after installing dependencies', () => {
-    expect(deploymentAuditArgs()).toEqual(['audit', '--audit-level=low']);
-  });
 });

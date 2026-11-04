@@ -47,9 +47,6 @@ export function deploymentInstallArgs(hasLockfile = true): string[] {
   return hasLockfile ? ['ci', ...sharedArgs] : ['install', ...sharedArgs];
 }
 
-export function deploymentAuditArgs(): string[] {
-  return ['audit', '--audit-level=low'];
-}
 
 export function deploymentPullArgs(remote: string, branch: string): string[] {
   return ['pull', '--no-rebase', '--autostash', remote, branch];

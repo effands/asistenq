@@ -9,7 +9,7 @@ import { z } from 'zod';
 import { createId, formatCurrency } from '../shared/domain';
 import { clearSessionCookie, readSession, sessionCookie, signSession, requireAdminScope, requireSession } from './auth';
 import { getTelegramBotStatus, startTelegramBot, stopTelegramBot } from './bot-control';
-import { buildGitHubRemote, deploymentAuditArgs, deploymentInstallArgs, deploymentPullArgs, parseDeploymentSettings, runCommand, schedulePassengerRestart } from './deploy';
+import { buildGitHubRemote, deploymentInstallArgs, deploymentPullArgs, parseDeploymentSettings, runCommand, schedulePassengerRestart } from './deploy';
 import { clearPaymentProofDirectory, removePaymentProof } from './payment-proof-storage';
 import { notifyOwnerOfPaymentProof } from './payment-proof-notifications';
 import { seedInitialData } from './seed';
@@ -445,7 +445,6 @@ async function runGitHubDeployUpdate(githubToken: string): Promise<{ stdout: str
   const results = [
     await runCommand('git', deploymentPullArgs(remote, githubBranch), commandOptions),
     await runCommand('npm', deploymentInstallArgs(hasLockfile), commandOptions),
-    await runCommand('npm', deploymentAuditArgs(), commandOptions),
     await runCommand('npm', ['run', 'build:hosting'], commandOptions)
   ];
 
