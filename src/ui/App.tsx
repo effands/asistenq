@@ -2587,8 +2587,10 @@ function DeployPanel({ settings, adminSession, onDeployUpdate, onRefreshBotStatu
           <label className="span-two">GitHub Token / PAT<input name="githubToken" value={githubToken} onChange={(event) => setGithubToken(event.target.value)} placeholder={settings?.maskedGithubToken || 'ghp_... atau github_pat_...'} type="password" /></label>
         </div>
         <p className="form-helper">Untuk repository private, gunakan GitHub Personal Access Token dengan akses read ke repository ini. Token disimpan di server dan hanya ditampilkan dalam bentuk masking.</p>
-        <button className="primary" disabled={saving}>{saving ? 'Menyimpan...' : 'Simpan Token GitHub'}</button>
-        {settingsNotice && <p className="form-notice">{settingsNotice}</p>}
+        <div className="compact-card-footer">
+          {settingsNotice && <span className="compact-card-notice">{settingsNotice}</span>}
+          <button className="compact-save-btn" disabled={saving}>{saving ? 'Menyimpan...' : 'Simpan Token GitHub'}</button>
+        </div>
       </form>
       <form className="panel compact-token-card" onSubmit={async (event) => {
         event.preventDefault();
@@ -2633,8 +2635,10 @@ function DeployPanel({ settings, adminSession, onDeployUpdate, onRefreshBotStatu
           <label className="span-two">Mail From<input name="mailFrom" value={mailFrom} onChange={(event) => setMailFrom(event.target.value)} placeholder="AsistenQ <cs@asistenq.com>" /></label>
         </div>
         <p className="form-helper">{settings?.hasSmtpPass ? 'SMTP aktif. Isi password hanya kalau ingin mengganti password email.' : 'Isi password email cPanel untuk cs@asistenq.com. Rekomendasi screenshot: host mail.asistenq.com, port 465.'}</p>
-        <button className="primary" disabled={saving}>{saving ? 'Menyimpan...' : 'Simpan SMTP'}</button>
-        {smtpNotice && <p className="form-notice">{smtpNotice}</p>}
+        <div className="compact-card-footer">
+          {smtpNotice && <span className="compact-card-notice">{smtpNotice}</span>}
+          <button className="compact-save-btn" disabled={saving}>{saving ? 'Menyimpan...' : 'Simpan SMTP'}</button>
+        </div>
       </form>
       <form className="panel compact-token-card" onSubmit={async (event) => {
         event.preventDefault();
@@ -2664,12 +2668,11 @@ function DeployPanel({ settings, adminSession, onDeployUpdate, onRefreshBotStatu
           <label>Owner ID<input name="telegramOwnerId" value={telegramOwnerId} onChange={(event) => setTelegramOwnerId(event.target.value.replace(/\D/g, ''))} placeholder="ID Telegram angka" inputMode="numeric" /></label>
           <label>Bot Token<input name="telegramBotToken" value={telegramBotToken} onChange={(event) => setTelegramBotToken(event.target.value)} placeholder={settings?.maskedTelegramBotToken || 'Token dari BotFather'} type="password" /></label>
         </div>
-        <button className="primary" disabled={saving}>{saving ? 'Menyimpan...' : 'Simpan Token Telegram'}</button>
         <div className="bot-control-strip">
-          <div>
+          <div className="bot-status-indicator">
             <span className={`bot-dot ${botStatus?.running ? 'running' : ''}`} />
-            <b>{botStatus?.running ? 'Bot aktif' : 'Bot mati'}</b>
-            <small>{botStatus?.message ?? 'Status belum dicek.'}{botStatus?.pid ? ` PID ${botStatus.pid}` : ''}</small>
+            <b>{botStatus?.running ? 'Bot aktif' : 'Bot nonaktif'}</b>
+            <small>{botStatus?.message ?? 'Status belum dicek.'}{botStatus?.pid ? ` (PID ${botStatus.pid})` : ''}</small>
           </div>
           <div className="bot-control-actions">
             <button type="button" className="ghost-button tiny-button" disabled={botBusy} onClick={async () => {
@@ -2682,7 +2685,7 @@ function DeployPanel({ settings, adminSession, onDeployUpdate, onRefreshBotStatu
               } finally {
                 setBotBusy(false);
               }
-            }}><RefreshCw size={13} /> Cek</button>
+            }}><RefreshCw size={12} /> Cek</button>
             <button type="button" className="ghost-button tiny-button" disabled={botBusy || botStatus?.running} onClick={async () => {
               setBotBusy(true);
               try {
@@ -2693,7 +2696,7 @@ function DeployPanel({ settings, adminSession, onDeployUpdate, onRefreshBotStatu
               } finally {
                 setBotBusy(false);
               }
-            }}><PlayCircle size={13} /> Start</button>
+            }}><PlayCircle size={12} /> Start</button>
             <button type="button" className="ghost-button tiny-button" disabled={botBusy || !botStatus?.running} onClick={async () => {
               setBotBusy(true);
               try {
@@ -2707,7 +2710,10 @@ function DeployPanel({ settings, adminSession, onDeployUpdate, onRefreshBotStatu
             }}>Stop</button>
           </div>
         </div>
-        {telegramNotice && <p className="form-notice">{telegramNotice}</p>}
+        <div className="compact-card-footer">
+          {telegramNotice && <span className="compact-card-notice">{telegramNotice}</span>}
+          <button className="compact-save-btn" disabled={saving}>{saving ? 'Menyimpan...' : 'Simpan Token Telegram'}</button>
+        </div>
       </form>
       <form className="panel compact-token-card" onSubmit={async (event) => {
         event.preventDefault();
@@ -2743,8 +2749,10 @@ function DeployPanel({ settings, adminSession, onDeployUpdate, onRefreshBotStatu
           </label>
         </div>
         <p className="form-helper">QRIS ini menjadi sumber merchant. Saat checkout, server otomatis memasukkan harga + kode unik tiga digit dan menghitung ulang CRC.</p>
-        <button className="primary" disabled={saving || !qrisStaticPayload.trim()}>{saving ? 'Menyimpan...' : 'Validasi & Simpan QRIS'}</button>
-        {qrisNotice && <p className="form-notice">{qrisNotice}</p>}
+        <div className="compact-card-footer">
+          {qrisNotice && <span className="compact-card-notice">{qrisNotice}</span>}
+          <button className="compact-save-btn" disabled={saving || !qrisStaticPayload.trim()}>{saving ? 'Menyimpan...' : 'Validasi & Simpan QRIS'}</button>
+        </div>
       </form>
       <form className="panel compact-token-card" onSubmit={async (event) => {
         event.preventDefault();
@@ -2780,8 +2788,8 @@ function DeployPanel({ settings, adminSession, onDeployUpdate, onRefreshBotStatu
           <label className="span-two">Tanggung Biaya Fee (Merchant Fee)<select value={sakuRupiahMerchantFee} onChange={(e) => setSakuRupiahMerchantFee(Number(e.target.value))}><option value={1}>Fee Ditanggung Merchant (Penjual)</option><option value={2}>Fee Ditanggung Customer (Pembeli)</option></select></label>
         </div>
         <p className="form-helper">Callback Webhook URL untuk didaftarkan di dashboard SakuRupiah: <code>{window.location.origin}/api/payments/sakurupiah/callback</code></p>
-        <div className="bot-control-actions" style={{ marginTop: '12px' }}>
-          <button className="primary" disabled={saving}>{saving ? 'Menyimpan...' : 'Simpan Setting SakuRupiah'}</button>
+        <div className="compact-card-footer">
+          {sakuRupiahNotice && <span className="compact-card-notice">{sakuRupiahNotice}</span>}
           <button className="ghost-button tiny-button" type="button" disabled={checkingBalance || !adminSession} onClick={async () => {
             if (!adminSession) return;
             setCheckingBalance(true);
@@ -2789,16 +2797,16 @@ function DeployPanel({ settings, adminSession, onDeployUpdate, onRefreshBotStatu
             try {
               const res = await apiRequest<{ ok: boolean; data: { merchantName: string; balance: string; availableBalance: string } }>('/admin/sakurupiah/balance', { token: adminSession.token });
               if (res.ok && res.data) {
-                setSakuRupiahNotice(`Merchant: ${res.data.merchantName} | Saldo: Rp ${Number(res.data.balance).toLocaleString('id-ID')} | Saldo Tersedia: Rp ${Number(res.data.availableBalance).toLocaleString('id-ID')}`);
+                setSakuRupiahNotice(`Merchant: ${res.data.merchantName} | Saldo: Rp ${Number(res.data.balance).toLocaleString('id-ID')}`);
               }
             } catch (err) {
               setSakuRupiahNotice(err instanceof Error ? err.message : 'Cek saldo gagal');
             } finally {
               setCheckingBalance(false);
             }
-          }}><RefreshCw size={13} /> Cek Saldo</button>
+          }}><RefreshCw size={12} /> Cek Saldo</button>
+          <button className="compact-save-btn" disabled={saving}>{saving ? 'Menyimpan...' : 'Simpan Setting'}</button>
         </div>
-        {sakuRupiahNotice && <p className="form-notice">{sakuRupiahNotice}</p>}
       </form>
     </section>
   );

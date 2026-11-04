@@ -9751,3 +9751,322 @@ button.ghost-button.primary:hover {
   border-color: rgba(255, 255, 255, 0.16) !important;
   color: #f1f5f9 !important;
 }
+
+/* ============================================================
+   ENTERPRISE SETTINGS & DEPLOY HUB (Compact & Modern)
+   ============================================================ */
+.deploy-settings-grid {
+  display: grid !important;
+  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  gap: 16px !important;
+  align-items: start !important;
+}
+
+@media (max-width: 960px) {
+  .deploy-settings-grid {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+.deploy-action-panel {
+  grid-column: 1 / -1 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 12px !important;
+  background: #ffffff !important;
+  border: 1px solid var(--adm-border-light, #e2e8f0) !important;
+  border-radius: 12px !important;
+  padding: 16px 20px !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02) !important;
+}
+
+.deploy-action-panel .panel-heading {
+  margin-bottom: 2px !important;
+}
+
+.deploy-action-panel .panel-heading h2 {
+  font-size: 16px !important;
+  font-weight: 700 !important;
+  margin: 0 !important;
+}
+
+.deploy-action-row {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  flex-wrap: wrap !important;
+  gap: 12px !important;
+}
+
+.deploy-action-row p {
+  margin: 0 !important;
+  font-size: 13px !important;
+  color: #64748b !important;
+}
+
+.deploy-button {
+  height: 36px !important;
+  min-height: 36px !important;
+  padding: 0 18px !important;
+  font-size: 13px !important;
+  font-weight: 700 !important;
+  border-radius: 8px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+  cursor: pointer !important;
+  white-space: nowrap !important;
+  background: #00473d !important;
+  color: #ffffff !important;
+  border: none !important;
+  box-shadow: 0 2px 6px rgba(0, 71, 61, 0.2) !important;
+  transition: all 0.15s ease !important;
+}
+
+.deploy-button:hover:not(:disabled) {
+  background: #00332c !important;
+  transform: translateY(-1px) !important;
+}
+
+.deploy-log.compact-log {
+  background: #090d16 !important;
+  color: #38bdf8 !important;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace !important;
+  font-size: 12px !important;
+  line-height: 1.5 !important;
+  padding: 10px 14px !important;
+  border-radius: 8px !important;
+  max-height: 110px !important;
+  overflow-y: auto !important;
+  margin: 0 !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+}
+
+/* Individual Settings Cards */
+.compact-token-card {
+  display: flex !important;
+  flex-direction: column !important;
+  background: #ffffff !important;
+  border: 1px solid var(--adm-border-light, #e2e8f0) !important;
+  border-radius: 12px !important;
+  padding: 16px 18px !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02) !important;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease !important;
+  min-height: 270px !important;
+}
+
+.compact-token-card:hover {
+  border-color: #cbd5e1 !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.04) !important;
+}
+
+.compact-token-card .panel-heading {
+  margin-bottom: 12px !important;
+  padding-bottom: 8px !important;
+  border-bottom: 1px solid #f1f5f9 !important;
+}
+
+.compact-token-card .panel-heading h2 {
+  font-size: 15px !important;
+  font-weight: 700 !important;
+  margin: 0 !important;
+  color: #0f172a !important;
+}
+
+.compact-token-fields {
+  display: grid !important;
+  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  gap: 10px !important;
+  margin-bottom: 6px !important;
+}
+
+.compact-token-fields label {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 4px !important;
+  font-size: 11px !important;
+  font-weight: 700 !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.04em !important;
+  color: var(--adm-muted-light, #64748b) !important;
+}
+
+.compact-token-fields label.span-two {
+  grid-column: 1 / -1 !important;
+}
+
+.compact-token-fields input,
+.compact-token-fields select,
+.compact-token-fields textarea {
+  height: 34px !important;
+  min-height: 34px !important;
+  padding: 0 10px !important;
+  font-size: 12.5px !important;
+  border-radius: 6px !important;
+  border: 1px solid #cbd5e1 !important;
+  background: #ffffff !important;
+  color: #0f172a !important;
+  outline: none !important;
+  width: 100% !important;
+  box-sizing: border-box !important;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease !important;
+}
+
+.compact-token-fields textarea.qris-payload-input {
+  height: auto !important;
+  min-height: 65px !important;
+  padding: 8px 10px !important;
+  font-family: ui-monospace, monospace !important;
+  font-size: 11px !important;
+  line-height: 1.4 !important;
+  resize: vertical !important;
+}
+
+.compact-token-fields input:focus,
+.compact-token-fields select:focus,
+.compact-token-fields textarea:focus {
+  border-color: #0d9488 !important;
+  box-shadow: 0 0 0 2px rgba(13, 148, 136, 0.12) !important;
+}
+
+.compact-token-card .form-helper {
+  font-size: 11px !important;
+  color: #64748b !important;
+  line-height: 1.45 !important;
+  margin: 4px 0 10px !important;
+}
+
+/* Card Action Footer & Compact Save Button */
+.compact-card-footer {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: flex-end !important;
+  gap: 8px !important;
+  margin-top: auto !important;
+  padding-top: 10px !important;
+}
+
+.compact-save-btn,
+.compact-token-card button.primary {
+  align-self: flex-end !important;
+  width: auto !important;
+  min-width: 110px !important;
+  max-width: fit-content !important;
+  height: 34px !important;
+  min-height: 34px !important;
+  padding: 0 16px !important;
+  font-size: 12px !important;
+  font-weight: 700 !important;
+  border-radius: 6px !important;
+  cursor: pointer !important;
+  white-space: nowrap !important;
+  background: #00473d !important;
+  color: #ffffff !important;
+  border: none !important;
+  box-shadow: 0 2px 5px rgba(0, 71, 61, 0.18) !important;
+  transition: all 0.15s ease !important;
+}
+
+.compact-save-btn:hover:not(:disabled),
+.compact-token-card button.primary:hover:not(:disabled) {
+  background: #00332c !important;
+  transform: translateY(-1px) !important;
+  box-shadow: 0 4px 10px rgba(0, 71, 61, 0.25) !important;
+}
+
+.compact-card-notice {
+  font-size: 11px !important;
+  color: #0d9488 !important;
+  font-weight: 600 !important;
+  margin-right: auto !important;
+  max-width: 60% !important;
+  white-space: normal !important;
+  line-height: 1.35 !important;
+}
+
+/* Bot Control Strip */
+.bot-control-strip {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  flex-wrap: wrap !important;
+  gap: 8px !important;
+  padding: 8px 12px !important;
+  background: #f8fafc !important;
+  border: 1px solid var(--adm-border-light, #e2e8f0) !important;
+  border-radius: 8px !important;
+  margin: 6px 0 10px !important;
+}
+
+.bot-status-indicator {
+  display: flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+  font-size: 12px !important;
+  color: #334155 !important;
+}
+
+.bot-dot {
+  display: inline-block !important;
+  width: 8px !important;
+  height: 8px !important;
+  border-radius: 50% !important;
+  background: #ef4444 !important;
+}
+
+.bot-dot.running {
+  background: #10b981 !important;
+  box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.2) !important;
+}
+
+.bot-control-actions {
+  display: flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+}
+
+.bot-control-actions button {
+  height: 28px !important;
+  min-height: 28px !important;
+  width: auto !important;
+  padding: 0 10px !important;
+  font-size: 11px !important;
+  font-weight: 700 !important;
+  border-radius: 5px !important;
+}
+
+/* Dark mode adjustments */
+.admin-dark .deploy-action-panel,
+.admin-dark .compact-token-card {
+  background: #161b22 !important;
+  border-color: rgba(255, 255, 255, 0.08) !important;
+}
+
+.admin-dark .compact-token-card .panel-heading {
+  border-bottom-color: rgba(255, 255, 255, 0.06) !important;
+}
+
+.admin-dark .compact-token-card .panel-heading h2 {
+  color: #f1f5f9 !important;
+}
+
+.admin-dark .compact-token-fields input,
+.admin-dark .compact-token-fields select,
+.admin-dark .compact-token-fields textarea {
+  background: #0d1117 !important;
+  border-color: rgba(255, 255, 255, 0.12) !important;
+  color: #f1f5f9 !important;
+}
+
+.admin-dark .bot-control-strip {
+  background: #0d1117 !important;
+  border-color: rgba(255, 255, 255, 0.08) !important;
+}
+
+.admin-dark .bot-status-indicator {
+  color: #94a3b8 !important;
+}
+
+.admin-dark .compact-card-notice {
+  color: #2dd4bf !important;
+}
